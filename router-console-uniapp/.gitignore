@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.hbuilderx/
+unpackage/
+*.log
+.android-sdk/
+android-wrapper/.gradle/
+android-wrapper/build/
+android-wrapper/app/build/
+android-wrapper/local.properties
+android-wrapper/*.jks
