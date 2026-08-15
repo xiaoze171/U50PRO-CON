@@ -4,6 +4,13 @@ const DEFAULT_CONFIG = {
   routerUrl: 'http://192.168.0.1',
   password: '111111',
   developerPassword: '111111',
+  profileKey: 'default',
+  dbEnabled: false,
+  dbHost: '',
+  dbPort: 3306,
+  dbName: 'u50pro_console',
+  dbUser: 'root',
+  dbPassword: '',
   pollIntervalMs: 1000
 };
 
@@ -30,7 +37,7 @@ const temperatureFields = [
 ];
 
 const resourceFields = [
-  'cpu_usage', 'cpu_load', 'cpu_percent', 'mem_usage', 'memory_usage', 'memory_percent', 'mem_total', 'mem_free', 'MemTotal', 'MemFree', 'ram_total', 'ram_free', 'uptime', 'sys_uptime', 'loadavg'
+  'cpu_usage', 'cpu_load', 'cpu_percent', 'mem_usage', 'memory_usage', 'memory_percent', 'mem_total', 'mem_free', 'MemTotal', 'MemFree', 'ram_total', 'ram_free', 'loadavg'
 ];
 
 const lockFields = ['nr5g_cell_lock', 'lte_band_lock', 'lte_freq_lock', 'lte_pci_lock', 'lte_earfcn_lock', 'nr5g_band_lock', 'nr5g_sa_band_lock', 'nr5g_nsa_band_lock', 'operate_mode'];
@@ -42,9 +49,13 @@ let cookies = new Map();
 let accessIdSeed = '';
 let loginState = { loggedIn: false, lastAttempt: 0, message: '尚未连接', method: 'sha256' };
 let batteryHistory = loadBatteryHistory();
+let batterySyncRunning = false;
+let lastBatterySyncAttempt = 0;
+let batterySyncState = { status: 'idle', message: '等待同步', lastSyncedAt: 0 };
 let isH5 = false;
 let nativeRequestSequence = 0;
 const nativeRequests = new Map();
+const databaseRequests = new Map();
 
 // #ifdef H5
 isH5 = true;
@@ -92,6 +103,53 @@ function nativeBridgeRequest(bridge, path, options, headers) {
     } catch (error) {
       clearTimeout(timer);
       nativeRequests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+function nativeDatabaseRequest(operation, data = {}) {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.database !== 'function') {
+    return Promise.reject(new Error('浏览器不能直连 MySQL，请在 Android App 中使用此功能'));
+  }
+  if (typeof window.__u50proNativeDatabaseResponse !== 'function') {
+    window.__u50proNativeDatabaseResponse = (id, rawResponse) => {
+      const pending = databaseRequests.get(id);
+      if (!pending) return;
+      databaseRequests.delete(id);
+      clearTimeout(pending.timer);
+      try {
+        const response = JSON.parse(rawResponse);
+        if (!response.ok) throw new Error(response.error || 'MySQL 操作失败');
+        pending.resolve(response.data || {});
+      } catch (error) {
+        pending.reject(error);
+      }
+    };
+  }
+  return new Promise((resolve, reject) => {
+    const id = `db-${Date.now()}-${++nativeRequestSequence}`;
+    const timer = setTimeout(() => {
+      databaseRequests.delete(id);
+      reject(new Error('MySQL 请求超时'));
+    }, 20000);
+    databaseRequests.set(id, { resolve, reject, timer });
+    try {
+      bridge.database(id, JSON.stringify({
+        operation,
+        database: {
+          host: config.dbHost,
+          port: Number(config.dbPort),
+          database: config.dbName,
+          user: config.dbUser,
+          password: config.dbPassword
+        },
+        data
+      }));
+    } catch (error) {
+      clearTimeout(timer);
+      databaseRequests.delete(id);
       reject(error);
     }
   });
@@ -159,7 +217,6 @@ function requestRouter(path, options = {}) {
 
   const bridge = nativeBridge();
   if (bridge) return nativeBridgeRequest(bridge, path, options, headers);
-
   return new Promise((resolve, reject) => {
     uni.request({
       url: `${baseUrl()}${path}`,
@@ -224,6 +281,8 @@ async function login(force = false) {
   loginState.lastAttempt = now;
   if (!config.password) return (loginState = { loggedIn: false, lastAttempt: now, message: '未保存路由器密码', method: 'none' });
   try {
+    // H5 的路由器 Cookie 由浏览器保存，改密码后先注销旧会话，避免旧 Cookie 让错误密码看起来也能登录。
+    if (force && isH5) await setGoform('LOGOUT').catch(() => {});
     await requestRouter('/index.html');
     const version = await getFields(['Language', 'cr_version', 'wa_inner_version']);
     accessIdSeed = `${version.wa_inner_version || ''}${version.cr_version || ''}`;
@@ -254,13 +313,13 @@ async function ensureLogin() {
 }
 
 async function developerLogin() {
-  if (!config.developerPassword) throw new Error('未保存开发者密码');
+  if (!config.password) throw new Error('未保存登录密码');
   const current = await getFields(['developer_option_loginfo']).catch(() => ({}));
   if (current.developer_option_loginfo === 'ok') return { ok: true, message: '开发者会话已就绪' };
   const main = await login(true);
   if (!main.loggedIn) throw new Error(`主登录刷新失败：${main.message}`);
   const token = await getFields(['LD']);
-  const password = sha256(sha256(config.developerPassword) + (token.LD || ''));
+  const password = sha256(sha256(config.password) + (token.LD || ''));
   const result = await setGoform('DEVELOPER_OPTION_LOGIN', { password });
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const state = await getFields(['developer_option_loginfo']).catch(() => ({}));
@@ -287,7 +346,16 @@ async function dashboard() {
     getCommand('lan_station_list').catch(() => ({ lan_station_list: [] })),
     getFields(['network_type', 'lte_ngbr_cell_info_ext', 'sa_ngbr_cell_manual_result_ext']).catch(() => ({}))
   ]);
-  recordBattery(status, temperature);
+  const sample = recordBattery(status, temperature);
+  const battery = batterySummary(status);
+  if (sample) {
+    Object.assign(sample, {
+      ratePerHour: battery.ratePerHour,
+      remainingMinutes: battery.remainingHours == null ? null : Math.round(battery.remainingHours * 60)
+    });
+    saveBatteryHistory();
+  }
+  scheduleBatteryHistorySync();
   return {
     timestamp: Date.now(),
     login: { ...loginState },
@@ -299,7 +367,7 @@ async function dashboard() {
     stations: normalizeList(stations.station_list),
     cableStations: normalizeList(cable.lan_station_list || cable.station_list),
     neighbors,
-    battery: batterySummary(status)
+    battery: { ...battery, databaseSync: { ...batterySyncState } }
   };
 }
 
@@ -311,21 +379,39 @@ function normalizeList(value) {
 
 function recordBattery(status, temperature) {
   const percent = numeric(status.battery_vol_percent || status.battery_value);
-  if (percent == null) return;
+  if (percent == null) return null;
   const timestamp = Date.now();
   const charging = status.battery_charging === '1' || status.external_charging_flag === '1';
   const last = batteryHistory.at(-1);
-  if (last && timestamp - last.timestamp < 60000 && last.percent === percent && last.charging === charging) return;
-  batteryHistory.push({ timestamp, percent, charging, temperature: numeric(temperature.battery_temp) });
+  if (last && timestamp - last.timestamp < 60000 && last.charging === charging) return null;
+  const sample = {
+    timestamp,
+    percent,
+    charging,
+    temperature: numeric(temperature.battery_temp),
+    chargeType: status.battery_charg_type || '',
+    externalPower: status.external_charging_flag === '1',
+    voltage: status.battery_voltage || '',
+    current: status.battery_current || '',
+    capacity: status.battery_capacity || '',
+    health: status.battery_health || ''
+  };
+  batteryHistory.push(sample);
   const cutoff = timestamp - 30 * 24 * 60 * 60 * 1000;
   batteryHistory = batteryHistory.filter(item => item.timestamp >= cutoff).slice(-20000);
-  uni.setStorageSync('mu5120-battery-history', batteryHistory);
+  return sample;
 }
 
 function batterySummary(status) {
   const percent = numeric(status.battery_vol_percent || status.battery_value);
   const charging = status.battery_charging === '1' || status.external_charging_flag === '1';
-  const recent = batteryHistory.filter(item => item.timestamp >= Date.now() - 48 * 60 * 60 * 1000 && item.charging === charging);
+  const recent = [];
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  for (let index = batteryHistory.length - 1; index >= 0; index -= 1) {
+    const item = batteryHistory[index];
+    if (item.timestamp < cutoff || item.charging !== charging) break;
+    recent.unshift(item);
+  }
   let ratePerHour = null;
   if (recent.length >= 2) {
     const first = recent[0];
@@ -338,6 +424,51 @@ function batterySummary(status) {
     ? (charging ? Math.max(0, (100 - percent) / ratePerHour) : Math.max(0, percent / ratePerHour))
     : null;
   return { percent, charging, ratePerHour, remainingHours, samples: batteryHistory.slice(-720) };
+}
+
+function saveBatteryHistory() {
+  uni.setStorageSync('mu5120-battery-history', batteryHistory);
+}
+
+function mergeBatteryHistory(remoteSamples) {
+  const merged = new Map();
+  [...batteryHistory, ...(Array.isArray(remoteSamples) ? remoteSamples : [])].forEach(item => {
+    const timestamp = Number(item?.timestamp);
+    const percent = numeric(item?.percent);
+    if (!Number.isFinite(timestamp) || percent == null) return;
+    merged.set(timestamp, { ...item, timestamp, percent, charging: Boolean(item.charging) });
+  });
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  batteryHistory = [...merged.values()]
+    .filter(item => item.timestamp >= cutoff)
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .slice(-20000);
+  saveBatteryHistory();
+}
+
+function scheduleBatteryHistorySync(force = false) {
+  if (!config.dbEnabled || !nativeBridge() || batterySyncRunning) return;
+  const now = Date.now();
+  if (!force && now - lastBatterySyncAttempt < 60000) return;
+  lastBatterySyncAttempt = now;
+  batterySyncRunning = true;
+  batterySyncState = { ...batterySyncState, status: 'syncing', message: '正在同步续航记录' };
+  nativeDatabaseRequest('syncBatteryHistory', {
+    profileKey: config.profileKey,
+    routerUrl: config.routerUrl,
+    samples: batteryHistory.slice(-2000)
+  }).then(result => {
+    mergeBatteryHistory(result.samples);
+    batterySyncState = {
+      status: 'ok',
+      message: result.inserted ? `已新增 ${result.inserted} 条` : '已与 MySQL 同步',
+      lastSyncedAt: Date.now()
+    };
+  }).catch(error => {
+    batterySyncState = { ...batterySyncState, status: 'error', message: error.message };
+  }).finally(() => {
+    batterySyncRunning = false;
+  });
 }
 
 async function listSms() {
@@ -485,17 +616,94 @@ function getConfig() {
 }
 
 function updateConfig(next) {
-  config = { ...config, ...next, pollIntervalMs: 1000 };
+  const password = String(next.password ?? config.password);
+  config = {
+    ...config,
+    ...next,
+    password,
+    developerPassword: password,
+    routerUrl: String(next.routerUrl ?? config.routerUrl).trim().replace(/\/$/, ''),
+    profileKey: String((next.profileKey ?? config.profileKey) || 'default').trim() || 'default',
+    dbEnabled: Boolean(next.dbEnabled ?? config.dbEnabled),
+    dbPort: Number(next.dbPort ?? config.dbPort) || 3306,
+    pollIntervalMs: 1000
+  };
   saveConfig();
+  clearSession();
+  return getConfig();
+}
+
+function clearSession() {
   cookies.clear();
   accessIdSeed = '';
-  loginState.loggedIn = false;
+  loginState = { loggedIn: false, lastAttempt: 0, message: '配置已更新，等待重新登录', method: 'sha256' };
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.clearSession === 'function') bridge.clearSession();
+}
+
+async function pullSharedConfig() {
+  const shared = await nativeDatabaseRequest('pullProfile', { profileKey: config.profileKey });
+  if (!shared.found) throw new Error('MySQL 中没有找到共享配置');
+  const password = shared.password || config.password;
+  config = {
+    ...config,
+    routerUrl: shared.routerUrl || config.routerUrl,
+    password,
+    developerPassword: password
+  };
+  saveConfig();
+  clearSession();
   return getConfig();
+}
+
+async function pushSharedConfig() {
+  const result = await nativeDatabaseRequest('pushProfile', {
+    profileKey: config.profileKey,
+    routerUrl: config.routerUrl,
+    password: config.password
+  });
+  scheduleBatteryHistorySync(true);
+  return result;
+}
+
+async function getDatabaseConfig() {
+  return { host: config.dbHost, port: config.dbPort, database: config.dbName, user: config.dbUser };
+}
+
+async function updateDatabaseConfig(values) {
+  Object.assign(config, {
+    dbHost: String(values.dbHost || '').trim(),
+    dbPort: Number(values.dbPort) || 3306,
+    dbName: String(values.dbName || '').trim(),
+    dbUser: String(values.dbUser || '').trim(),
+    dbPassword: String(values.dbPassword || '')
+  });
+  saveConfig();
+  await nativeDatabaseRequest('test');
+  return getDatabaseConfig();
+}
+
+async function controlDevice(action) {
+  await ensureLogin();
+  const definitions = {
+    reboot: ['REBOOT_DEVICE', {}],
+    shutdown: ['SHUTDOWN_DEVICE', {}],
+    'wifi-on': ['SET_WIFI_INFO', { wifiEnabled: 1 }],
+    'wifi-off': ['SET_WIFI_INFO', { wifiEnabled: 0 }]
+  };
+  if (!definitions[action]) throw new Error('不支持的设备控制命令');
+  const [goformId, values] = definitions[action];
+  return setGoform(goformId, values);
 }
 
 export const routerApi = {
   getConfig,
   updateConfig,
+  pullSharedConfig,
+  pushSharedConfig,
+  getDatabaseConfig,
+  updateDatabaseConfig,
+  controlDevice,
   login,
   developerLogin,
   dashboard,

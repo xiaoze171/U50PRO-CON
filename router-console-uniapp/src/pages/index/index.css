@@ -38,12 +38,11 @@
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 8px;
-  background: #1b816b;
+  border: 1px solid rgba(117, 232, 197, 0.38);
+  border-radius: 11px;
+  background: linear-gradient(145deg, #28a787, #176a8a);
   color: #fff;
-  font-size: 18px;
-  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(8, 36, 50, 0.3);
 }
 
 .brand-title,
@@ -124,6 +123,21 @@
   font-size: 13px;
   line-height: 42px;
   text-align: left;
+}
+
+.nav-button > svg {
+  width: 29px;
+  height: 29px;
+  padding: 5px;
+  flex: 0 0 29px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #8eb1c5;
+}
+
+.nav-button.active > svg {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 .nav-button.active {
@@ -229,16 +243,12 @@
   line-height: 1;
 }
 
+.icon-button svg {
+  color: #287c70;
+}
+
 .mobile-menu {
   display: none;
-}
-
-.spinning {
-  animation: rotate 0.85s linear infinite;
-}
-
-@keyframes rotate {
-  to { transform: rotate(360deg); }
 }
 
 .content-scroll {
@@ -452,6 +462,22 @@
   align-items: center;
 }
 
+.panel-header > svg {
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  flex: 0 0 34px;
+  border-radius: 9px;
+  background: #eaf6f2;
+  color: #17765f;
+}
+
+.primary-button svg,
+.secondary-button svg,
+.danger-button svg {
+  flex: 0 0 auto;
+}
+
 .panel-title,
 .panel-subtitle {
   display: block;
@@ -504,6 +530,17 @@
 
 .health-grid:has(.panel:only-child) {
   grid-template-columns: 1fr;
+}
+
+.temperature-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(310px, 0.72fr) minmax(0, 1.28fr);
+  align-items: stretch;
+  gap: 16px;
+}
+
+.temperature-overview-grid :deep(.metric-grid) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .radio-overview-grid {
@@ -643,6 +680,16 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.settings-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.settings-form label.switch-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .lock-form-grid label,
 .settings-form label {
   display: flex;
@@ -723,6 +770,45 @@ textarea {
   color: #344154;
 }
 
+.danger-button {
+  display: inline-flex;
+  width: auto;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 13px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #a43b3b;
+  border-radius: 6px;
+  background: #b84444;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 36px;
+}
+
+.danger-outline {
+  border-color: #e2b5b5;
+  color: #a33a3a;
+}
+
+.device-control-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.device-control-grid button {
+  width: 100%;
+}
+
+.control-result {
+  display: block;
+  margin-top: 12px;
+}
+
 .primary-button[disabled],
 .secondary-button[disabled] {
   opacity: 0.55;
@@ -738,58 +824,135 @@ textarea {
 .band-groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .band-group {
+  position: relative;
+  display: flex;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid #e2e6ec;
-  border-radius: 6px;
-  background: #fafbfc;
+  min-height: 250px;
+  padding: 17px;
+  flex-direction: column;
+  border: 1px solid #dde5e9;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfa 100%);
+  box-shadow: 0 8px 24px rgba(21, 56, 65, 0.055);
+}
+
+.band-group-header {
+  display: flex;
+  margin-bottom: 15px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .band-title {
   display: block;
-  margin-bottom: 10px;
   color: #172033;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.band-count {
+  display: block;
+  margin-top: 4px;
+  color: #84909f;
+  font-size: 10px;
+}
+
+.band-network-tag {
+  display: grid;
+  min-width: 38px;
+  height: 25px;
+  padding: 0 8px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e9f5f1;
+  color: #14715d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.band-network-tag.sa {
+  background: #eaf0fb;
+  color: #3565a8;
+}
+
+.band-network-tag.nsa {
+  background: #f5eddf;
+  color: #9a6418;
 }
 
 .band-options {
   display: flex;
-  min-height: 78px;
-  margin-bottom: 12px;
+  min-height: 94px;
+  margin-bottom: 16px;
   align-content: flex-start;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
-.band-options label {
+.band-chip {
   display: inline-flex;
-  height: 30px;
-  padding: 0 8px;
+  width: auto;
+  min-width: 52px;
+  height: 35px;
+  min-height: 35px;
+  margin: 0;
+  padding: 0 12px;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  border: 1px solid #dfe4eb;
-  border-radius: 5px;
-  background: #fff;
-  color: #4a5668;
-  font-size: 11px;
-}
-
-.band-options label.checked {
-  border-color: #48a28e;
-  background: #e8f6f2;
-  color: #116b57;
+  border: 1px solid #dce3e8;
+  border-radius: 999px;
+  background: #f5f7f8;
+  color: #536071;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 35px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.band-options checkbox {
-  width: 15px;
-  height: 15px;
-  transform: scale(0.72);
+.band-chip::after,
+.band-save-button::after {
+  border: 0;
+}
+
+.band-chip.checked {
+  border-color: transparent;
+  background: linear-gradient(135deg, #19846d, #237d91);
+  color: #fff;
+  box-shadow: 0 5px 13px rgba(25, 132, 109, 0.22);
+}
+
+.band-chip:active {
+  transform: scale(0.96);
+}
+
+.band-save-button {
+  display: inline-flex;
+  width: 100%;
+  height: 39px;
+  min-height: 39px;
+  margin: auto 0 0;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #cddbd7;
+  border-radius: 9px;
+  background: #fff;
+  color: #176f5e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 39px;
+}
+
+.band-save-button:active {
+  background: #edf7f4;
 }
 
 .section-gap {
@@ -968,6 +1131,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .temperature-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
   .radio-overview-grid {
     grid-template-columns: 1fr;
   }
@@ -1090,9 +1257,14 @@ textarea {
   }
 
   .primary-button,
-  .secondary-button {
+  .secondary-button,
+  .danger-button {
     flex: 1;
     min-width: 136px;
+  }
+
+  .device-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .action-result {

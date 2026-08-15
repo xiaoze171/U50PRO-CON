@@ -1,6 +1,6 @@
 {
   "name": "mu5120-router-console-uniapp",
-  "version": "1.0.0",
+  "version": "1.2.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,9 +14,9 @@
     "@dcloudio/uni-app-plus": "3.0.0-5020420260813001",
     "@dcloudio/uni-components": "3.0.0-5020420260813001",
     "@dcloudio/uni-h5": "3.0.0-5020420260813001",
+    "@tabler/icons-vue": "^3.46.0",
     "crypto-js": "^4.2.0",
     "echarts": "^6.1.0",
-    "lucide-vue-next": "^0.468.0",
     "vue": "3.4.21"
   },
   "devDependencies": {

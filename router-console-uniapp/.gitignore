@@ -9,3 +9,6 @@ android-wrapper/build/
 android-wrapper/app/build/
 android-wrapper/local.properties
 android-wrapper/*.jks
+server/node_modules/
+server/runtime-config.json
+server/*.log

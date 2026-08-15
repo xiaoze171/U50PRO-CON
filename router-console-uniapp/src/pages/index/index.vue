@@ -2,9 +2,9 @@
   <view class="app-shell">
     <aside class="sidebar" :class="{ open: menuOpen }">
       <view class="brand-block">
-        <view class="brand-mark">M</view>
+        <view class="brand-mark"><RouterIcon :size="22" :stroke-width="1.8" /></view>
         <view>
-          <text class="brand-title">MU5120</text>
+          <text class="brand-title">U50 PRO</text>
           <text class="brand-subtitle">移动网络控制台</text>
         </view>
       </view>
@@ -14,7 +14,7 @@
           <view class="status-dot" :class="connected ? 'online' : 'offline'"></view>
           <text>{{ connected ? '路由器已连接' : connectionMessage }}</text>
         </view>
-        <text class="connection-address">{{ config.routerUrl }}</text>
+        <text class="connection-address">{{ connectionAddress }}</text>
       </view>
 
       <view class="nav-list">
@@ -33,6 +33,7 @@
 
       <view class="sidebar-footer">
         <text>每秒自动刷新</text>
+        <text>v{{ APP_VERSION }} · 开发者 晓泽</text>
         <text>{{ clock }}</text>
       </view>
     </aside>
@@ -45,13 +46,13 @@
           <Menu :size="21" />
         </button>
         <view class="page-heading">
-          <text class="eyebrow">MU5120 ROUTER</text>
+          <text class="eyebrow">U50 PRO ROUTER</text>
           <text class="page-title">{{ activeTabInfo.label }}</text>
         </view>
         <view class="top-actions">
-          <text class="last-update">{{ refreshing ? '正在刷新…' : `更新于 ${lastUpdate}` }}</text>
+          <text class="last-update">更新于 {{ lastUpdate }}</text>
           <button class="icon-button" aria-label="立即刷新" @click="refresh(true)">
-            <RefreshCw :size="19" :class="{ spinning: refreshing }" />
+            <RefreshCw :size="19" />
           </button>
         </view>
       </header>
@@ -98,6 +99,20 @@
               </section>
             </view>
 
+            <section class="panel temperature-overview">
+              <view class="panel-header compact">
+                <view>
+                  <text class="panel-title">设备温度</text>
+                  <text class="panel-subtitle">最近 12 小时温度记录，本地自动保存</text>
+                </view>
+                <Thermometer :size="20" />
+              </view>
+              <view class="temperature-overview-grid">
+                <MetricGrid :items="temperatureMetrics" />
+                <AppChart :option="temperatureChartOption" height="230px" />
+              </view>
+            </section>
+
             <section class="panel">
               <view class="panel-header">
                 <view>
@@ -113,23 +128,13 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">信号波动</text>
-                  <text class="panel-subtitle">最近 120 秒的 RSRP、SINR 与 RSRQ</text>
+                  <text class="panel-subtitle">最近 12 小时的 RSRP、SINR 与 RSRQ，本地自动保存</text>
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="280px" />
             </section>
 
-            <view class="two-column health-grid">
-              <section class="panel">
-                <view class="panel-header compact">
-                  <view>
-                    <text class="panel-title">温度</text>
-                    <text class="panel-subtitle">仅显示固件实际返回的传感器</text>
-                  </view>
-                  <Thermometer :size="20" />
-                </view>
-                <MetricGrid :items="temperatureMetrics" />
-              </section>
+            <view class="health-grid">
               <section v-if="resourceItems.length" class="panel">
                 <view class="panel-header compact">
                   <view>
@@ -223,19 +228,40 @@
               </view>
               <view class="band-groups">
                 <view class="band-group">
-                  <text class="band-title">LTE</text>
-                  <view class="band-options"><label v-for="band in lteBands" :key="band" :class="{ checked: selectedLteBands.includes(band) }"><checkbox :value="String(band)" :checked="selectedLteBands.includes(band)" @click="toggleBand('lte', band)" />B{{ band }}</label></view>
-                  <button class="secondary-button" @click="saveBands('lte')">保存 LTE 频段</button>
+                  <view class="band-group-header">
+                    <view><text class="band-title">LTE 频段</text><text class="band-count">已选择 {{ selectedLteBands.length }} 个</text></view>
+                    <text class="band-network-tag">4G</text>
+                  </view>
+                  <view class="band-options">
+                    <button v-for="band in lteBands" :key="band" class="band-chip" :class="{ checked: selectedLteBands.includes(band) }" @click="toggleBand('lte', band)">
+                      <Check v-if="selectedLteBands.includes(band)" :size="14" :stroke-width="2.5" /><text>B{{ band }}</text>
+                    </button>
+                  </view>
+                  <button class="band-save-button" @click="saveBands('lte')"><Save :size="16" />保存 LTE 频段</button>
                 </view>
                 <view class="band-group">
-                  <text class="band-title">5G SA</text>
-                  <view class="band-options"><label v-for="band in nrBands" :key="band" :class="{ checked: selectedSaBands.includes(band) }"><checkbox :value="String(band)" :checked="selectedSaBands.includes(band)" @click="toggleBand('sa', band)" />n{{ band }}</label></view>
-                  <button class="secondary-button" @click="saveBands('sa')">保存 SA 频段</button>
+                  <view class="band-group-header">
+                    <view><text class="band-title">5G SA 频段</text><text class="band-count">已选择 {{ selectedSaBands.length }} 个</text></view>
+                    <text class="band-network-tag sa">SA</text>
+                  </view>
+                  <view class="band-options">
+                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedSaBands.includes(band) }" @click="toggleBand('sa', band)">
+                      <Check v-if="selectedSaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
+                    </button>
+                  </view>
+                  <button class="band-save-button" @click="saveBands('sa')"><Save :size="16" />保存 SA 频段</button>
                 </view>
                 <view class="band-group">
-                  <text class="band-title">5G NSA</text>
-                  <view class="band-options"><label v-for="band in nrBands" :key="band" :class="{ checked: selectedNsaBands.includes(band) }"><checkbox :value="String(band)" :checked="selectedNsaBands.includes(band)" @click="toggleBand('nsa', band)" />n{{ band }}</label></view>
-                  <button class="secondary-button" @click="saveBands('nsa')">保存 NSA 频段</button>
+                  <view class="band-group-header">
+                    <view><text class="band-title">5G NSA 频段</text><text class="band-count">已选择 {{ selectedNsaBands.length }} 个</text></view>
+                    <text class="band-network-tag nsa">NSA</text>
+                  </view>
+                  <view class="band-options">
+                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedNsaBands.includes(band) }" @click="toggleBand('nsa', band)">
+                      <Check v-if="selectedNsaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
+                    </button>
+                  </view>
+                  <button class="band-save-button" @click="saveBands('nsa')"><Save :size="16" />保存 NSA 频段</button>
                 </view>
               </view>
             </section>
@@ -254,7 +280,7 @@
               </section>
             </view>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 120 秒下载与上传速率</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 12 小时下载与上传速率，本地自动保存</text></view></view>
               <AppChart :option="trafficChartOption" height="300px" />
             </section>
           </template>
@@ -262,7 +288,7 @@
           <template v-else-if="activeTab === 'battery'">
             <MetricGrid :items="batteryMetrics" />
             <section class="panel section-gap">
-              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">根据本机保存的充放电记录估算</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 12 小时曲线；长期样本用于续航估算并同步 MySQL</text></view></view>
               <AppChart :option="batteryChartOption" height="280px" />
             </section>
             <section class="panel">
@@ -316,11 +342,10 @@
 
           <template v-else-if="activeTab === 'settings'">
             <section class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">连接设置</text><text class="panel-subtitle">配置保存在应用本机，不上传到外部服务</text></view><Settings :size="20" /></view>
+              <view class="panel-header"><view><text class="panel-title">路由器连接</text><text class="panel-subtitle">手机连接 U50 Pro Wi-Fi 后直接访问 192.168.0.1</text></view><Settings :size="20" /></view>
               <view class="settings-form">
                 <label><text>路由器地址</text><input v-model="settingsForm.routerUrl" placeholder="http://192.168.0.1" /></label>
-                <label><text>登录密码</text><input v-model="settingsForm.password" password /></label>
-                <label><text>开发者密码</text><input v-model="settingsForm.developerPassword" password /></label>
+                <label><text>登录与开发者密码</text><input v-model="settingsForm.password" password /></label>
                 <label><text>刷新间隔</text><input value="1000 ms（固定）" disabled /></label>
               </view>
               <view class="action-row">
@@ -328,6 +353,34 @@
                 <button class="secondary-button" @click="testDeveloper"><Code2 :size="17" />验证开发者权限</button>
                 <text class="action-result">{{ settingsResult }}</text>
               </view>
+            </section>
+            <section class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">MySQL 直连</text><text class="panel-subtitle">Android App 直接连接数据库；浏览器预览不支持 MySQL 协议</text></view><Database :size="20" /></view>
+              <view class="settings-form">
+                <label><text>数据库地址</text><input v-model="settingsForm.dbHost" placeholder="公网 IP、局域网 IP 或域名" /></label>
+                <label><text>端口</text><input v-model="settingsForm.dbPort" type="number" placeholder="3306" /></label>
+                <label><text>数据库名</text><input v-model="settingsForm.dbName" placeholder="u50pro_console" /></label>
+                <label><text>用户名</text><input v-model="settingsForm.dbUser" placeholder="root" /></label>
+                <label><text>数据库密码</text><input v-model="settingsForm.dbPassword" password /></label>
+                <label><text>共享配置标识</text><input v-model="settingsForm.profileKey" placeholder="default" /></label>
+                <label class="switch-field"><text>自动同步</text><switch :checked="settingsForm.dbEnabled" color="#2b927d" @change="settingsForm.dbEnabled = $event.detail.value" /></label>
+              </view>
+              <view class="action-row">
+                <button class="secondary-button" @click="testDatabaseConnection"><Database :size="17" />测试连接</button>
+                <button class="secondary-button" @click="pullDatabaseProfile"><Download :size="17" />从数据库读取</button>
+                <button class="primary-button" @click="pushDatabaseProfile"><Upload :size="17" />同步当前配置</button>
+                <text class="action-result">{{ databaseResult }}</text>
+              </view>
+            </section>
+            <section class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">设备控制</text><text class="panel-subtitle">Wi-Fi 关闭后当前连接会立即中断，需要手动重新连接设备</text></view><Power :size="20" /></view>
+              <view class="device-control-grid">
+                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('wifi-on')"><Wifi :size="17" />开启 Wi-Fi</button>
+                <button class="secondary-button danger-outline" :disabled="actionBusy" @click="runDeviceAction('wifi-off')"><WifiOff :size="17" />关闭 Wi-Fi</button>
+                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('reboot')"><RotateCw :size="17" />重启设备</button>
+                <button class="danger-button" :disabled="actionBusy" @click="runDeviceAction('shutdown')"><PowerOff :size="17" />关闭设备</button>
+              </view>
+              <text class="action-result control-result">{{ deviceActionResult }}</text>
             </section>
             <section class="panel">
               <view class="panel-header"><view><text class="panel-title">运行方式</text><text class="panel-subtitle">同一套功能用于浏览器预览和 Android App</text></view></view>
@@ -344,10 +397,17 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
-  ArrowDown, ArrowUp, BatteryCharging, Cable, ChartNoAxesCombined, CircleAlert, Code2, Cpu, Gauge, Layers3,
-  LayoutDashboard, LockKeyhole, LockOpen, MapPin, Menu, MessageSquareText, RadioTower, Radar, RefreshCw,
-  Save, Search, Send, Settings, Smartphone, Thermometer, Wifi
-} from 'lucide-vue-next';
+  IconAlertCircle as CircleAlert, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
+  IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
+  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCpu as Cpu, IconDatabase as Database,
+  IconDeviceFloppy as Save, IconDevices as Smartphone, IconDownload as Download, IconGauge as Gauge,
+  IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
+  IconLockOpen as LockOpen, IconMapPin as MapPin, IconMenu2 as Menu, IconMessage as MessageSquareText,
+  IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
+  IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
+  IconSettings as Settings, IconTemperature as Thermometer, IconUpload as Upload, IconWifi as Wifi,
+  IconWifiOff as WifiOff
+} from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
 import DataList from '../../components/DataList.vue';
 import MetricGrid from '../../components/MetricGrid.vue';
@@ -357,6 +417,12 @@ import {
   bytesPerSecond, compactEntries, displayPci, firstValue, formatBytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, withUnit
 } from '../../utils/format.js';
+
+const APP_VERSION = '1.2.6';
+const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
+const CHART_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
+const CHART_HISTORY_SAMPLE_MS = 5000;
+const CHART_HISTORY_MAX_POINTS = Math.ceil(CHART_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
 
 const tabs = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
@@ -376,7 +442,7 @@ const errorMessage = ref('');
 const lastUpdate = ref('—');
 const clock = ref('');
 const data = ref({ status: {}, signal: {}, temperature: {}, resources: {}, locks: {}, stations: [], cableStations: [], neighbors: {}, battery: {}, login: {} });
-const histories = reactive({ rsrp: [], sinr: [], rsrq: [], down: [], up: [] });
+const histories = reactive(loadChartHistory());
 const selectedCellKey = ref('');
 const neighborQuery = ref('');
 const lockForm = reactive({ pci: '', arfcn: '', band: '', scs: 30 });
@@ -391,13 +457,17 @@ const smsCapacity = ref('尚未读取');
 const smsNumber = ref('');
 const smsMessage = ref('');
 const settingsResult = ref('');
+const databaseResult = ref('');
+const deviceActionResult = ref('');
 const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
 let pollTimer = null;
 let clockTimer = null;
+let lastChartHistorySave = 0;
 
 const status = computed(() => data.value.status || {});
 const signal = computed(() => data.value.signal || {});
+const connectionAddress = computed(() => config.routerUrl);
 const temperature = computed(() => data.value.temperature || {});
 const resources = computed(() => data.value.resources || {});
 const login = computed(() => data.value.login || {});
@@ -406,8 +476,8 @@ const cableStations = computed(() => data.value.cableStations || []);
 const battery = computed(() => data.value.battery || {});
 const batterySamples = computed(() => battery.value.samples || []);
 const activeTabInfo = computed(() => tabs.find(tab => tab.id === activeTab.value) || tabs[0]);
-const connected = computed(() => login.value.loggedIn || status.value.loginfo === 'ok');
-const connectionMessage = computed(() => login.value.message || '连接失败');
+const connected = computed(() => !data.value.stale && (login.value.loggedIn || status.value.loginfo === 'ok'));
+const connectionMessage = computed(() => data.value.stale ? '服务器缓存数据' : (login.value.message || '连接失败'));
 const networkType = computed(() => firstValue(signal.value.network_type, status.value.network_type));
 const operator = computed(() => firstValue(signal.value.network_provider, signal.value.Operator, '未知运营商'));
 const currentRsrp = computed(() => numeric(firstValue(signal.value.Z5g_rsrp, signal.value.lte_rsrp, signal.value.rssi)));
@@ -481,7 +551,7 @@ const usageMetrics = computed(() => [
   { label: '联网时长', value: formatDuration(status.value.realtime_time) },
   { label: '连接设备', value: `${stations.value.length + cableStations.value.length} 台` }
 ]);
-const realtimeUsageDetails = computed(() => toItems({ '下载': formatBytes(status.value.realtime_rx_bytes), '上传': formatBytes(status.value.realtime_tx_bytes), '下载速度': bytesPerSecond(status.value.realtime_rx_thrpt), '上传速度': bytesPerSecond(status.value.realtime_tx_thrpt), '蜂窝联网时长': formatDuration(status.value.realtime_time), '整机开机时长': firstValue(resources.value.uptime, resources.value.sys_uptime, '固件未暴露'), '连接状态': firstValue(status.value.ppp_status, status.value.wan_connect_status) }));
+const realtimeUsageDetails = computed(() => toItems({ '下载': formatBytes(status.value.realtime_rx_bytes), '上传': formatBytes(status.value.realtime_tx_bytes), '下载速度': bytesPerSecond(status.value.realtime_rx_thrpt), '上传速度': bytesPerSecond(status.value.realtime_tx_thrpt), '蜂窝联网时长': formatDuration(status.value.realtime_time), '连接状态': firstValue(status.value.ppp_status, status.value.wan_connect_status) }));
 const monthlyUsageDetails = computed(() => toItems({ '本月下载': formatBytes(status.value.monthly_rx_bytes), '本月上传': formatBytes(status.value.monthly_tx_bytes), '本月合计': formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)), '累计联网': formatDuration(status.value.monthly_time), '统计月份': formatMonth(status.value.date_month) }));
 const batteryMetrics = computed(() => [
   { label: '电池电量', value: withUnit(firstValue(battery.value.percent, status.value.battery_vol_percent, status.value.battery_value), '%') },
@@ -491,66 +561,210 @@ const batteryMetrics = computed(() => [
   { label: '变化速率', value: battery.value.ratePerHour == null ? '数据不足' : `${battery.value.ratePerHour.toFixed(2)}%/小时` },
   { label: '充电类型', value: firstValue(status.value.battery_charg_type) },
   { label: '外部供电', value: status.value.external_charging_flag === '1' ? '是' : '否' },
-  { label: '记录样本', value: `${batterySamples.value.length} 条` }
+  { label: '记录样本', value: `${batterySamples.value.length} 条` },
+  { label: 'MySQL 同步', value: battery.value.databaseSync?.message || (config.dbEnabled ? '等待同步' : '未启用') }
 ]);
 const clientMetrics = computed(() => [
   { label: '无线设备', value: `${stations.value.length} 台` }, { label: '有线设备', value: `${cableStations.value.length} 台` }, { label: '合计', value: `${stations.value.length + cableStations.value.length} 台` }, { label: '主 Wi-Fi', value: firstValue(status.value.wifi_chip1_ssid1_ssid) }, { label: '副 Wi-Fi', value: firstValue(status.value.wifi_chip2_ssid1_ssid) }
 ]);
-const runtimeDetails = computed(() => toItems({ 'H5 开发预览': 'Vite 代理访问路由器，避免浏览器跨域', 'Android App': '应用内直接访问路由器局域网地址', '登录': '使用保存密码与动态 LD 自动计算 SHA-256', '开发者写接口': '自动刷新主会话、LD 与动态 AD', '刷新频率': '1000 ms' }));
+const runtimeDetails = computed(() => toItems({
+  '当前数据通道': '局域网直连',
+  'H5 开发预览': '仅支持局域网路由器功能，不支持 MySQL',
+  'Android App': '原生 JDBC 直连 MySQL',
+  '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
+  '配置同步': config.dbEnabled ? `${config.profileKey || 'default'} @ ${config.dbHost}:${config.dbPort}` : '未启用',
+  '软件版本': `v${APP_VERSION}`,
+  '开发者': '晓泽',
+  '开发者写接口': '自动刷新主会话、LD 与动态 AD',
+  '刷新频率': '1000 ms'
+}));
 
 const signalChartOption = computed(() => lineOption([
   { name: 'RSRP', data: histories.rsrp, color: '#16836a' },
   { name: 'SINR', data: histories.sinr, color: '#c57a19', axis: 1 },
   { name: 'RSRQ', data: histories.rsrq, color: '#356cc5' }
-], true));
-const speedChartOption = computed(() => miniLineOption(histories.down, histories.up));
-const trafficChartOption = computed(() => lineOption([{ name: '下载', data: histories.down, color: '#16836a' }, { name: '上传', data: histories.up, color: '#356cc5' }]));
-const batteryChartOption = computed(() => lineOption([{ name: '电量', data: batterySamples.value.map(item => item.percent), color: '#16836a' }], false, { min: 0, max: 100 }));
+], true, {}, {
+  animation: false,
+  axisWindowStepMs: 5000,
+  yAxisRanges: [{ min: -140, max: 0 }, { min: -30, max: 50 }]
+}));
+const throughputBuckets = computed(() => {
+  const down = stableTimeBuckets(histories.down, 720);
+  const up = stableTimeBuckets(histories.up, 720);
+  return { down, up, axisMax: niceAxisMax([...down, ...up].map(item => item[1])) };
+});
+const speedChartOption = computed(() => miniLineOption(throughputBuckets.value.down, throughputBuckets.value.up, throughputBuckets.value.axisMax));
+const trafficChartOption = computed(() => lineOption([
+  { name: '下载', data: throughputBuckets.value.down, color: '#16836a', bucketed: true },
+  { name: '上传', data: throughputBuckets.value.up, color: '#356cc5', bucketed: true }
+], false, { min: 0, max: throughputBuckets.value.axisMax }));
+const temperatureChartOption = computed(() => {
+  const colors = ['#d05b4d', '#16836a', '#356cc5', '#c57a19', '#7b61b3', '#2f8795'];
+  const series = Object.entries(histories.temperatures || {})
+    .filter(([, values]) => Array.isArray(values) && values.length)
+    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: values, color: colors[index % colors.length] }));
+  return lineOption(series);
+});
+const batteryChartOption = computed(() => {
+  const cutoff = Date.now() - CHART_HISTORY_WINDOW_MS;
+  const points = batterySamples.value
+    .filter(item => Number(item.timestamp) >= cutoff)
+    .map(item => [Number(item.timestamp), numeric(item.percent)]);
+  return lineOption([{ name: '电量', data: points, color: '#16836a' }], false, { min: 0, max: 100 });
+});
 
 function toItems(object) {
   return Object.entries(object).map(([label, value]) => ({ label, value: firstValue(value) }));
 }
 
-function pushHistory(list, value) {
-  list.push(value);
-  if (list.length > 120) list.splice(0, list.length - 120);
+function normalizePointList(value, cutoff) {
+  if (!Array.isArray(value)) return [];
+  const buckets = new Map();
+  value.forEach(item => {
+    const timestamp = Number(item?.[0]);
+    const pointValue = numeric(item?.[1]);
+    if (!Number.isFinite(timestamp) || timestamp < cutoff || pointValue == null) return;
+    const bucketTime = Math.floor(timestamp / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
+    buckets.set(bucketTime, [bucketTime, pointValue]);
+  });
+  return [...buckets.values()]
+    .sort((left, right) => left[0] - right[0])
+    .slice(-CHART_HISTORY_MAX_POINTS);
+}
+
+function loadChartHistory() {
+  const cutoff = Date.now() - CHART_HISTORY_WINDOW_MS;
+  const stored = uni.getStorageSync(CHART_HISTORY_KEY) || {};
+  const temperatures = {};
+  Object.entries(stored.temperatures || {}).forEach(([key, values]) => {
+    const normalized = normalizePointList(values, cutoff);
+    if (normalized.length) temperatures[key] = normalized;
+  });
+  return {
+    rsrp: normalizePointList(stored.rsrp, cutoff),
+    sinr: normalizePointList(stored.sinr, cutoff),
+    rsrq: normalizePointList(stored.rsrq, cutoff),
+    down: normalizePointList(stored.down, cutoff),
+    up: normalizePointList(stored.up, cutoff),
+    temperatures
+  };
+}
+
+function persistChartHistory(force = false) {
+  const now = Date.now();
+  if (!force && now - lastChartHistorySave < 5000) return;
+  lastChartHistorySave = now;
+  uni.setStorageSync(CHART_HISTORY_KEY, {
+    rsrp: histories.rsrp,
+    sinr: histories.sinr,
+    rsrq: histories.rsrq,
+    down: histories.down,
+    up: histories.up,
+    temperatures: histories.temperatures
+  });
+}
+
+function pushHistory(list, timestamp, value) {
+  if (value == null) return;
+  const bucketTime = Math.floor(timestamp / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
+  const last = list.at(-1);
+  if (last?.[0] === bucketTime) last[1] = value;
+  else list.push([bucketTime, value]);
+  pruneHistory(list, timestamp);
+}
+
+function pruneHistory(list, timestamp) {
+  const cutoff = timestamp - CHART_HISTORY_WINDOW_MS;
+  while (list.length && list[0][0] < cutoff) list.shift();
+  if (list.length > CHART_HISTORY_MAX_POINTS) list.splice(0, list.length - CHART_HISTORY_MAX_POINTS);
 }
 
 function captureHistory(payload) {
+  const timestamp = Number(payload.timestamp) || Date.now();
   const nextSignal = payload.signal || {};
   const nextStatus = payload.status || {};
-  pushHistory(histories.rsrp, numeric(firstValue(nextSignal.Z5g_rsrp, nextSignal.lte_rsrp, nextSignal.rssi)));
-  pushHistory(histories.sinr, numeric(firstValue(nextSignal.Z5g_SINR, nextSignal.Z5g_snr, nextSignal.lte_snr)));
-  pushHistory(histories.rsrq, numeric(firstValue(nextSignal.Z5g_rsrq, nextSignal.lte_rsrq)));
-  pushHistory(histories.down, numeric(nextStatus.realtime_rx_thrpt) || 0);
-  pushHistory(histories.up, numeric(nextStatus.realtime_tx_thrpt) || 0);
+  const nextTemperature = payload.temperature || {};
+  pushHistory(histories.rsrp, timestamp, numeric(firstValue(nextSignal.Z5g_rsrp, nextSignal.lte_rsrp, nextSignal.rssi)));
+  pushHistory(histories.sinr, timestamp, numeric(firstValue(nextSignal.Z5g_SINR, nextSignal.Z5g_snr, nextSignal.lte_snr)));
+  pushHistory(histories.rsrq, timestamp, numeric(firstValue(nextSignal.Z5g_rsrq, nextSignal.lte_rsrq)));
+  pushHistory(histories.down, timestamp, numeric(nextStatus.realtime_rx_thrpt));
+  pushHistory(histories.up, timestamp, numeric(nextStatus.realtime_tx_thrpt));
+  Object.entries(nextTemperature).forEach(([key, value]) => {
+    if (!/temp|sensor|temperature/i.test(key) || /level|oom_temp_pro/i.test(key)) return;
+    const number = numeric(value);
+    if (number == null) return;
+    if (!Array.isArray(histories.temperatures[key])) histories.temperatures[key] = [];
+    pushHistory(histories.temperatures[key], timestamp, number);
+  });
+  Object.values(histories.temperatures).forEach(values => pruneHistory(values, timestamp));
+  persistChartHistory();
 }
 
-function lineOption(series, dualAxis = false, range = {}) {
+function stableTimeBuckets(values, maximum = 720) {
+  if (!Array.isArray(values) || !values.length) return [];
+  const bucketMs = Math.max(1000, Math.ceil(CHART_HISTORY_WINDOW_MS / maximum / 1000) * 1000);
+  const buckets = new Map();
+  values.forEach(point => {
+    const timestamp = Number(point?.[0]);
+    const value = numeric(point?.[1]);
+    if (!Number.isFinite(timestamp) || value == null) return;
+    const bucketStart = Math.floor(timestamp / bucketMs) * bucketMs;
+    const bucket = buckets.get(bucketStart) || { sum: 0, count: 0 };
+    bucket.sum += value;
+    bucket.count += 1;
+    buckets.set(bucketStart, bucket);
+  });
+  return [...buckets.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([bucketStart, bucket]) => [bucketStart + bucketMs, Number((bucket.sum / bucket.count).toFixed(3))]);
+}
+
+function niceAxisMax(values) {
+  const maximum = Math.max(0, ...values.filter(value => Number.isFinite(value)));
+  if (maximum <= 0) return 1024;
+  const padded = maximum * 1.12;
+  const magnitude = 10 ** Math.floor(Math.log10(padded));
+  const normalized = padded / magnitude;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+
+function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
+  const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || 1000);
+  const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
+  const animate = behavior.animation !== false;
+  const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
   return {
-    animationDuration: 250,
+    animation: animate,
+    animationDuration: 0,
+    animationDurationUpdate: animate ? 520 : 0,
+    animationEasingUpdate: 'linear',
     color: series.map(item => item.color),
     grid: { left: 14, right: dualAxis ? 14 : 8, top: 34, bottom: 24, containLabel: true },
     tooltip: { trigger: 'axis', backgroundColor: 'rgba(18,29,43,.94)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 11 } },
     legend: { top: 0, right: 6, textStyle: { color: '#667085', fontSize: 11 } },
-    xAxis: { type: 'category', boundaryGap: false, data: Array.from({ length: Math.max(0, ...series.map(item => item.data.length)) }, (_, index) => index + 1), axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dee7' } } },
+    xAxis: { type: 'time', min: chartNow - CHART_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, axisLabel: { color: '#7b8493', fontSize: 9, hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dee7' } }, splitLine: { show: false } },
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, axisLabel: { color: '#667085', fontSize: 10 }, splitLine: { lineStyle: { color: '#edf0f4' } } },
-      { type: 'value', scale: true, axisLabel: { color: '#a76513', fontSize: 10 }, splitLine: { show: false } }
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#667085', fontSize: 10 }, splitLine: { lineStyle: { color: '#edf0f4' } } },
+      { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#a76513', fontSize: 10 }, splitLine: { show: false } }
     ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#667085', fontSize: 10 }, splitLine: { lineStyle: { color: '#edf0f4' } } }],
-    series: series.map(item => ({ name: item.name, type: 'line', data: item.data, yAxisIndex: item.axis || 0, showSymbol: false, smooth: 0.28, connectNulls: false, lineStyle: { width: 2 }, areaStyle: item.name === '下载' ? { opacity: 0.08 } : undefined }))
+    series: series.map(item => ({ id: item.name, name: item.name, type: 'line', data: item.bucketed ? item.data : stableTimeBuckets(item.data), yAxisIndex: item.axis || 0, showSymbol: false, smooth: 0.12, connectNulls: true, lineStyle: { width: 2 }, areaStyle: item.name === '下载' ? { opacity: 0.08 } : undefined }))
   };
 }
 
-function miniLineOption(download, upload) {
+function miniLineOption(download, upload, axisMax) {
+  const chartNow = Date.now();
   return {
-    animationDuration: 200,
+    animation: true,
+    animationDuration: 0,
+    animationDurationUpdate: 520,
+    animationEasingUpdate: 'linear',
     grid: { left: 0, right: 0, top: 2, bottom: 0 },
-    xAxis: { type: 'category', boundaryGap: false, data: Array.from({ length: Math.max(download.length, upload.length) }, (_, index) => index), show: false },
-    yAxis: { type: 'value', show: false },
+    xAxis: { type: 'time', min: chartNow - CHART_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, show: false },
+    yAxis: { type: 'value', min: 0, max: axisMax, show: false },
     series: [
-      { type: 'line', data: download, showSymbol: false, smooth: 0.28, lineStyle: { width: 1.7, color: '#16836a' }, areaStyle: { color: 'rgba(22,131,106,.12)' } },
-      { type: 'line', data: upload, showSymbol: false, smooth: 0.28, lineStyle: { width: 1.7, color: '#356cc5' } }
+      { id: 'download-mini', type: 'line', data: stableTimeBuckets(download, 240), showSymbol: false, smooth: 0.12, lineStyle: { width: 1.7, color: '#16836a' }, areaStyle: { color: 'rgba(22,131,106,.12)' } },
+      { id: 'upload-mini', type: 'line', data: stableTimeBuckets(upload, 240), showSymbol: false, smooth: 0.12, lineStyle: { width: 1.7, color: '#356cc5' } }
     ]
   };
 }
@@ -592,7 +806,7 @@ async function refresh(manual = false) {
     captureHistory(merged);
     applyInitialBands();
     syncCandidate();
-    errorMessage.value = '';
+    errorMessage.value = merged.stale ? `当前显示缓存数据：${merged.serverMessage || '路由器暂时离线'}` : '';
     lastUpdate.value = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   } catch (error) {
     errorMessage.value = error.message;
@@ -743,10 +957,88 @@ function formatSmsDate(raw) {
 
 async function saveSettings() {
   Object.assign(config, routerApi.updateConfig({ ...settingsForm, pollIntervalMs: 1000 }));
-  settingsResult.value = '正在重新登录…';
-  const result = await routerApi.login(true);
-  settingsResult.value = result.message;
-  await refresh(true);
+  Object.assign(settingsForm, config);
+  settingsResult.value = '正在保存并重新登录…';
+  let syncWarning = '';
+  try {
+    const result = await routerApi.login(true);
+    if (config.dbEnabled) {
+      try {
+        await routerApi.pushSharedConfig();
+      } catch (error) {
+        syncWarning = `；MySQL 未同步：${error.message}`;
+      }
+    }
+    settingsResult.value = result.loggedIn ? `${result.message}，密码已生效${syncWarning}` : `${result.message}${syncWarning}`;
+    await refresh(true);
+  } catch (error) {
+    settingsResult.value = error.message;
+  }
+}
+
+async function pullDatabaseProfile() {
+  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
+  databaseResult.value = '正在从 MySQL 读取…';
+  try {
+    const shared = await routerApi.pullSharedConfig();
+    Object.assign(config, shared);
+    Object.assign(settingsForm, shared);
+    databaseResult.value = '已读取共享登录配置';
+    await refresh(true);
+  } catch (error) {
+    databaseResult.value = error.message;
+  }
+}
+
+async function pushDatabaseProfile() {
+  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
+  databaseResult.value = '正在写入 MySQL…';
+  try {
+    const result = await routerApi.pushSharedConfig();
+    databaseResult.value = result.message || '配置已同步到 MySQL';
+  } catch (error) {
+    databaseResult.value = error.message;
+  }
+}
+
+async function testDatabaseConnection() {
+  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
+  databaseResult.value = '正在测试 MySQL 连接…';
+  try {
+    const result = await routerApi.updateDatabaseConfig(settingsForm);
+    databaseResult.value = `连接成功：${result.host}:${result.port}/${result.database}`;
+  } catch (error) {
+    databaseResult.value = error.message;
+  }
+}
+
+function confirmAction(title, content) {
+  return new Promise(resolve => {
+    uni.showModal({ title, content, confirmText: '继续', cancelText: '取消', success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) });
+  });
+}
+
+async function runDeviceAction(action) {
+  const labels = { 'wifi-on': '开启 Wi-Fi', 'wifi-off': '关闭 Wi-Fi', reboot: '重启设备', shutdown: '关闭设备' };
+  const prompts = {
+    'wifi-off': '关闭后当前 Wi-Fi 连接会断开，需要通过设备按键或重新连接恢复。',
+    reboot: '设备会暂时离线，通常需要约一分钟恢复。',
+    shutdown: '设备关机后无法远程重新开机，需要按实体电源键。'
+  };
+  if (prompts[action] && !(await confirmAction(labels[action], prompts[action]))) return;
+  actionBusy.value = true;
+  deviceActionResult.value = `正在${labels[action]}…`;
+  try {
+    const result = await routerApi.controlDevice(action);
+    const accepted = ['success', '0', '4', 0, 4].includes(result?.result);
+    deviceActionResult.value = accepted ? `${labels[action]}命令已执行` : `${labels[action]}返回：${result?.result ?? '未知'}`;
+    if (action === 'wifi-on') setTimeout(() => refresh(true), 1800);
+  } catch (error) {
+    if (action === 'wifi-off' && /超时|timeout|网络/i.test(error.message)) deviceActionResult.value = '连接已中断，关闭 Wi-Fi 命令可能已经生效';
+    else deviceActionResult.value = error.message;
+  } finally {
+    actionBusy.value = false;
+  }
 }
 
 async function testDeveloper() {
@@ -759,8 +1051,21 @@ async function testDeveloper() {
   }
 }
 
+async function initialize() {
+  if (config.dbEnabled) {
+    try {
+      const shared = await routerApi.pullSharedConfig();
+      Object.assign(config, shared);
+      Object.assign(settingsForm, shared);
+    } catch (error) {
+      databaseResult.value = `MySQL 同步未完成：${error.message}`;
+    }
+  }
+  await refresh();
+}
+
 onMounted(() => {
-  refresh();
+  initialize();
   pollTimer = setInterval(refresh, 1000);
   const updateClock = () => { clock.value = new Date().toLocaleString('zh-CN', { hour12: false }); };
   updateClock();
@@ -775,6 +1080,7 @@ onLoad(options => {
 });
 
 onBeforeUnmount(() => {
+  persistChartHistory(true);
   clearInterval(pollTimer);
   clearInterval(clockTimer);
 });

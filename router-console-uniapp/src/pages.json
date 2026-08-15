@@ -4,13 +4,13 @@
       "path": "pages/index/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "MU5120 控制台"
+        "navigationBarTitleText": "U50 Pro 控制台"
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "MU5120 控制台",
+    "navigationBarTitleText": "U50 Pro 控制台",
     "navigationBarBackgroundColor": "#ffffff",
     "backgroundColor": "#f3f5f8"
   }

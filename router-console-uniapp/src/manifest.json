@@ -1,9 +1,9 @@
 {
-  "name": "MU5120 控制台",
+  "name": "U50 Pro 控制台",
   "appid": "__UNI__MU5120",
-  "description": "中兴 MU5120 路由器管理控制台",
-  "versionName": "1.0.0",
-  "versionCode": "100",
+  "description": "中兴 U50 Pro 路由器管理控制台",
+  "versionName": "1.2.6",
+  "versionCode": "126",
   "transformPx": false,
   "uniStatistics": {
     "enable": false
@@ -32,7 +32,7 @@
     }
   },
   "h5": {
-    "title": "MU5120 控制台",
+    "title": "U50 Pro 控制台",
     "router": {
       "mode": "hash"
     }
