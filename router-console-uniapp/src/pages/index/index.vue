@@ -418,7 +418,7 @@ import {
   formatMonth, numeric, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.2.6';
+const APP_VERSION = '1.2.7';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const CHART_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 5000;

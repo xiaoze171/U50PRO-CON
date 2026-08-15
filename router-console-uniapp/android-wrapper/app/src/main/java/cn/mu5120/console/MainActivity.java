@@ -139,6 +139,23 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView == null) return;
+        webView.onResume();
+        webView.postDelayed(() -> webView.evaluateJavascript(
+            "window.dispatchEvent(new Event('pageshow'));window.dispatchEvent(new Event('resize'));",
+            null
+        ), 160);
+    }
+
+    @Override
+    protected void onPause() {
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidRouter");
