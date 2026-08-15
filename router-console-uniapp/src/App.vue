@@ -7,6 +7,13 @@ export default {
         routerUrl: 'http://192.168.0.1',
         password: '111111',
         developerPassword: '111111',
+        profileKey: 'default',
+        dbEnabled: false,
+        dbHost: '',
+        dbPort: 3306,
+        dbName: 'u50pro_console',
+        dbUser: 'root',
+        dbPassword: '',
         pollIntervalMs: 1000
       });
     }
