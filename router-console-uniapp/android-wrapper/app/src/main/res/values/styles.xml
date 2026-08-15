@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.MU5120" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/brand_green</item>
+        <item name="android:navigationBarColor">@color/brand_dark</item>
+        <item name="android:statusBarColor">@color/brand_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/page_background</item>
+    </style>
+</resources>
