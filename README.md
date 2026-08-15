@@ -6,7 +6,7 @@ U50PRO-CON 是为中兴 U50 Pro / MU5120 随身路由器制作的第三方管理
 
 项目将原厂 Web 管理后台中可用的数据和控制接口重新整理成一套适合电脑浏览器和 Android 手机使用的界面，并增加本地历史记录、续航估算、MySQL 多设备数据共享等能力。
 
-- 当前版本：`1.2.6`
+- 当前版本：`1.2.7`
 - Android 包名：`cn.mu5120.console`
 - 开发者：晓泽
 - 已验证固件：`BD_FLYMODEMMU5120V1.0.1B10`
@@ -34,7 +34,7 @@ U50PRO-CON/
    │     └─ RouterBridge.java         HTTP Cookie 和 MySQL 原生桥
    ├─ database/schema.sql             MySQL 建库建表脚本
    ├─ dist/build/h5/                  H5 构建产物
-   └─ U50PRO-Console-v1.2.6.apk       当前 Android 安装包
+   └─ U50PRO-Console-v1.2.7.apk       当前 Android 安装包
 ```
 
 ## 3. 已完成的主要工作
@@ -263,7 +263,8 @@ Content-Type: application/x-www-form-urlencoded
 - ECharts 序列使用固定 `id`，避免每次刷新被识别为新曲线。
 - 图表实例持续复用，不再每秒清空后重建。
 - Canvas 更新放入 `requestAnimationFrame`。
-- Android WebView 启用 ECharts 局部重绘。
+- Android WebView 关闭不稳定的脏矩形局部重绘，避免 Canvas 局部或整体白屏。
+- 图表容器尺寸变化、页面重新可见和 App 从后台恢复时会执行完整重绘。
 - 吞吐图使用稳定纵轴最大值，避免下载和上传曲线互相挤压。
 - 信号图关闭逐点动画，并固定合理的信号坐标范围。
 - 信号图时间窗口按 5 秒推进，页面数据仍然每秒刷新。
@@ -401,12 +402,12 @@ cd D:\code\github\e\U50PRO-CON\router-console-uniapp\android-wrapper
 D:\config\gradle-6.9.4\bin\gradle.bat :app:assembleRelease
 ```
 
-当前安装包：[`router-console-uniapp/U50PRO-Console-v1.2.6.apk`](router-console-uniapp/U50PRO-Console-v1.2.6.apk)
+当前安装包：[`router-console-uniapp/U50PRO-Console-v1.2.7.apk`](router-console-uniapp/U50PRO-Console-v1.2.7.apk)
 
 ```text
-versionCode: 10
-versionName: 1.2.6
-SHA-256: E547E85A589BF89566020EFDA58092A2FCC640A2FD81CCA08D29FD000D27133D
+versionCode: 11
+versionName: 1.2.7
+SHA-256: 01661CEA6DD97F96237747A7CBC5E7C756C7A78BA7791D5B23B833B65C209838
 ```
 
 该版本已通过 Gradle Release 构建，并使用 ADB 覆盖安装验证。
