@@ -3,6 +3,28 @@ export function firstValue(...values) {
   return '—';
 }
 
+export function operatorName(raw, mcc, mnc) {
+  const source = String(raw ?? '').trim();
+  const compact = source.replace(/[ -]/g, '');
+  const numericCode = /^460(?:0\d|1\d|2\d|3\d|5\d|6\d|7\d|8\d|9\d)$/.test(compact) ? compact.slice(3) : '';
+  const carrierByMnc = {
+    '00': '中国移动', '02': '中国移动', '04': '中国移动', '07': '中国移动', '08': '中国移动', '13': '中国移动',
+    '01': '中国联通', '06': '中国联通', '09': '中国联通', '10': '中国联通', '11': '中国电信', '20': '中国铁通',
+    '03': '中国电信', '05': '中国电信'
+  };
+  if (String(mcc ?? '').trim() === '460' && carrierByMnc[String(mnc ?? '').trim()]) return carrierByMnc[String(mnc ?? '').trim()];
+  if (/^460\d{2}$/.test(compact) && carrierByMnc[compact.slice(3)]) return carrierByMnc[compact.slice(3)];
+  if (source && /[\u3400-\u9fff]/.test(source)) return source;
+  if (source && /[ÃÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßäåæçèéêëìíîïðñòóôõö÷øùúûüýþ]/.test(source) && typeof TextDecoder !== 'undefined') {
+    try {
+      const bytes = Uint8Array.from([...source].map(char => char.charCodeAt(0) & 0xff));
+      const repaired = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      if (/[\u3400-\u9fff]/.test(repaired)) return repaired;
+    } catch {}
+  }
+  return source || '未知运营商';
+}
+
 export function numeric(value) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;

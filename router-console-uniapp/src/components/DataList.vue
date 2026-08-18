@@ -32,7 +32,7 @@ defineProps({
   gap: 14px;
   align-items: center;
   min-height: 43px;
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid #edf1f6;
 }
 
 .data-row:last-child {
@@ -40,7 +40,7 @@ defineProps({
 }
 
 .data-label {
-  color: #687285;
+  color: #718096;
   font-size: 13px;
 }
 
@@ -58,7 +58,7 @@ defineProps({
 
 .empty-row {
   padding: 24px 8px;
-  color: #7b8494;
+  color: #8b97a8;
   font-size: 13px;
   text-align: center;
 }
