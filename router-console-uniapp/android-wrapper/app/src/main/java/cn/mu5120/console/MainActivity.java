@@ -2,8 +2,12 @@ package cn.mu5120.console;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
@@ -20,6 +24,14 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String APP_ASSET_HOST = "appassets.androidplatform.net";
     private WebView webView;
+    private final Handler foregroundHandler = new Handler(Looper.getMainLooper());
+    private final Runnable foregroundHeartbeat = new Runnable() {
+        @Override
+        public void run() {
+            BackgroundMonitorService.setAppForeground(MainActivity.this, true);
+            foregroundHandler.postDelayed(this, 5000);
+        }
+    };
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
@@ -31,7 +43,6 @@ public final class MainActivity extends Activity {
         webView.setBackgroundColor(0xFFF3F5F8);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setDatabaseEnabled(true);
         webView.getSettings().setAllowFileAccess(false);
         webView.getSettings().setAllowContentAccess(false);
         webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
@@ -40,6 +51,10 @@ public final class MainActivity extends Activity {
         webView.getSettings().setDisplayZoomControls(false);
         webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         webView.addJavascriptInterface(new RouterBridge(webView), "AndroidRouter");
+        BackgroundMonitorService.start(this);
+        BackgroundMonitorService.setAppForeground(this, true);
+        BackgroundMonitorService.refreshOverlay(this);
+        requestNotificationPermissionIfNeeded();
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
@@ -141,7 +156,11 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        foregroundHandler.removeCallbacks(foregroundHeartbeat);
+        foregroundHeartbeat.run();
+        BackgroundMonitorService.refreshOverlay(this);
         if (webView == null) return;
+        webView.resumeTimers();
         webView.onResume();
         webView.postDelayed(() -> webView.evaluateJavascript(
             "window.dispatchEvent(new Event('pageshow'));window.dispatchEvent(new Event('resize'));",
@@ -151,12 +170,25 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (webView != null) webView.onPause();
+        foregroundHandler.removeCallbacks(foregroundHeartbeat);
+        BackgroundMonitorService.setAppForeground(this, false);
+        if (webView != null) {
+            webView.onPause();
+            webView.pauseTimers();
+        }
         super.onPause();
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33
+            && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1001);
+        }
     }
 
     @Override
     protected void onDestroy() {
+        foregroundHandler.removeCallbacks(foregroundHeartbeat);
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidRouter");
             webView.destroy();

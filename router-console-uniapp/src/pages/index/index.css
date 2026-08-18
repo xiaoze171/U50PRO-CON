@@ -8,7 +8,7 @@
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #f3f5f8;
+  background: #f5f7fb;
 }
 
 .sidebar {
@@ -21,8 +21,8 @@
   min-width: 244px;
   height: 100%;
   padding: 20px 14px 16px;
-  border-right: 1px solid #24364a;
-  background: #142334;
+  border-right: 1px solid #1e293b;
+  background: #111c2f;
   color: #fff;
 }
 
@@ -38,11 +38,10 @@
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(117, 232, 197, 0.38);
-  border-radius: 11px;
-  background: linear-gradient(145deg, #28a787, #176a8a);
+  border: 1px solid rgba(125, 211, 252, 0.32);
+  border-radius: 8px;
+  background: #2563eb;
   color: #fff;
-  box-shadow: 0 8px 20px rgba(8, 36, 50, 0.3);
 }
 
 .brand-title,
@@ -58,7 +57,7 @@
 
 .brand-subtitle {
   margin-top: 3px;
-  color: #a9bacb;
+  color: #94a3b8;
   font-size: 11px;
 }
 
@@ -86,15 +85,14 @@
 }
 
 .status-dot.online {
-  background: #40c99a;
-  box-shadow: 0 0 0 3px rgba(64, 201, 154, 0.12);
+  background: #34d399;
 }
 
 .connection-address {
   display: block;
   margin-top: 7px;
   overflow: hidden;
-  color: #8297aa;
+  color: #8292aa;
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -119,7 +117,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #b8c5d2;
+  color: #bdc8d8;
   font-size: 13px;
   line-height: 42px;
   text-align: left;
@@ -130,18 +128,18 @@
   height: 29px;
   padding: 5px;
   flex: 0 0 29px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #8eb1c5;
+  border-radius: 6px;
+  background: transparent;
+  color: #aab8cc;
 }
 
 .nav-button.active > svg {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
 .nav-button.active {
-  background: #1e856f;
+  background: #2563eb;
   color: #fff;
   font-weight: 700;
 }
@@ -165,7 +163,7 @@
   gap: 4px;
   padding: 12px 9px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: #7f93a6;
+  color: #8292aa;
   font-size: 10px;
 }
 
@@ -192,7 +190,7 @@
   padding: 0 26px;
   align-items: center;
   gap: 14px;
-  border-bottom: 1px solid #dfe4eb;
+  border-bottom: 1px solid #e3e8ef;
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -203,7 +201,7 @@
 }
 
 .eyebrow {
-  color: #1b816b;
+  color: #2563eb;
   font-size: 9px;
   font-weight: 800;
 }
@@ -224,7 +222,7 @@
 }
 
 .last-update {
-  color: #788293;
+  color: #7a8799;
   font-size: 11px;
 }
 
@@ -236,15 +234,15 @@
   margin: 0;
   padding: 0;
   place-items: center;
-  border: 1px solid #dbe1e9;
+  border: 1px solid #dce3ec;
   border-radius: 6px;
   background: #fff;
-  color: #334155;
+  color: #42526a;
   line-height: 1;
 }
 
 .icon-button svg {
-  color: #287c70;
+  color: #2563eb;
 }
 
 .mobile-menu {
@@ -303,7 +301,7 @@
   padding: 22px 24px;
   flex-direction: column;
   justify-content: space-between;
-  background: #17364a;
+  background: #17233a;
   color: #fff;
 }
 
@@ -317,7 +315,7 @@
 .hero-kicker,
 .operator-name {
   display: block;
-  color: #a8c2d0;
+  color: #b9c6d8;
   font-size: 11px;
 }
 
@@ -347,7 +345,7 @@
 }
 
 .signal-bars view.on {
-  background: #4bd6a5;
+  background: #38bdf8;
 }
 
 .hero-metrics {
@@ -362,7 +360,7 @@
 .hero-metrics view {
   min-width: 0;
   padding: 10px 12px;
-  background: rgba(8, 26, 39, 0.42);
+  background: rgba(20, 27, 33, 0.36);
 }
 
 .hero-metrics text,
@@ -371,7 +369,7 @@
 }
 
 .hero-metrics text {
-  color: #9fbbc9;
+  color: #b8c5d7;
   font-size: 10px;
 }
 
@@ -389,7 +387,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-content: start;
-  border: 1px solid #dfe5ec;
+  border: 1px solid #e1e7ef;
   background: #fff;
 }
 
@@ -409,12 +407,12 @@
   display: block;
 }
 
-.speed-column.download svg { color: #16836a; }
-.speed-column.upload svg { color: #356cc5; }
+.speed-column.download svg { color: #2563eb; }
+.speed-column.upload svg { color: #06b6d4; }
 
 .speed-column text {
   margin-top: 5px;
-  color: #788293;
+  color: #7a8799;
   font-size: 10px;
 }
 
@@ -437,9 +435,10 @@
   min-width: 0;
   margin-bottom: 14px;
   padding: 18px;
-  border: 1px solid #dfe4eb;
+  border: 1px solid #e1e7ef;
   border-radius: 8px;
   background: #fff;
+  box-shadow: 0 4px 18px rgba(30, 55, 90, 0.045);
   overflow: hidden;
 }
 
@@ -468,8 +467,9 @@
   padding: 7px;
   flex: 0 0 34px;
   border-radius: 9px;
-  background: #eaf6f2;
-  color: #17765f;
+  border-radius: 7px;
+  background: #eef4ff;
+  color: #2563eb;
 }
 
 .primary-button svg,
@@ -492,7 +492,7 @@
 
 .panel-subtitle {
   margin-top: 4px;
-  color: #7b8493;
+  color: #7a8799;
   font-size: 10px;
   line-height: 1.4;
 }
@@ -514,8 +514,8 @@
 }
 
 .panel-tag.accent {
-  background: #e6f5f0;
-  color: #116c58;
+  background: #eaf7f8;
+  color: #087c8d;
 }
 
 .two-column {
@@ -610,9 +610,9 @@
 }
 
 .candidate-card.selected {
-  border-color: #2a927c;
-  background: #f1faf7;
-  box-shadow: inset 3px 0 0 #16836a;
+  border-color: #93b4f8;
+  background: #f4f7ff;
+  box-shadow: inset 3px 0 0 #2563eb;
 }
 
 .candidate-rank {
@@ -628,7 +628,7 @@
 }
 
 .candidate-card.selected .candidate-rank {
-  background: #16836a;
+  background: #2563eb;
   color: #fff;
 }
 
@@ -661,7 +661,7 @@
 }
 
 .candidate-signal b {
-  color: #126f5c;
+  color: #2563eb;
   font-size: 13px;
 }
 
@@ -688,6 +688,36 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+}
+
+.overlay-setting-row {
+  display: flex;
+  min-height: 58px;
+  padding: 11px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #d9e0e8;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.overlay-setting-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overlay-setting-copy b {
+  color: #172033;
+  font-size: 13px;
+}
+
+.overlay-setting-copy text {
+  color: #657083;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .lock-form-grid label,
@@ -759,8 +789,8 @@ textarea {
 }
 
 .primary-button {
-  border: 1px solid #146f5c;
-  background: #16836a;
+  border: 1px solid #1d4ed8;
+  background: #2563eb;
   color: #fff;
 }
 
@@ -834,10 +864,9 @@ textarea {
   min-height: 250px;
   padding: 17px;
   flex-direction: column;
-  border: 1px solid #dde5e9;
-  border-radius: 13px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbfa 100%);
-  box-shadow: 0 8px 24px rgba(21, 56, 65, 0.055);
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .band-group-header {
@@ -868,22 +897,22 @@ textarea {
   height: 25px;
   padding: 0 8px;
   place-items: center;
-  border-radius: 999px;
-  background: #e9f5f1;
-  color: #14715d;
+  border-radius: 5px;
+  background: #eaf7f8;
+  color: #087c8d;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
 }
 
 .band-network-tag.sa {
-  background: #eaf0fb;
-  color: #3565a8;
+  background: #eef4ff;
+  color: #315fba;
 }
 
 .band-network-tag.nsa {
-  background: #f5eddf;
-  color: #9a6418;
+  background: #fff6e8;
+  color: #a56308;
 }
 
 .band-options {
@@ -907,13 +936,13 @@ textarea {
   justify-content: center;
   gap: 5px;
   border: 1px solid #dce3e8;
-  border-radius: 999px;
-  background: #f5f7f8;
+  border-radius: 6px;
+  background: #f7f8f8;
   color: #536071;
   font-size: 12px;
   font-weight: 700;
   line-height: 35px;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .band-chip::after,
@@ -922,10 +951,9 @@ textarea {
 }
 
 .band-chip.checked {
-  border-color: transparent;
-  background: linear-gradient(135deg, #19846d, #237d91);
+  border-color: #2563eb;
+  background: #2563eb;
   color: #fff;
-  box-shadow: 0 5px 13px rgba(25, 132, 109, 0.22);
 }
 
 .band-chip:active {
@@ -942,17 +970,17 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #cddbd7;
-  border-radius: 9px;
+  border: 1px solid #cfdcf5;
+  border-radius: 6px;
   background: #fff;
-  color: #176f5e;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 800;
   line-height: 39px;
 }
 
 .band-save-button:active {
-  background: #edf7f4;
+  background: #f0f2f2;
 }
 
 .section-gap {
@@ -971,7 +999,7 @@ textarea {
 }
 
 .history-row b {
-  color: #116e5a;
+  color: #2563eb;
 }
 
 .sms-compose {
@@ -1000,8 +1028,8 @@ textarea {
 }
 
 .sms-card.unread {
-  border-left: 3px solid #16836a;
-  background: #f5fbf9;
+  border-left: 3px solid #2563eb;
+  background: #f6f8ff;
 }
 
 .sms-meta {

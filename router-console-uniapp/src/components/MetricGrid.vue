@@ -23,9 +23,9 @@ defineProps({
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   overflow: hidden;
-  border: 1px solid #e1e6ee;
+  border: 1px solid #e5eaf1;
   border-radius: 8px;
-  background: #e1e6ee;
+  background: #e5eaf1;
 }
 
 .metric-item {
@@ -38,7 +38,7 @@ defineProps({
 .metric-label,
 .metric-note {
   display: block;
-  color: #6c7586;
+  color: #718096;
   font-size: 12px;
   line-height: 1.35;
 }

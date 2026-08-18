@@ -4,15 +4,15 @@
 
 U50PRO-CON 是为中兴 U50 Pro / MU5120 随身路由器制作的第三方管理界面。
 
-项目将原厂 Web 管理后台中可用的数据和控制接口重新整理成一套适合电脑浏览器和 Android 手机使用的界面，并增加本地历史记录、续航估算、MySQL 多设备数据共享等能力。
+项目将原厂 Web 管理后台中可用的数据和控制接口重新整理成一套适合电脑浏览器和 Android 手机使用的界面，并增加本地历史记录和续航估算能力。
 
-- 当前版本：`1.2.7`
+- 当前版本：`1.3.1`
 - Android 包名：`cn.mu5120.console`
 - 开发者：晓泽
 - 已验证固件：`BD_FLYMODEMMU5120V1.0.1B10`
 - 路由器默认地址：`http://192.168.0.1`
 - 前端技术：uni-app、Vue 3、Vite、ECharts、Tabler Icons
-- Android 技术：原生 WebView、Java 网络桥、JDBC MySQL
+- Android 技术：原生 WebView、Java HTTP 网络桥
 
 主工程位于 [`router-console-uniapp`](router-console-uniapp)。
 
@@ -20,8 +20,7 @@ U50PRO-CON 是为中兴 U50 Pro / MU5120 随身路由器制作的第三方管理
 
 ```text
 U50PRO-CON/
-├─ PROJECT.md                         项目完整说明
-├─ README.md                          仓库入口说明
+├─ README.md                          项目完整说明
 └─ router-console-uniapp/
    ├─ src/                            uni-app 前端源码
    │  ├─ pages/index/index.vue        主界面和业务交互
@@ -31,10 +30,9 @@ U50PRO-CON/
    │  └─ utils/                       数据格式化、小区解析工具
    ├─ android-wrapper/                可直接使用 Gradle 构建的 Android 工程
    │  └─ app/src/main/java/.../
-   │     └─ RouterBridge.java         HTTP Cookie 和 MySQL 原生桥
-   ├─ database/schema.sql             MySQL 建库建表脚本
+   │     └─ RouterBridge.java         HTTP Cookie 和局域网请求原生桥
    ├─ dist/build/h5/                  H5 构建产物
-   └─ U50PRO-Console-v1.2.7.apk       当前 Android 安装包
+   └─ U50PRO-Console-v1.3.1.apk       当前 Android 安装包
 ```
 
 ## 3. 已完成的主要工作
@@ -69,11 +67,11 @@ U50PRO-CON/
 - RSRP、RSRQ、SINR、RSSI 和信号格数。
 - 当前下载、上传速度。
 - 设备和电池温度。
-- 最近 12 小时温度曲线。
+- 最近 1 小时温度曲线。
 - LAN IP、WAN IP、IMEI、联网时间。
 - 本月上行、下行流量。
 - 电池电量和充电状态。
-- 最近 12 小时信号波动图。
+- 最近 1 小时信号波动图。
 - 路由器固件和设备快照。
 
 #### 基站、CA 与锁定
@@ -96,7 +94,7 @@ U50PRO-CON/
 - 当前下载、上传速率。
 - 本月下载、上传和合计用量。
 - 当前联网时间和本月累计联网时间。
-- 最近 12 小时吞吐折线图。
+- 最近 1 小时吞吐折线图。
 
 #### 电池与续航
 
@@ -106,8 +104,7 @@ U50PRO-CON/
 - 本地充放电变化速率。
 - 根据历史百分比变化估算剩余续航或充满时间。
 - 最近 12 小时电量曲线。
-- 最近 30 天续航样本保存与合并。
-- 可将续航记录同步到 MySQL，供多台手机共享。
+- 最近 12 小时续航样本仅保存在本机。
 
 #### 短信
 
@@ -131,12 +128,19 @@ U50PRO-CON/
 - 修改路由器管理地址。
 - 保存一个统一的登录密码，主登录和开发者登录共用。
 - 固定每秒刷新一次。
-- 测试 MySQL 连接。
-- 从 MySQL 读取共享配置。
-- 将当前路由器地址和密码写入 MySQL。
-- 开启或关闭 MySQL 自动同步。
+- 所有设置和历史记录仅保存在当前设备本地。
 - 开启 Wi-Fi、关闭 Wi-Fi、重启和关机。
 - 显示软件版本和开发者信息。
+
+#### Android 后台监测
+
+- 启动后默认创建不可关闭的前台监测服务和常驻通知。
+- 页面在前台时由 WebView 将实时上下行、电量和温度同步到通知栏。
+- 页面退到后台约 15 秒后，由原生服务接管轻量接口轮询，避免和前台登录会话互相挤占。
+- 原生服务每 1 秒刷新通知中的上传、下载速度，与前台频率一致；每分钟保存一条电池记录。
+- 后台电池样本保存在 Android `SharedPreferences`，回到页面后与本地历史合并，仍只保留最近 12 小时。
+- 监听开机和应用升级广播，手机重启或覆盖安装后自动恢复。
+- 使用前台服务、CPU 唤醒锁和 Wi-Fi 锁提高 vivo 等系统上的持续运行能力。
 
 ## 4. 路由器认证实现
 
@@ -253,7 +257,7 @@ Content-Type: application/x-www-form-urlencoded
 - 路由器实际返回的温度传感器值。
 - 电池百分比、充放电状态和电池温度。
 
-图表数据使用 `mu5120-chart-history-v1` 保存最近 12 小时，每 5 秒保留一个原始点；电池长期记录使用 `mu5120-battery-history` 保存最近 30 天。
+图表数据使用 `mu5120-chart-history-v1` 保存最近 1 小时，每 5 秒保留一个原始点；电池记录使用 `mu5120-battery-history` 保存最近 12 小时的分钟级样本。
 
 ### 6.2 折线图修复
 
@@ -284,50 +288,16 @@ Content-Type: application/x-www-form-urlencoded
 
 已经尝试查询电压、电流、设计容量、实际容量、循环次数、FCC、SOC、SOH 和健康度等常见字段，但当前固件均返回空字符串。原厂隐藏调试页、温度页和开发者页也没有暴露这些值。
 
-因此当前项目中的续航时间和变化速率来自电池百分比历史估算，不是路由器电量计直接返回的真实容量或电池健康度。数据库保留了电压、电流、容量和健康度列，是为了将来固件或更深层接口能够提供这些值时无需再次改表。
+因此当前项目中的续航时间和变化速率来自电池百分比历史估算，不是路由器电量计直接返回的真实容量或电池健康度。
 
 如需获取更底层电池数据，需要设备 Shell、`/sys/class/power_supply/`、QMI/AT、Qualcomm 诊断接口或外部电量测量设备，当前项目没有执行 Root、刷机或破坏性修改。
 
-## 8. MySQL 多设备共享
+## 8. 本地数据保存
 
-### 8.1 当前实现
-
-Android App 通过 `RouterBridge.java` 使用 JDBC 直接连接 MySQL，不需要 Node、PHP、Java Web 或其他接口服务器。
-
-浏览器受限于 Web 平台，不能直接使用 MySQL 协议，因此 MySQL 功能只在 Android APK 中可用。
-
-原生桥提供四项数据库操作：
-
-| 操作 | 用途 |
-| --- | --- |
-| `test` | 测试数据库连接和表结构 |
-| `pullProfile` | 按 `profile_key` 读取共享路由器地址和密码 |
-| `pushProfile` | 写入或更新共享路由器配置 |
-| `syncBatteryHistory` | 上传并合并最近 30 天电池续航样本 |
-
-### 8.2 数据表
-
-建库建表脚本位于 [`router-console-uniapp/database/schema.sql`](router-console-uniapp/database/schema.sql)。
-
-项目只保留两张实际使用的表：
-
-| 表 | 用途 |
-| --- | --- |
-| `router_profiles` | 保存共享标识、路由器地址、登录密码、更新时间和配置修订号 |
-| `router_battery_history` | 保存电量、充放电、温度、速率、预计续航和预留电池字段 |
-
-旧的状态快照表和操作日志表没有实际业务用途，已从当前数据库设计中删除。
-
-### 8.3 同步规则
-
-- 路由器配置按 `profile_key` 共享，默认值为 `default`。
-- 多台手机使用相同 `profile_key` 时读取同一份配置。
-- 电池记录按设备配置 ID 和采样时间去重。
-- App 最多上传最近 2000 条本地样本。
-- 数据库返回最近 30 天、最多 2000 条样本，与本地记录合并。
-- 自动同步最多每分钟尝试一次，避免每秒刷新都连接数据库。
-
-当前版本按用户要求采用直连 MySQL 方案，路由器密码以普通文本保存在数据库中。数据库地址、用户名和密码保存在 Android 应用本地设置中，没有写入本项目文档。
+- 路由器地址和统一登录密码保存在 `mu5120-config`。
+- 信号、温度和吞吐历史保存在 `mu5120-chart-history-v1`，只保留最近 1 小时。
+- 电池历史保存在 `mu5120-battery-history`，只保留最近 12 小时。
+- 数据不会上传到 MySQL 或其他服务器，多台设备之间不自动共享。
 
 ## 9. H5 与 Android 数据通道
 
@@ -349,15 +319,9 @@ Vue 页面 -> AndroidRouter.request -> RouterBridge -> 路由器 HTTP 接口
 
 原生桥保存路由器 Cookie，并限制 HTTP 请求只能访问 localhost、`.local` 和 RFC1918 局域网地址。Android 清单已允许局域网 HTTP 明文通信。
 
-MySQL 使用独立的数据库桥：
-
-```text
-Vue 页面 -> AndroidRouter.database -> JDBC -> MySQL
-```
-
 ## 10. 外网访问现状
 
-MySQL 只能共享配置和历史数据，不能替手机访问路由器的 `192.168.0.1`。手机没有连接 U50 Pro Wi-Fi 时，当前版本不能实时读取或控制路由器。
+手机没有连接 U50 Pro Wi-Fi、且无法访问路由器的 `192.168.0.1` 时，当前版本不能实时读取或控制路由器。
 
 中兴智慧生活 App 的外网能力依赖中兴账号、设备绑定和厂商云私有协议，与本地 `/goform` 接口不是同一套服务。项目已经确认这一点，但没有伪造或猜测厂商云接口。
 
@@ -402,12 +366,12 @@ cd D:\code\github\e\U50PRO-CON\router-console-uniapp\android-wrapper
 D:\config\gradle-6.9.4\bin\gradle.bat :app:assembleRelease
 ```
 
-当前安装包：[`router-console-uniapp/U50PRO-Console-v1.2.7.apk`](router-console-uniapp/U50PRO-Console-v1.2.7.apk)
+当前安装包：[`router-console-uniapp/U50PRO-Console-v1.3.1.apk`](router-console-uniapp/U50PRO-Console-v1.3.1.apk)
 
 ```text
-versionCode: 11
-versionName: 1.2.7
-SHA-256: 01661CEA6DD97F96237747A7CBC5E7C756C7A78BA7791D5B23B833B65C209838
+versionCode: 15
+versionName: 1.3.1
+SHA-256: 3BA00B8EFD0C903271CFA980A34E962E71716707047FECD02390ABB6240117BE
 ```
 
 该版本已通过 Gradle Release 构建，并使用 ADB 覆盖安装验证。
@@ -422,7 +386,7 @@ SHA-256: 01661CEA6DD97F96237747A7CBC5E7C756C7A78BA7791D5B23B833B65C209838
 - CPU 温度、CPU 占用和内存占用只在固件真实返回时显示，空字段不会伪造。
 - SIM 状态字段不可靠时不显示，`pin_status=0` 不再被误认为有效 SIM 状态。
 - 电池续航是根据历史百分比变化估算，不能代表真实电池容量和健康度。
-- 当前 MySQL 直连方案适合个人使用，不适合作为公开互联网数据库架构。
+- 本地数据不会跨手机同步，卸载应用或清除应用数据会删除历史记录和保存的设置。
 
 ## 13. 后续可继续开发的方向
 

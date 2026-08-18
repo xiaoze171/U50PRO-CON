@@ -4,15 +4,12 @@ const DEFAULT_CONFIG = {
   routerUrl: 'http://192.168.0.1',
   password: '111111',
   developerPassword: '111111',
-  profileKey: 'default',
-  dbEnabled: false,
-  dbHost: '',
-  dbPort: 3306,
-  dbName: 'u50pro_console',
-  dbUser: 'root',
-  dbPassword: '',
   pollIntervalMs: 1000
 };
+
+const BATTERY_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
+const BATTERY_HISTORY_MAX_POINTS = 725;
+const NATIVE_BATTERY_MERGE_MS = 30000;
 
 const signalFields = [
   'network_type', 'network_provider', 'Operator', 'rmcc', 'rmnc', 'mdm_mcc', 'mdm_mnc', 'rssi', 'lte_rssi', 'rscp', 'lte_rsrp', 'lte_rsrq', 'lte_snr', 'ecio',
@@ -49,13 +46,10 @@ let cookies = new Map();
 let accessIdSeed = '';
 let loginState = { loggedIn: false, lastAttempt: 0, message: '尚未连接', method: 'sha256' };
 let batteryHistory = loadBatteryHistory();
-let batterySyncRunning = false;
-let lastBatterySyncAttempt = 0;
-let batterySyncState = { status: 'idle', message: '等待同步', lastSyncedAt: 0 };
+let lastNativeBatteryMerge = 0;
 let isH5 = false;
 let nativeRequestSequence = 0;
 const nativeRequests = new Map();
-const databaseRequests = new Map();
 
 // #ifdef H5
 isH5 = true;
@@ -108,56 +102,15 @@ function nativeBridgeRequest(bridge, path, options, headers) {
   });
 }
 
-function nativeDatabaseRequest(operation, data = {}) {
-  const bridge = nativeBridge();
-  if (!bridge || typeof bridge.database !== 'function') {
-    return Promise.reject(new Error('浏览器不能直连 MySQL，请在 Android App 中使用此功能'));
-  }
-  if (typeof window.__u50proNativeDatabaseResponse !== 'function') {
-    window.__u50proNativeDatabaseResponse = (id, rawResponse) => {
-      const pending = databaseRequests.get(id);
-      if (!pending) return;
-      databaseRequests.delete(id);
-      clearTimeout(pending.timer);
-      try {
-        const response = JSON.parse(rawResponse);
-        if (!response.ok) throw new Error(response.error || 'MySQL 操作失败');
-        pending.resolve(response.data || {});
-      } catch (error) {
-        pending.reject(error);
-      }
-    };
-  }
-  return new Promise((resolve, reject) => {
-    const id = `db-${Date.now()}-${++nativeRequestSequence}`;
-    const timer = setTimeout(() => {
-      databaseRequests.delete(id);
-      reject(new Error('MySQL 请求超时'));
-    }, 20000);
-    databaseRequests.set(id, { resolve, reject, timer });
-    try {
-      bridge.database(id, JSON.stringify({
-        operation,
-        database: {
-          host: config.dbHost,
-          port: Number(config.dbPort),
-          database: config.dbName,
-          user: config.dbUser,
-          password: config.dbPassword
-        },
-        data
-      }));
-    } catch (error) {
-      clearTimeout(timer);
-      databaseRequests.delete(id);
-      reject(error);
-    }
-  });
-}
-
 function loadConfig() {
   const stored = uni.getStorageSync('mu5120-config');
-  return { ...DEFAULT_CONFIG, ...(stored || {}) };
+  return {
+    ...DEFAULT_CONFIG,
+    routerUrl: stored?.routerUrl || DEFAULT_CONFIG.routerUrl,
+    password: stored?.password || DEFAULT_CONFIG.password,
+    developerPassword: stored?.password || stored?.developerPassword || DEFAULT_CONFIG.password,
+    pollIntervalMs: 1000
+  };
 }
 
 function saveConfig() {
@@ -166,7 +119,85 @@ function saveConfig() {
 
 function loadBatteryHistory() {
   const stored = uni.getStorageSync('mu5120-battery-history');
-  return Array.isArray(stored) ? stored : [];
+  const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
+  return mergeBatterySamples(Array.isArray(stored) ? stored : [], readNativeBatteryHistory(), cutoff);
+}
+
+function readNativeBatteryHistory() {
+  try {
+    const bridge = nativeBridge();
+    if (!bridge || typeof bridge.getBackgroundBatteryHistory !== 'function') return [];
+    const value = JSON.parse(bridge.getBackgroundBatteryHistory() || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS) {
+  const buckets = new Map();
+  [...local, ...native].forEach(item => {
+    const timestamp = Number(item?.timestamp);
+    const percent = numeric(item?.percent);
+    if (!Number.isFinite(timestamp) || timestamp < cutoff || percent == null) return;
+    const charging = Boolean(item?.charging);
+    const key = `${Math.floor(timestamp / 60000)}:${charging ? 1 : 0}`;
+    const previous = buckets.get(key) || {};
+    buckets.set(key, { ...previous, ...item, timestamp, percent, charging });
+  });
+  return [...buckets.values()]
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .slice(-BATTERY_HISTORY_MAX_POINTS);
+}
+
+function mergeNativeBatteryHistory(force = false) {
+  const now = Date.now();
+  if (!force && now - lastNativeBatteryMerge < NATIVE_BATTERY_MERGE_MS) return;
+  lastNativeBatteryMerge = now;
+  const merged = mergeBatterySamples(batteryHistory, readNativeBatteryHistory());
+  if (merged.length) batteryHistory = merged;
+}
+
+function syncBackgroundConfig() {
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.configureBackground === 'function') {
+    bridge.configureBackground(config.routerUrl, config.password);
+  }
+}
+
+function updateBackgroundSnapshot(status, temperature) {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.updateBackgroundSnapshot !== 'function') return;
+  try {
+    bridge.updateBackgroundSnapshot(JSON.stringify({ status, temperature }));
+  } catch {}
+}
+
+function getOverlayState() {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.getOverlayEnabled !== 'function') {
+    return { available: false, enabled: false, permitted: false };
+  }
+  try {
+    return {
+      available: true,
+      enabled: Boolean(bridge.getOverlayEnabled()),
+      permitted: typeof bridge.canDrawOverlays === 'function' && Boolean(bridge.canDrawOverlays())
+    };
+  } catch {
+    return { available: true, enabled: false, permitted: false };
+  }
+}
+
+function setOverlayEnabled(enabled) {
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.setOverlayEnabled === 'function') bridge.setOverlayEnabled(Boolean(enabled));
+  return getOverlayState();
+}
+
+function requestOverlayPermission() {
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.requestOverlayPermission === 'function') bridge.requestOverlayPermission();
 }
 
 function sha256(value) {
@@ -346,6 +377,7 @@ async function dashboard() {
     getCommand('lan_station_list').catch(() => ({ lan_station_list: [] })),
     getFields(['network_type', 'lte_ngbr_cell_info_ext', 'sa_ngbr_cell_manual_result_ext']).catch(() => ({}))
   ]);
+  mergeNativeBatteryHistory();
   const sample = recordBattery(status, temperature);
   const battery = batterySummary(status);
   if (sample) {
@@ -355,7 +387,7 @@ async function dashboard() {
     });
     saveBatteryHistory();
   }
-  scheduleBatteryHistorySync();
+  updateBackgroundSnapshot(status, temperature);
   return {
     timestamp: Date.now(),
     login: { ...loginState },
@@ -367,7 +399,7 @@ async function dashboard() {
     stations: normalizeList(stations.station_list),
     cableStations: normalizeList(cable.lan_station_list || cable.station_list),
     neighbors,
-    battery: { ...battery, databaseSync: { ...batterySyncState } }
+    battery
   };
 }
 
@@ -397,8 +429,8 @@ function recordBattery(status, temperature) {
     health: status.battery_health || ''
   };
   batteryHistory.push(sample);
-  const cutoff = timestamp - 30 * 24 * 60 * 60 * 1000;
-  batteryHistory = batteryHistory.filter(item => item.timestamp >= cutoff).slice(-20000);
+  const cutoff = timestamp - BATTERY_HISTORY_WINDOW_MS;
+  batteryHistory = batteryHistory.filter(item => item.timestamp >= cutoff).slice(-BATTERY_HISTORY_MAX_POINTS);
   return sample;
 }
 
@@ -406,7 +438,7 @@ function batterySummary(status) {
   const percent = numeric(status.battery_vol_percent || status.battery_value);
   const charging = status.battery_charging === '1' || status.external_charging_flag === '1';
   const recent = [];
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
   for (let index = batteryHistory.length - 1; index >= 0; index -= 1) {
     const item = batteryHistory[index];
     if (item.timestamp < cutoff || item.charging !== charging) break;
@@ -423,52 +455,11 @@ function batterySummary(status) {
   const remainingHours = ratePerHour && percent != null
     ? (charging ? Math.max(0, (100 - percent) / ratePerHour) : Math.max(0, percent / ratePerHour))
     : null;
-  return { percent, charging, ratePerHour, remainingHours, samples: batteryHistory.slice(-720) };
+  return { percent, charging, ratePerHour, remainingHours, samples: batteryHistory };
 }
 
 function saveBatteryHistory() {
   uni.setStorageSync('mu5120-battery-history', batteryHistory);
-}
-
-function mergeBatteryHistory(remoteSamples) {
-  const merged = new Map();
-  [...batteryHistory, ...(Array.isArray(remoteSamples) ? remoteSamples : [])].forEach(item => {
-    const timestamp = Number(item?.timestamp);
-    const percent = numeric(item?.percent);
-    if (!Number.isFinite(timestamp) || percent == null) return;
-    merged.set(timestamp, { ...item, timestamp, percent, charging: Boolean(item.charging) });
-  });
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  batteryHistory = [...merged.values()]
-    .filter(item => item.timestamp >= cutoff)
-    .sort((left, right) => left.timestamp - right.timestamp)
-    .slice(-20000);
-  saveBatteryHistory();
-}
-
-function scheduleBatteryHistorySync(force = false) {
-  if (!config.dbEnabled || !nativeBridge() || batterySyncRunning) return;
-  const now = Date.now();
-  if (!force && now - lastBatterySyncAttempt < 60000) return;
-  lastBatterySyncAttempt = now;
-  batterySyncRunning = true;
-  batterySyncState = { ...batterySyncState, status: 'syncing', message: '正在同步续航记录' };
-  nativeDatabaseRequest('syncBatteryHistory', {
-    profileKey: config.profileKey,
-    routerUrl: config.routerUrl,
-    samples: batteryHistory.slice(-2000)
-  }).then(result => {
-    mergeBatteryHistory(result.samples);
-    batterySyncState = {
-      status: 'ok',
-      message: result.inserted ? `已新增 ${result.inserted} 条` : '已与 MySQL 同步',
-      lastSyncedAt: Date.now()
-    };
-  }).catch(error => {
-    batterySyncState = { ...batterySyncState, status: 'error', message: error.message };
-  }).finally(() => {
-    batterySyncRunning = false;
-  });
 }
 
 async function listSms() {
@@ -612,6 +603,7 @@ function delay(ms) {
 }
 
 function getConfig() {
+  syncBackgroundConfig();
   return { ...config };
 }
 
@@ -623,12 +615,10 @@ function updateConfig(next) {
     password,
     developerPassword: password,
     routerUrl: String(next.routerUrl ?? config.routerUrl).trim().replace(/\/$/, ''),
-    profileKey: String((next.profileKey ?? config.profileKey) || 'default').trim() || 'default',
-    dbEnabled: Boolean(next.dbEnabled ?? config.dbEnabled),
-    dbPort: Number(next.dbPort ?? config.dbPort) || 3306,
     pollIntervalMs: 1000
   };
   saveConfig();
+  syncBackgroundConfig();
   clearSession();
   return getConfig();
 }
@@ -639,48 +629,6 @@ function clearSession() {
   loginState = { loggedIn: false, lastAttempt: 0, message: '配置已更新，等待重新登录', method: 'sha256' };
   const bridge = nativeBridge();
   if (bridge && typeof bridge.clearSession === 'function') bridge.clearSession();
-}
-
-async function pullSharedConfig() {
-  const shared = await nativeDatabaseRequest('pullProfile', { profileKey: config.profileKey });
-  if (!shared.found) throw new Error('MySQL 中没有找到共享配置');
-  const password = shared.password || config.password;
-  config = {
-    ...config,
-    routerUrl: shared.routerUrl || config.routerUrl,
-    password,
-    developerPassword: password
-  };
-  saveConfig();
-  clearSession();
-  return getConfig();
-}
-
-async function pushSharedConfig() {
-  const result = await nativeDatabaseRequest('pushProfile', {
-    profileKey: config.profileKey,
-    routerUrl: config.routerUrl,
-    password: config.password
-  });
-  scheduleBatteryHistorySync(true);
-  return result;
-}
-
-async function getDatabaseConfig() {
-  return { host: config.dbHost, port: config.dbPort, database: config.dbName, user: config.dbUser };
-}
-
-async function updateDatabaseConfig(values) {
-  Object.assign(config, {
-    dbHost: String(values.dbHost || '').trim(),
-    dbPort: Number(values.dbPort) || 3306,
-    dbName: String(values.dbName || '').trim(),
-    dbUser: String(values.dbUser || '').trim(),
-    dbPassword: String(values.dbPassword || '')
-  });
-  saveConfig();
-  await nativeDatabaseRequest('test');
-  return getDatabaseConfig();
 }
 
 async function controlDevice(action) {
@@ -699,10 +647,9 @@ async function controlDevice(action) {
 export const routerApi = {
   getConfig,
   updateConfig,
-  pullSharedConfig,
-  pushSharedConfig,
-  getDatabaseConfig,
-  updateDatabaseConfig,
+  getOverlayState,
+  setOverlayEnabled,
+  requestOverlayPermission,
   controlDevice,
   login,
   developerLogin,

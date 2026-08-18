@@ -103,7 +103,7 @@
               <view class="panel-header compact">
                 <view>
                   <text class="panel-title">设备温度</text>
-                  <text class="panel-subtitle">最近 12 小时温度记录，本地自动保存</text>
+                  <text class="panel-subtitle">最近 1 小时温度记录，本地自动保存</text>
                 </view>
                 <Thermometer :size="20" />
               </view>
@@ -128,7 +128,7 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">信号波动</text>
-                  <text class="panel-subtitle">最近 12 小时的 RSRP、SINR 与 RSRQ，本地自动保存</text>
+                  <text class="panel-subtitle">最近 1 小时的 RSRP、SINR 与 RSRQ，本地自动保存</text>
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="280px" />
@@ -280,7 +280,7 @@
               </section>
             </view>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 12 小时下载与上传速率，本地自动保存</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 1 小时下载与上传速率，本地自动保存</text></view></view>
               <AppChart :option="trafficChartOption" height="300px" />
             </section>
           </template>
@@ -288,7 +288,7 @@
           <template v-else-if="activeTab === 'battery'">
             <MetricGrid :items="batteryMetrics" />
             <section class="panel section-gap">
-              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 12 小时曲线；长期样本用于续航估算并同步 MySQL</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 12 小时电量记录，仅保存在本机</text></view></view>
               <AppChart :option="batteryChartOption" height="280px" />
             </section>
             <section class="panel">
@@ -355,21 +355,13 @@
               </view>
             </section>
             <section class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">MySQL 直连</text><text class="panel-subtitle">Android App 直接连接数据库；浏览器预览不支持 MySQL 协议</text></view><Database :size="20" /></view>
-              <view class="settings-form">
-                <label><text>数据库地址</text><input v-model="settingsForm.dbHost" placeholder="公网 IP、局域网 IP 或域名" /></label>
-                <label><text>端口</text><input v-model="settingsForm.dbPort" type="number" placeholder="3306" /></label>
-                <label><text>数据库名</text><input v-model="settingsForm.dbName" placeholder="u50pro_console" /></label>
-                <label><text>用户名</text><input v-model="settingsForm.dbUser" placeholder="root" /></label>
-                <label><text>数据库密码</text><input v-model="settingsForm.dbPassword" password /></label>
-                <label><text>共享配置标识</text><input v-model="settingsForm.profileKey" placeholder="default" /></label>
-                <label class="switch-field"><text>自动同步</text><switch :checked="settingsForm.dbEnabled" color="#2b927d" @change="settingsForm.dbEnabled = $event.detail.value" /></label>
-              </view>
-              <view class="action-row">
-                <button class="secondary-button" @click="testDatabaseConnection"><Database :size="17" />测试连接</button>
-                <button class="secondary-button" @click="pullDatabaseProfile"><Download :size="17" />从数据库读取</button>
-                <button class="primary-button" @click="pushDatabaseProfile"><Upload :size="17" />同步当前配置</button>
-                <text class="action-result">{{ databaseResult }}</text>
+              <view class="panel-header"><view><text class="panel-title">悬浮监测</text><text class="panel-subtitle">在其他应用上层显示实时速率、电量与电池温度</text></view><Layers3 :size="20" /></view>
+              <view class="overlay-setting-row">
+                <view class="overlay-setting-copy">
+                  <b>显示悬浮窗</b>
+                  <text>{{ overlayStateText }}</text>
+                </view>
+                <switch :checked="overlayState.enabled" :disabled="!overlayState.available" color="#2563eb" @change="toggleOverlay" />
               </view>
             </section>
             <section class="panel settings-panel">
@@ -399,13 +391,13 @@ import { onLoad } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
-  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCpu as Cpu, IconDatabase as Database,
-  IconDeviceFloppy as Save, IconDevices as Smartphone, IconDownload as Download, IconGauge as Gauge,
+  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCpu as Cpu,
+  IconDeviceFloppy as Save, IconDevices as Smartphone, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMenu2 as Menu, IconMessage as MessageSquareText,
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
-  IconSettings as Settings, IconTemperature as Thermometer, IconUpload as Upload, IconWifi as Wifi,
+  IconSettings as Settings, IconTemperature as Thermometer, IconWifi as Wifi,
   IconWifiOff as WifiOff
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
@@ -415,14 +407,15 @@ import { routerApi } from '../../services/router-client.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import {
   bytesPerSecond, compactEntries, displayPci, firstValue, formatBytes, formatDate, formatDuration, formatHours,
-  formatMonth, numeric, withUnit
+  formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.2.7';
+const APP_VERSION = '1.3.5';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
-const CHART_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
+const METRIC_HISTORY_WINDOW_MS = 60 * 60 * 1000;
+const BATTERY_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 5000;
-const CHART_HISTORY_MAX_POINTS = Math.ceil(CHART_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
+const CHART_HISTORY_MAX_POINTS = Math.ceil(METRIC_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
 
 const tabs = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
@@ -457,10 +450,10 @@ const smsCapacity = ref('尚未读取');
 const smsNumber = ref('');
 const smsMessage = ref('');
 const settingsResult = ref('');
-const databaseResult = ref('');
 const deviceActionResult = ref('');
 const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
+const overlayState = reactive(routerApi.getOverlayState());
 let pollTimer = null;
 let clockTimer = null;
 let lastChartHistorySave = 0;
@@ -477,9 +470,18 @@ const battery = computed(() => data.value.battery || {});
 const batterySamples = computed(() => battery.value.samples || []);
 const activeTabInfo = computed(() => tabs.find(tab => tab.id === activeTab.value) || tabs[0]);
 const connected = computed(() => !data.value.stale && (login.value.loggedIn || status.value.loginfo === 'ok'));
+const overlayStateText = computed(() => {
+  if (!overlayState.available) return '仅 Android App 支持悬浮窗';
+  if (!overlayState.enabled) return '已关闭';
+  return overlayState.permitted ? '已开启，可拖动调整位置' : '已开启，等待系统悬浮窗权限';
+});
 const connectionMessage = computed(() => data.value.stale ? '服务器缓存数据' : (login.value.message || '连接失败'));
 const networkType = computed(() => firstValue(signal.value.network_type, status.value.network_type));
-const operator = computed(() => firstValue(signal.value.network_provider, signal.value.Operator, '未知运营商'));
+const operator = computed(() => operatorName(
+  firstValue(signal.value.network_provider, signal.value.Operator, ''),
+  firstValue(signal.value.rmcc, signal.value.mdm_mcc, ''),
+  firstValue(signal.value.rmnc, signal.value.mdm_mnc, '')
+));
 const currentRsrp = computed(() => numeric(firstValue(signal.value.Z5g_rsrp, signal.value.lte_rsrp, signal.value.rssi)));
 const currentSinr = computed(() => numeric(firstValue(signal.value.Z5g_SINR, signal.value.Z5g_snr, signal.value.lte_snr)));
 const signalBars = computed(() => currentRsrp.value == null ? 0 : currentRsrp.value >= -80 ? 5 : currentRsrp.value >= -90 ? 4 : currentRsrp.value >= -100 ? 3 : currentRsrp.value >= -110 ? 2 : 1);
@@ -562,17 +564,17 @@ const batteryMetrics = computed(() => [
   { label: '充电类型', value: firstValue(status.value.battery_charg_type) },
   { label: '外部供电', value: status.value.external_charging_flag === '1' ? '是' : '否' },
   { label: '记录样本', value: `${batterySamples.value.length} 条` },
-  { label: 'MySQL 同步', value: battery.value.databaseSync?.message || (config.dbEnabled ? '等待同步' : '未启用') }
+  { label: '保存位置', value: '本机 · 12 小时' }
 ]);
 const clientMetrics = computed(() => [
   { label: '无线设备', value: `${stations.value.length} 台` }, { label: '有线设备', value: `${cableStations.value.length} 台` }, { label: '合计', value: `${stations.value.length + cableStations.value.length} 台` }, { label: '主 Wi-Fi', value: firstValue(status.value.wifi_chip1_ssid1_ssid) }, { label: '副 Wi-Fi', value: firstValue(status.value.wifi_chip2_ssid1_ssid) }
 ]);
 const runtimeDetails = computed(() => toItems({
   '当前数据通道': '局域网直连',
-  'H5 开发预览': '仅支持局域网路由器功能，不支持 MySQL',
-  'Android App': '原生 JDBC 直连 MySQL',
+  'H5 开发预览': '通过本机代理访问路由器',
+  'Android App': '原生 HTTP 直连路由器',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
-  '配置同步': config.dbEnabled ? `${config.profileKey || 'default'} @ ${config.dbHost}:${config.dbPort}` : '未启用',
+  '历史记录': '电池 12 小时，其他指标 1 小时，仅保存在本机',
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
@@ -580,9 +582,9 @@ const runtimeDetails = computed(() => toItems({
 }));
 
 const signalChartOption = computed(() => lineOption([
-  { name: 'RSRP', data: histories.rsrp, color: '#16836a' },
-  { name: 'SINR', data: histories.sinr, color: '#c57a19', axis: 1 },
-  { name: 'RSRQ', data: histories.rsrq, color: '#356cc5' }
+  { name: 'RSRP', data: histories.rsrp, color: '#2563eb' },
+  { name: 'SINR', data: histories.sinr, color: '#f59e0b', axis: 1 },
+  { name: 'RSRQ', data: histories.rsrq, color: '#06b6d4' }
 ], true, {}, {
   animation: false,
   axisWindowStepMs: 5000,
@@ -595,22 +597,22 @@ const throughputBuckets = computed(() => {
 });
 const speedChartOption = computed(() => miniLineOption(throughputBuckets.value.down, throughputBuckets.value.up, throughputBuckets.value.axisMax));
 const trafficChartOption = computed(() => lineOption([
-  { name: '下载', data: throughputBuckets.value.down, color: '#16836a', bucketed: true },
-  { name: '上传', data: throughputBuckets.value.up, color: '#356cc5', bucketed: true }
+  { name: '下载', data: throughputBuckets.value.down, color: '#2563eb', bucketed: true, area: true },
+  { name: '上传', data: throughputBuckets.value.up, color: '#06b6d4', bucketed: true, area: true }
 ], false, { min: 0, max: throughputBuckets.value.axisMax }));
 const temperatureChartOption = computed(() => {
-  const colors = ['#d05b4d', '#16836a', '#356cc5', '#c57a19', '#7b61b3', '#2f8795'];
+  const colors = ['#f97316', '#10b981', '#2563eb', '#8b5cf6', '#e11d48', '#06b6d4'];
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
     .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: values, color: colors[index % colors.length] }));
   return lineOption(series);
 });
 const batteryChartOption = computed(() => {
-  const cutoff = Date.now() - CHART_HISTORY_WINDOW_MS;
+  const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
   const points = batterySamples.value
     .filter(item => Number(item.timestamp) >= cutoff)
     .map(item => [Number(item.timestamp), numeric(item.percent)]);
-  return lineOption([{ name: '电量', data: points, color: '#16836a' }], false, { min: 0, max: 100 });
+  return lineOption([{ name: '电量', data: points, color: '#10b981', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS });
 });
 
 function toItems(object) {
@@ -633,7 +635,7 @@ function normalizePointList(value, cutoff) {
 }
 
 function loadChartHistory() {
-  const cutoff = Date.now() - CHART_HISTORY_WINDOW_MS;
+  const cutoff = Date.now() - METRIC_HISTORY_WINDOW_MS;
   const stored = uni.getStorageSync(CHART_HISTORY_KEY) || {};
   const temperatures = {};
   Object.entries(stored.temperatures || {}).forEach(([key, values]) => {
@@ -674,7 +676,7 @@ function pushHistory(list, timestamp, value) {
 }
 
 function pruneHistory(list, timestamp) {
-  const cutoff = timestamp - CHART_HISTORY_WINDOW_MS;
+  const cutoff = timestamp - METRIC_HISTORY_WINDOW_MS;
   while (list.length && list[0][0] < cutoff) list.shift();
   if (list.length > CHART_HISTORY_MAX_POINTS) list.splice(0, list.length - CHART_HISTORY_MAX_POINTS);
 }
@@ -700,9 +702,9 @@ function captureHistory(payload) {
   persistChartHistory();
 }
 
-function stableTimeBuckets(values, maximum = 720) {
+function stableTimeBuckets(values, maximum = 720, windowMs = METRIC_HISTORY_WINDOW_MS) {
   if (!Array.isArray(values) || !values.length) return [];
-  const bucketMs = Math.max(1000, Math.ceil(CHART_HISTORY_WINDOW_MS / maximum / 1000) * 1000);
+  const bucketMs = Math.max(1000, Math.ceil(windowMs / maximum / 1000) * 1000);
   const buckets = new Map();
   values.forEach(point => {
     const timestamp = Number(point?.[0]);
@@ -732,6 +734,7 @@ function niceAxisMax(values) {
 function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
   const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || 1000);
   const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
+  const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
   const animate = behavior.animation !== false;
   const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
   return {
@@ -740,15 +743,37 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
     animationDurationUpdate: animate ? 520 : 0,
     animationEasingUpdate: 'linear',
     color: series.map(item => item.color),
-    grid: { left: 14, right: dualAxis ? 14 : 8, top: 34, bottom: 24, containLabel: true },
-    tooltip: { trigger: 'axis', backgroundColor: 'rgba(18,29,43,.94)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 11 } },
-    legend: { top: 0, right: 6, textStyle: { color: '#667085', fontSize: 11 } },
-    xAxis: { type: 'time', min: chartNow - CHART_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, axisLabel: { color: '#7b8493', fontSize: 9, hideOverlap: true }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dee7' } }, splitLine: { show: false } },
+    grid: { left: 10, right: dualAxis ? 10 : 6, top: 38, bottom: 20, containLabel: true },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,.94)', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, padding: [8, 10], textStyle: { color: '#fff', fontSize: 11 }, axisPointer: { type: 'line', lineStyle: { color: '#94a3b8', width: 1, type: 'dashed' } } },
+    legend: { top: 1, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
+    xAxis: { type: 'time', min: chartNow - windowMs, max: chartNow, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 9, hideOverlap: true, margin: 10 }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }, splitLine: { show: false } },
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#667085', fontSize: 10 }, splitLine: { lineStyle: { color: '#edf0f4' } } },
-      { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#a76513', fontSize: 10 }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#667085', fontSize: 10 }, splitLine: { lineStyle: { color: '#edf0f4' } } }],
-    series: series.map(item => ({ id: item.name, name: item.name, type: 'line', data: item.bucketed ? item.data : stableTimeBuckets(item.data), yAxisIndex: item.axis || 0, showSymbol: false, smooth: 0.12, connectNulls: true, lineStyle: { width: 2 }, areaStyle: item.name === '下载' ? { opacity: 0.08 } : undefined }))
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#eef2f7', width: 1 } } },
+      { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
+    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#eef2f7', width: 1 } } }],
+    series: series.map(item => ({
+      id: item.name,
+      name: item.name,
+      type: 'line',
+      data: item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs),
+      yAxisIndex: item.axis || 0,
+      showSymbol: false,
+      symbol: 'circle',
+      smooth: 0.24,
+      connectNulls: true,
+      lineStyle: { width: 2.2, cap: 'round' },
+      emphasis: { focus: 'series', lineStyle: { width: 3 } },
+      areaStyle: item.area ? {
+        opacity: 1,
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: `${item.color}24` },
+            { offset: 1, color: `${item.color}02` }
+          ]
+        }
+      } : undefined
+    }))
   };
 }
 
@@ -760,11 +785,11 @@ function miniLineOption(download, upload, axisMax) {
     animationDurationUpdate: 520,
     animationEasingUpdate: 'linear',
     grid: { left: 0, right: 0, top: 2, bottom: 0 },
-    xAxis: { type: 'time', min: chartNow - CHART_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, show: false },
+    xAxis: { type: 'time', min: chartNow - METRIC_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, show: false },
     yAxis: { type: 'value', min: 0, max: axisMax, show: false },
     series: [
-      { id: 'download-mini', type: 'line', data: stableTimeBuckets(download, 240), showSymbol: false, smooth: 0.12, lineStyle: { width: 1.7, color: '#16836a' }, areaStyle: { color: 'rgba(22,131,106,.12)' } },
-      { id: 'upload-mini', type: 'line', data: stableTimeBuckets(upload, 240), showSymbol: false, smooth: 0.12, lineStyle: { width: 1.7, color: '#356cc5' } }
+      { id: 'download-mini', type: 'line', data: stableTimeBuckets(download, 240), showSymbol: false, smooth: 0.24, lineStyle: { width: 2, color: '#2563eb' }, areaStyle: { color: 'rgba(37,99,235,.10)' } },
+      { id: 'upload-mini', type: 'line', data: stableTimeBuckets(upload, 240), showSymbol: false, smooth: 0.24, lineStyle: { width: 2, color: '#06b6d4' } }
     ]
   };
 }
@@ -959,57 +984,32 @@ async function saveSettings() {
   Object.assign(config, routerApi.updateConfig({ ...settingsForm, pollIntervalMs: 1000 }));
   Object.assign(settingsForm, config);
   settingsResult.value = '正在保存并重新登录…';
-  let syncWarning = '';
   try {
     const result = await routerApi.login(true);
-    if (config.dbEnabled) {
-      try {
-        await routerApi.pushSharedConfig();
-      } catch (error) {
-        syncWarning = `；MySQL 未同步：${error.message}`;
-      }
-    }
-    settingsResult.value = result.loggedIn ? `${result.message}，密码已生效${syncWarning}` : `${result.message}${syncWarning}`;
+    settingsResult.value = result.loggedIn ? `${result.message}，密码已生效` : result.message;
     await refresh(true);
   } catch (error) {
     settingsResult.value = error.message;
   }
 }
 
-async function pullDatabaseProfile() {
-  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
-  databaseResult.value = '正在从 MySQL 读取…';
-  try {
-    const shared = await routerApi.pullSharedConfig();
-    Object.assign(config, shared);
-    Object.assign(settingsForm, shared);
-    databaseResult.value = '已读取共享登录配置';
-    await refresh(true);
-  } catch (error) {
-    databaseResult.value = error.message;
+function syncOverlayState() {
+  Object.assign(overlayState, routerApi.getOverlayState());
+}
+
+function toggleOverlay(event) {
+  const enabled = Boolean(event?.detail?.value);
+  Object.assign(overlayState, routerApi.setOverlayEnabled(enabled));
+  if (enabled && !overlayState.permitted) {
+    settingsResult.value = '请允许 U50 Pro 控制台显示在其他应用上层';
+    routerApi.requestOverlayPermission();
+  } else {
+    settingsResult.value = enabled ? '悬浮窗已开启' : '悬浮窗已关闭';
   }
 }
 
-async function pushDatabaseProfile() {
-  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
-  databaseResult.value = '正在写入 MySQL…';
-  try {
-    const result = await routerApi.pushSharedConfig();
-    databaseResult.value = result.message || '配置已同步到 MySQL';
-  } catch (error) {
-    databaseResult.value = error.message;
-  }
-}
-
-async function testDatabaseConnection() {
-  Object.assign(config, routerApi.updateConfig({ ...settingsForm }));
-  databaseResult.value = '正在测试 MySQL 连接…';
-  try {
-    const result = await routerApi.updateDatabaseConfig(settingsForm);
-    databaseResult.value = `连接成功：${result.host}:${result.port}/${result.database}`;
-  } catch (error) {
-    databaseResult.value = error.message;
-  }
+function handlePageShow() {
+  setTimeout(syncOverlayState, 250);
 }
 
 function confirmAction(title, content) {
@@ -1052,20 +1052,13 @@ async function testDeveloper() {
 }
 
 async function initialize() {
-  if (config.dbEnabled) {
-    try {
-      const shared = await routerApi.pullSharedConfig();
-      Object.assign(config, shared);
-      Object.assign(settingsForm, shared);
-    } catch (error) {
-      databaseResult.value = `MySQL 同步未完成：${error.message}`;
-    }
-  }
   await refresh();
 }
 
 onMounted(() => {
   initialize();
+  syncOverlayState();
+  if (typeof window !== 'undefined') window.addEventListener('pageshow', handlePageShow);
   pollTimer = setInterval(refresh, 1000);
   const updateClock = () => { clock.value = new Date().toLocaleString('zh-CN', { hour12: false }); };
   updateClock();
@@ -1083,6 +1076,7 @@ onBeforeUnmount(() => {
   persistChartHistory(true);
   clearInterval(pollTimer);
   clearInterval(clockTimer);
+  if (typeof window !== 'undefined') window.removeEventListener('pageshow', handlePageShow);
 });
 </script>
 
