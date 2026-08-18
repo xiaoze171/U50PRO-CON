@@ -582,9 +582,9 @@ const runtimeDetails = computed(() => toItems({
 }));
 
 const signalChartOption = computed(() => lineOption([
-  { name: 'RSRP', data: histories.rsrp, color: '#2563eb' },
-  { name: 'SINR', data: histories.sinr, color: '#f59e0b', axis: 1 },
-  { name: 'RSRQ', data: histories.rsrq, color: '#06b6d4' }
+  { name: 'RSRP', data: histories.rsrp, color: '#5b8def' },
+  { name: 'SINR', data: histories.sinr, color: '#f5a524', axis: 1 },
+  { name: 'RSRQ', data: histories.rsrq, color: '#2dd4bf' }
 ], true, {}, {
   animation: false,
   axisWindowStepMs: 5000,
@@ -597,11 +597,11 @@ const throughputBuckets = computed(() => {
 });
 const speedChartOption = computed(() => miniLineOption(throughputBuckets.value.down, throughputBuckets.value.up, throughputBuckets.value.axisMax));
 const trafficChartOption = computed(() => lineOption([
-  { name: '下载', data: throughputBuckets.value.down, color: '#2563eb', bucketed: true, area: true },
-  { name: '上传', data: throughputBuckets.value.up, color: '#06b6d4', bucketed: true, area: true }
+  { name: '下载', data: throughputBuckets.value.down, color: '#5b8def', bucketed: true, area: true },
+  { name: '上传', data: throughputBuckets.value.up, color: '#2dd4bf', bucketed: true, area: true }
 ], false, { min: 0, max: throughputBuckets.value.axisMax }));
 const temperatureChartOption = computed(() => {
-  const colors = ['#f97316', '#10b981', '#2563eb', '#8b5cf6', '#e11d48', '#06b6d4'];
+  const colors = ['#fb923c', '#34d399', '#5b8def', '#a78bfa', '#f472b6', '#2dd4bf'];
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
     .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: values, color: colors[index % colors.length] }));
@@ -612,7 +612,7 @@ const batteryChartOption = computed(() => {
   const points = batterySamples.value
     .filter(item => Number(item.timestamp) >= cutoff)
     .map(item => [Number(item.timestamp), numeric(item.percent)]);
-  return lineOption([{ name: '电量', data: points, color: '#10b981', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS });
+  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS });
 });
 
 function toItems(object) {
@@ -740,56 +740,119 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
   return {
     animation: animate,
     animationDuration: 0,
-    animationDurationUpdate: animate ? 520 : 0,
-    animationEasingUpdate: 'linear',
+    animationDurationUpdate: animate ? 480 : 0,
+    animationEasingUpdate: 'cubicOut',
     color: series.map(item => item.color),
-    grid: { left: 10, right: dualAxis ? 10 : 6, top: 38, bottom: 20, containLabel: true },
-    tooltip: { trigger: 'axis', backgroundColor: 'rgba(15,23,42,.94)', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, padding: [8, 10], textStyle: { color: '#fff', fontSize: 11 }, axisPointer: { type: 'line', lineStyle: { color: '#94a3b8', width: 1, type: 'dashed' } } },
-    legend: { top: 1, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
-    xAxis: { type: 'time', min: chartNow - windowMs, max: chartNow, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 9, hideOverlap: true, margin: 10 }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }, splitLine: { show: false } },
+    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: 22, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15,23,42,.92)',
+      borderColor: 'rgba(255,255,255,.10)',
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: '#e2e8f0', fontSize: 11 },
+      extraCssText: 'border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.22);',
+      axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.5)', width: 1, type: 'dashed' } }
+    },
+    legend: { top: 0, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
+    xAxis: { type: 'time', min: chartNow - windowMs, max: chartNow, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 9, hideOverlap: true, margin: 10 }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#eef2f7' } }, splitLine: { show: false } },
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#eef2f7', width: 1 } } },
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } },
       { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#eef2f7', width: 1 } } }],
-    series: series.map(item => ({
-      id: item.name,
-      name: item.name,
-      type: 'line',
-      data: item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs),
-      yAxisIndex: item.axis || 0,
-      showSymbol: false,
+    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } }],
+    series: series.map(item => buildLineSeries(item, windowMs))
+  };
+}
+
+function lineGradient(color) {
+  return {
+    type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+    colorStops: [
+      { offset: 0, color: `${color}4d` },
+      { offset: 0.55, color: `${color}b3` },
+      { offset: 1, color }
+    ]
+  };
+}
+
+function areaGradient(color) {
+  return {
+    opacity: 1,
+    color: {
+      type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [
+        { offset: 0, color: `${color}33` },
+        { offset: 0.65, color: `${color}12` },
+        { offset: 1, color: `${color}00` }
+      ]
+    }
+  };
+}
+
+function markLivePoint(data, color) {
+  if (!Array.isArray(data) || !data.length) return data;
+  const lastIndex = data.length - 1;
+  return data.map((point, index) => {
+    if (index !== lastIndex) return point;
+    return {
+      value: point,
       symbol: 'circle',
-      smooth: 0.24,
-      connectNulls: true,
-      lineStyle: { width: 2.2, cap: 'round' },
-      emphasis: { focus: 'series', lineStyle: { width: 3 } },
-      areaStyle: item.area ? {
-        opacity: 1,
-        color: {
-          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: `${item.color}24` },
-            { offset: 1, color: `${item.color}02` }
-          ]
-        }
-      } : undefined
-    }))
+      symbolSize: 7,
+      itemStyle: {
+        color,
+        borderColor: '#ffffff',
+        borderWidth: 1.6,
+        shadowColor: `${color}cc`,
+        shadowBlur: 10
+      }
+    };
+  });
+}
+
+function buildLineSeries(item, windowMs) {
+  const color = item.color;
+  const data = markLivePoint(item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs), color);
+  return {
+    id: item.name,
+    name: item.name,
+    type: 'line',
+    data,
+    yAxisIndex: item.axis || 0,
+    showSymbol: false,
+    symbol: 'circle',
+    symbolSize: 7,
+    smooth: 0.3,
+    connectNulls: true,
+    lineStyle: { width: 2.2, cap: 'round', color: lineGradient(color), shadowColor: `${color}59`, shadowBlur: 8 },
+    emphasis: { focus: 'series', lineStyle: { width: 3 } },
+    areaStyle: item.area ? areaGradient(color) : undefined
   };
 }
 
 function miniLineOption(download, upload, axisMax) {
   const chartNow = Date.now();
+  const downColor = '#5b8def';
+  const upColor = '#2dd4bf';
   return {
     animation: true,
     animationDuration: 0,
-    animationDurationUpdate: 520,
-    animationEasingUpdate: 'linear',
-    grid: { left: 0, right: 0, top: 2, bottom: 0 },
+    animationDurationUpdate: 480,
+    animationEasingUpdate: 'cubicOut',
+    grid: { left: 2, right: 4, top: 4, bottom: 2 },
     xAxis: { type: 'time', min: chartNow - METRIC_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, show: false },
     yAxis: { type: 'value', min: 0, max: axisMax, show: false },
     series: [
-      { id: 'download-mini', type: 'line', data: stableTimeBuckets(download, 240), showSymbol: false, smooth: 0.24, lineStyle: { width: 2, color: '#2563eb' }, areaStyle: { color: 'rgba(37,99,235,.10)' } },
-      { id: 'upload-mini', type: 'line', data: stableTimeBuckets(upload, 240), showSymbol: false, smooth: 0.24, lineStyle: { width: 2, color: '#06b6d4' } }
+      {
+        id: 'download-mini', type: 'line', data: markLivePoint(stableTimeBuckets(download, 240), downColor),
+        showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
+        lineStyle: { width: 2, color: lineGradient(downColor), shadowColor: `${downColor}4d`, shadowBlur: 6 },
+        areaStyle: areaGradient(downColor)
+      },
+      {
+        id: 'upload-mini', type: 'line', data: markLivePoint(stableTimeBuckets(upload, 240), upColor),
+        showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
+        lineStyle: { width: 2, color: lineGradient(upColor), shadowColor: `${upColor}4d`, shadowBlur: 6 }
+      }
     ]
   };
 }

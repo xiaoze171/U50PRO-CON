@@ -3,6 +3,7 @@ package cn.mu5120.console;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -65,11 +66,16 @@ final class MonitorOverlay {
 
         LinearLayout container = new LinearLayout(context);
         container.setOrientation(LinearLayout.HORIZONTAL);
-        container.setPadding(dp(4), dp(3), dp(4), dp(3));
-        container.setBackgroundColor(Color.TRANSPARENT);
+        container.setPadding(dp(12), dp(7), dp(12), dp(7));
+
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.argb(180, 15, 23, 42));
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(1), Color.argb(42, 255, 255, 255));
+        container.setBackground(background);
 
         speedText = createTextView(12, Color.WHITE);
-        speedText.setShadowLayer(dp(3), 0, dp(1), Color.argb(210, 0, 0, 0));
+        speedText.setShadowLayer(dp(1.5f), 0, dp(1), Color.argb(80, 0, 0, 0));
         batteryText = null;
         container.addView(speedText);
 
