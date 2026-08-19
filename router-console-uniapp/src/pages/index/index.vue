@@ -583,12 +583,11 @@ const runtimeDetails = computed(() => toItems({
 
 const signalChartOption = computed(() => lineOption([
   { name: 'RSRP', data: histories.rsrp, color: '#5b8def' },
-  { name: 'SINR', data: histories.sinr, color: '#f5a524', axis: 1 },
+  { name: 'SINR', data: histories.sinr, color: '#f5a524' },
   { name: 'RSRQ', data: histories.rsrq, color: '#2dd4bf' }
-], true, {}, {
+], false, { min: -140, max: 50 }, {
   animation: false,
-  axisWindowStepMs: 5000,
-  yAxisRanges: [{ min: -140, max: 0 }, { min: -30, max: 50 }]
+  axisWindowStepMs: 5000
 }));
 const throughputBuckets = computed(() => {
   const down = stableTimeBuckets(histories.down, 720);
@@ -604,7 +603,7 @@ const temperatureChartOption = computed(() => {
   const colors = ['#fb923c', '#34d399', '#5b8def', '#a78bfa', '#f472b6', '#2dd4bf'];
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
-    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: values, color: colors[index % colors.length] }));
+    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(values, 3), color: colors[index % colors.length] }));
   return lineOption(series);
 });
 const batteryChartOption = computed(() => {
@@ -719,6 +718,26 @@ function stableTimeBuckets(values, maximum = 720, windowMs = METRIC_HISTORY_WIND
   return [...buckets.entries()]
     .sort((left, right) => left[0] - right[0])
     .map(([bucketStart, bucket]) => [bucketStart + bucketMs, Number((bucket.sum / bucket.count).toFixed(3))]);
+}
+
+function smoothSeries(values, windowSize = 3) {
+  if (!Array.isArray(values) || values.length < 2 || windowSize < 2) return values;
+  const half = Math.floor(windowSize / 2);
+  return values.map((point, i) => {
+    const t = point[0];
+    let sum = 0;
+    let count = 0;
+    const start = Math.max(0, i - half);
+    const end = Math.min(values.length - 1, i + half);
+    for (let j = start; j <= end; j++) {
+      const v = numeric(values[j][1]);
+      if (Number.isFinite(v)) {
+        sum += v;
+        count++;
+      }
+    }
+    return count ? [t, Number((sum / count).toFixed(2))] : point;
+  });
 }
 
 function niceAxisMax(values) {

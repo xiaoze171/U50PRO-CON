@@ -5,6 +5,7 @@ import android.webkit.WebView;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import org.json.JSONArray;
@@ -74,6 +75,24 @@ public final class RouterBridge {
         if (canDrawOverlays()) return;
         Intent intent = new Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + webView.getContext().getPackageName())
+        );
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        webView.getContext().startActivity(intent);
+    }
+
+    @JavascriptInterface
+    public boolean isIgnoringBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        PowerManager pm = (PowerManager) webView.getContext().getSystemService(android.content.Context.POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(webView.getContext().getPackageName());
+    }
+
+    @JavascriptInterface
+    public void requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < 23 || isIgnoringBatteryOptimizations()) return;
+        Intent intent = new Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:" + webView.getContext().getPackageName())
         );
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

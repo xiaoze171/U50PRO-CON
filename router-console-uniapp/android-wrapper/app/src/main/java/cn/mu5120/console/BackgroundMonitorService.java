@@ -20,6 +20,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -44,7 +48,6 @@ public final class BackgroundMonitorService extends Service {
     private static final String KEY_URL = "routerUrl";
     private static final String KEY_PASSWORD = "password";
     private static final String KEY_FOREGROUND_UNTIL = "appForegroundUntil";
-    private static final String KEY_HISTORY = "batteryHistory";
     private static final String KEY_OVERLAY_ENABLED = "overlayEnabled";
     private static final String ACTION_FOREGROUND = "cn.mu5120.console.monitor.FOREGROUND";
     private static final String ACTION_CONFIGURE = "cn.mu5120.console.monitor.CONFIGURE";
@@ -85,7 +88,7 @@ public final class BackgroundMonitorService extends Service {
 
     public static void setAppForeground(Context context, boolean foreground) {
         long until = foreground ? System.currentTimeMillis() + 15000 : 0;
-        context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong(KEY_FOREGROUND_UNTIL, until).apply();
+        context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong(KEY_FOREGROUND_UNTIL, until).commit();
         Intent intent = new Intent(context, BackgroundMonitorService.class)
             .setAction(ACTION_FOREGROUND)
             .putExtra("foreground", foreground);
@@ -111,9 +114,10 @@ public final class BackgroundMonitorService extends Service {
     }
 
     public static String readBatteryHistory(Context context) {
-        String raw = context.getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_HISTORY, "[]");
         try {
-            JSONArray source = new JSONArray(raw);
+            File file = historyFile(context);
+            if (!file.exists()) return "[]";
+            JSONArray source = new JSONArray(new String(readFileBytes(file), StandardCharsets.UTF_8));
             JSONArray output = pruneHistory(source, System.currentTimeMillis());
             return output.toString();
         } catch (Exception ignored) {
@@ -164,7 +168,6 @@ public final class BackgroundMonitorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.w(TAG, "service created");
         instance = this;
         running = true;
         android.content.SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -172,6 +175,7 @@ public final class BackgroundMonitorService extends Service {
         password = preferences.getString(KEY_PASSWORD, "111111");
         overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false);
         appForeground = preferences.getLong(KEY_FOREGROUND_UNTIL, 0) > System.currentTimeMillis();
+        Log.w(TAG, "service created foreground=" + appForeground);
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
         overlay = new MonitorOverlay(this);
@@ -180,7 +184,7 @@ public final class BackgroundMonitorService extends Service {
         updateOverlay();
         acquireLocks();
         executor = Executors.newSingleThreadScheduledExecutor();
-        if (!appForeground) {
+        if (!isAppForeground()) {
             pollNow();
             startFastPolling();
             scheduleWatchdog();
@@ -192,10 +196,13 @@ public final class BackgroundMonitorService extends Service {
         if (intent != null) {
             String action = intent.getAction();
             if (ACTION_FOREGROUND.equals(action)) {
-                appForeground = intent.getBooleanExtra("foreground", false);
-                Log.w(TAG, "foreground=" + appForeground);
+                boolean foreground = intent.getBooleanExtra("foreground", false);
+                if (foreground != appForeground) {
+                    Log.w(TAG, foreground ? "[FG] 应用切换到前台" : "[BG] 应用切换到后台");
+                }
+                appForeground = foreground;
                 updateNotification();
-                if (appForeground) {
+                if (foreground) {
                     stopFastPolling();
                     cancelWatchdog();
                 }
@@ -230,7 +237,7 @@ public final class BackgroundMonitorService extends Service {
             } else if (ACTION_SNAPSHOT.equals(action)) {
                 applySnapshotPayload(intent.getStringExtra("payload"));
             } else if (ACTION_POLL.equals(action)) {
-                if (!appForeground) pollNow();
+                if (!isAppForeground()) pollNow();
             }
         }
         return START_STICKY;
@@ -256,22 +263,19 @@ public final class BackgroundMonitorService extends Service {
 
     private void pollRouter() {
         if (!running || isAppForeground()) {
-            Log.w(TAG, "poll skipped running=" + running + " foreground=" + isAppForeground());
             return;
         }
-        Log.w(TAG, "poll start");
         try {
             JSONObject status = fetchStatus(routerUrl, password);
             applySnapshot(status);
             lastError = "";
-            Log.w(TAG, "poll success");
         } catch (Throwable error) {
             lastError = error.getMessage() == null ? "等待路由器连接" : error.getMessage();
             Log.e(TAG, "poll failed", error);
             updateNotification();
             updateOverlay();
         } finally {
-            if (running && !appForeground) scheduleWatchdog();
+            if (running && !isAppForeground()) scheduleWatchdog();
         }
     }
 
@@ -282,7 +286,7 @@ public final class BackgroundMonitorService extends Service {
 
     private void startFastPolling() {
         ScheduledExecutorService current = executor;
-        if (current == null || current.isShutdown() || appForeground) return;
+        if (current == null || current.isShutdown() || isAppForeground()) return;
         if (fastPollTask != null && !fastPollTask.isCancelled()) return;
         fastPollTask = current.scheduleAtFixedRate(this::pollRouter, 0, 1000, TimeUnit.MILLISECONDS);
         Log.w(TAG, "fast polling enabled interval=1000ms");
@@ -297,10 +301,14 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void scheduleWatchdog() {
-        if (alarmManager == null || appForeground) return;
+        if (alarmManager == null || isAppForeground()) return;
         long triggerAt = android.os.SystemClock.elapsedRealtime() + 1000;
         PendingIntent pending = watchdogPendingIntent();
-        alarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
+        if (Build.VERSION.SDK_INT >= 23) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
+        } else {
+            alarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
+        }
     }
 
     private void cancelWatchdog() {
@@ -422,13 +430,18 @@ public final class BackgroundMonitorService extends Service {
         synchronized (HISTORY_LOCK) {
             double percent = number(status, "battery_vol_percent");
             if (!Double.isFinite(percent)) percent = number(status, "battery_value");
-            if (!Double.isFinite(percent)) return;
+            if (!Double.isFinite(percent)) {
+                Log.w(TAG, "recordBattery skipped: percent unavailable");
+                return;
+            }
             boolean charging = "1".equals(status.optString("battery_charging")) || "1".equals(status.optString("external_charging_flag"));
             long now = System.currentTimeMillis();
             SharedHistory history = new SharedHistory(context);
             JSONArray samples = history.loadUnlocked();
             JSONObject previous = samples.length() == 0 ? null : samples.optJSONObject(samples.length() - 1);
-            if (previous != null && now - previous.optLong("timestamp", 0) < 60000 && charging == previous.optBoolean("charging", false)) return;
+            if (previous != null && now - previous.optLong("timestamp", 0) < 60000 && charging == previous.optBoolean("charging", false)) {
+                return;
+            }
             JSONObject sample = new JSONObject();
             try {
                 sample.put("timestamp", now);
@@ -445,6 +458,7 @@ public final class BackgroundMonitorService extends Service {
                 sample.put("health", status.optString("battery_health", ""));
                 samples.put(sample);
                 history.saveUnlocked(pruneHistory(samples, now));
+                Log.w(TAG, "recordBattery saved percent=" + percent + " charging=" + charging + " len=" + samples.length());
             } catch (Exception ignored) {}
         }
     }
@@ -461,7 +475,7 @@ public final class BackgroundMonitorService extends Service {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
-        return builder.setSmallIcon(R.drawable.ic_launcher)
+        return builder.setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("U50 Pro")
             .setContentText("后台监测服务运行中")
             .setContentIntent(pending)
@@ -564,15 +578,50 @@ public final class BackgroundMonitorService extends Service {
         return output.toString().trim();
     }
 
+    private static File historyFile(Context context) {
+        return new File(context.getFilesDir(), "battery_history.json");
+    }
+
+    private static byte[] readFileBytes(File file) throws Exception {
+        try (FileInputStream input = new FileInputStream(file); ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+            byte[] chunk = new byte[8192];
+            int count;
+            while ((count = input.read(chunk)) != -1) buffer.write(chunk, 0, count);
+            return buffer.toByteArray();
+        }
+    }
+
+    private static void writeFileBytes(File file, byte[] data) throws Exception {
+        File temp = new File(file.getParentFile(), file.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temp)) {
+            output.write(data);
+            output.flush();
+            output.getFD().sync();
+        }
+        if (!temp.renameTo(file)) {
+            try (FileOutputStream output = new FileOutputStream(file)) {
+                output.write(data);
+                output.flush();
+            }
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+        }
+    }
+
     private static final class SharedHistory {
         private final Context context;
         SharedHistory(Context context) { this.context = context.getApplicationContext(); }
         JSONArray loadUnlocked() {
-            try { return new JSONArray(context.getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_HISTORY, "[]")); }
-            catch (Exception ignored) { return new JSONArray(); }
+            try {
+                File file = historyFile(context);
+                if (!file.exists()) return new JSONArray();
+                return new JSONArray(new String(readFileBytes(file), StandardCharsets.UTF_8));
+            } catch (Exception ignored) { return new JSONArray(); }
         }
         void saveUnlocked(JSONArray value) {
-            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_HISTORY, value.toString()).apply();
+            try {
+                writeFileBytes(historyFile(context), value.toString().getBytes(StandardCharsets.UTF_8));
+            } catch (Exception ignored) {}
         }
     }
 }
