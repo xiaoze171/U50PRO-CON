@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -475,7 +476,8 @@ public final class BackgroundMonitorService extends Service {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
             ? new Notification.Builder(this, CHANNEL_ID)
             : new Notification.Builder(this);
-        return builder.setSmallIcon(R.mipmap.ic_launcher)
+        return builder.setSmallIcon(R.drawable.ic_stat_monitor)
+            .setLargeIcon(BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher))
             .setContentTitle("U50 Pro")
             .setContentText("后台监测服务运行中")
             .setContentIntent(pending)
