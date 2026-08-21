@@ -3,6 +3,7 @@ package cn.mu5120.console;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.provider.Settings;
@@ -17,6 +18,7 @@ final class MonitorOverlay {
     private static final String PREFS = "u50pro_background_monitor";
     private static final String KEY_X = "overlayX";
     private static final String KEY_Y = "overlayY";
+    private static final int OVERLAY_WIDTH_DP = 250;
 
     private final Context context;
     private final SharedPreferences preferences;
@@ -74,16 +76,21 @@ final class MonitorOverlay {
         background.setStroke(dp(1), Color.argb(42, 255, 255, 255));
         container.setBackground(background);
 
-        speedText = createTextView(12, Color.WHITE);
+        speedText = createTextView(11, Color.WHITE);
+        speedText.setTypeface(Typeface.MONOSPACE);
         speedText.setShadowLayer(dp(1.5f), 0, dp(1), Color.argb(80, 0, 0, 0));
         batteryText = null;
-        container.addView(speedText);
+        container.addView(speedText, new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f
+        ));
 
         int type = Build.VERSION.SDK_INT >= 26
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             : WindowManager.LayoutParams.TYPE_PHONE;
         layoutParams = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(OVERLAY_WIDTH_DP),
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -92,7 +99,11 @@ final class MonitorOverlay {
             android.graphics.PixelFormat.TRANSLUCENT
         );
         layoutParams.gravity = Gravity.TOP | Gravity.START;
-        layoutParams.x = preferences.getInt(KEY_X, Math.max(dp(12), screenWidth() - dp(230)));
+        int defaultX = Math.max(dp(12), screenWidth() - dp(OVERLAY_WIDTH_DP) - dp(12));
+        layoutParams.x = Math.max(0, Math.min(
+            preferences.getInt(KEY_X, defaultX),
+            screenWidth() - dp(OVERLAY_WIDTH_DP)
+        ));
         layoutParams.y = preferences.getInt(KEY_Y, dp(110));
 
         container.setOnTouchListener(new DragListener());
@@ -109,7 +120,7 @@ final class MonitorOverlay {
         TextView view = new TextView(context);
         view.setTextSize(size);
         view.setTextColor(color);
-        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setGravity(Gravity.CENTER);
         view.setSingleLine(true);
         view.setIncludeFontPadding(false);
         return view;

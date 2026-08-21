@@ -42,9 +42,6 @@
 
     <main class="main-area">
       <header class="topbar">
-        <button class="icon-button mobile-menu" aria-label="打开菜单" @click="menuOpen = true">
-          <Menu :size="21" />
-        </button>
         <view class="page-heading">
           <text class="eyebrow">U50 PRO ROUTER</text>
           <text class="page-title">{{ activeTabInfo.label }}</text>
@@ -113,27 +110,6 @@
               </view>
             </section>
 
-            <section class="panel">
-              <view class="panel-header">
-                <view>
-                  <text class="panel-title">设备快照</text>
-                  <text class="panel-subtitle">网络、设备与本月用量</text>
-                </view>
-                <text class="panel-tag">{{ status.wa_inner_version || login.firmware || '固件信息等待中' }}</text>
-              </view>
-              <MetricGrid :items="snapshotMetrics" />
-            </section>
-
-            <section class="panel">
-              <view class="panel-header">
-                <view>
-                  <text class="panel-title">信号波动</text>
-                  <text class="panel-subtitle">最近 1 小时的 RSRP、SINR 与 RSRQ，本地自动保存</text>
-                </view>
-              </view>
-              <AppChart :option="signalChartOption" height="280px" />
-            </section>
-
             <view class="health-grid">
               <section v-if="resourceItems.length" class="panel">
                 <view class="panel-header compact">
@@ -145,24 +121,44 @@
                 </view>
                 <DataList :items="resourceItems" />
               </section>
+              <section class="panel">
+                <view class="panel-header compact">
+                  <view>
+                    <text class="panel-title">设备信息</text>
+                    <text class="panel-subtitle">仅保留设备自身标识</text>
+                  </view>
+                  <RouterIcon :size="20" />
+                </view>
+                <DataList :items="deviceIdentityDetails" />
+              </section>
             </view>
           </template>
 
           <template v-else-if="activeTab === 'radio'">
             <view class="radio-overview-grid">
-              <section class="panel compact-panel">
+              <section class="panel compact-panel radio-info-panel">
                 <view class="panel-header compact"><text class="panel-title">当前网络信息</text><RadioTower :size="19" /></view>
-                <DataList :items="networkDetails" />
+                <DataList class="radio-data-list" :items="networkDetails" />
               </section>
-              <section class="panel compact-panel">
+              <section class="panel compact-panel radio-info-panel">
                 <view class="panel-header compact"><text class="panel-title">服务小区</text><MapPin :size="19" /></view>
-                <DataList :items="servingCellDetails" />
+                <DataList class="radio-data-list" :items="servingCellDetails" />
               </section>
-              <section class="panel compact-panel">
+              <section class="panel compact-panel radio-info-panel secondary-info-panel">
                 <view class="panel-header compact"><text class="panel-title">辅载波与 NR CA</text><Layers3 :size="19" /></view>
-                <DataList :items="secondaryCellDetails" empty-text="当前未检测到辅载波或 CA" />
+                <DataList class="radio-data-list" :items="secondaryCellDetails" empty-text="当前未检测到辅载波或 CA" />
               </section>
             </view>
+
+            <section class="panel signal-trend-panel">
+              <view class="panel-header">
+                <view>
+                  <text class="panel-title">无线质量趋势</text>
+                  <text class="panel-subtitle">最近 1 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
+                </view>
+              </view>
+              <AppChart :option="signalChartOption" height="260px" />
+            </section>
 
             <section class="panel">
               <view class="panel-header">
@@ -268,20 +264,14 @@
           </template>
 
           <template v-else-if="activeTab === 'usage'">
-            <MetricGrid :items="usageMetrics" />
-            <view class="two-column section-gap">
-              <section class="panel">
-                <view class="panel-header"><view><text class="panel-title">当前会话</text><text class="panel-subtitle">实时速率与蜂窝连接时长</text></view></view>
-                <DataList :items="realtimeUsageDetails" />
-              </section>
-              <section class="panel">
-                <view class="panel-header"><view><text class="panel-title">每月用量</text><text class="panel-subtitle">统计月份 {{ formatMonth(status.date_month) }}</text></view></view>
-                <DataList :items="monthlyUsageDetails" />
-              </section>
-            </view>
+            <MetricGrid :items="usageSummaryMetrics" />
             <section class="panel">
               <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 1 小时下载与上传速率，本地自动保存</text></view></view>
               <AppChart :option="trafficChartOption" height="300px" />
+            </section>
+            <section class="panel">
+              <view class="panel-header"><view><text class="panel-title">用量明细</text><text class="panel-subtitle">当前会话与 {{ formatMonth(status.date_month) }} 月统计</text></view></view>
+              <DataList :items="usageDetails" />
             </section>
           </template>
 
@@ -327,8 +317,7 @@
           </template>
 
           <template v-else-if="activeTab === 'clients'">
-            <MetricGrid :items="clientMetrics" />
-            <view class="two-column section-gap">
+            <view class="two-column">
               <section class="panel">
                 <view class="panel-header"><view><text class="panel-title">无线设备</text><text class="panel-subtitle">{{ stations.length }} 台</text></view><Wifi :size="20" /></view>
                 <view class="client-list"><view v-for="client in stations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!stations.length" class="empty-state">当前没有无线设备。</view></view>
@@ -382,6 +371,35 @@
         </view>
       </scroll-view>
     </main>
+
+    <view class="mobile-bottom-nav">
+      <button
+        v-for="item in mobileTabs"
+        :key="item.id"
+        class="mobile-nav-button"
+        :class="{ active: activeTab === item.id }"
+        @click="switchTab(item.id)"
+      >
+        <component :is="item.icon" :size="21" :stroke-width="activeTab === item.id ? 2.2 : 1.8" />
+        <text>{{ item.label }}</text>
+      </button>
+      <button class="mobile-nav-button" :class="{ active: moreOpen || moreTabs.some(item => item.id === activeTab) }" @click="moreOpen = !moreOpen">
+        <Apps :size="21" :stroke-width="moreOpen ? 2.2 : 1.8" />
+        <text>更多</text>
+      </button>
+    </view>
+
+    <view v-if="moreOpen" class="more-sheet-mask" @click="moreOpen = false"></view>
+    <view v-if="moreOpen" class="more-sheet">
+      <view class="more-sheet-handle"></view>
+      <view class="more-sheet-title"><text>更多功能</text><button class="more-sheet-close" aria-label="关闭更多功能" @click="moreOpen = false"><X :size="18" /></button></view>
+      <view class="more-grid">
+        <button v-for="item in moreTabs" :key="item.id" class="more-item" @click="switchTab(item.id)">
+          <view class="more-item-icon"><component :is="item.icon" :size="21" :stroke-width="1.9" /></view>
+          <text>{{ item.label }}</text>
+        </button>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -389,16 +407,16 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
-  IconAlertCircle as CircleAlert, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
+  IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
   IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCpu as Cpu,
   IconDeviceFloppy as Save, IconDevices as Smartphone, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
-  IconLockOpen as LockOpen, IconMapPin as MapPin, IconMenu2 as Menu, IconMessage as MessageSquareText,
+  IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
   IconSettings as Settings, IconTemperature as Thermometer, IconWifi as Wifi,
-  IconWifiOff as WifiOff
+  IconWifiOff as WifiOff, IconX as X
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
 import DataList from '../../components/DataList.vue';
@@ -410,7 +428,7 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.5';
+const APP_VERSION = '1.3.9';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -427,8 +445,21 @@ const tabs = [
   { id: 'settings', label: '设置', icon: Settings }
 ];
 
+const mobileTabs = [
+  { id: 'overview', label: '总览', icon: LayoutDashboard },
+  { id: 'radio', label: '基站', icon: RadioTower },
+  { id: 'usage', label: '流量', icon: ChartNoAxesCombined },
+  { id: 'battery', label: '电池', icon: BatteryCharging }
+];
+const moreTabs = [
+  { id: 'sms', label: '短信', icon: MessageSquareText },
+  { id: 'clients', label: '连接设备', icon: Smartphone },
+  { id: 'settings', label: '设置与控制', icon: Settings }
+];
+
 const activeTab = ref('overview');
 const menuOpen = ref(false);
+const moreOpen = ref(false);
 const refreshing = ref(false);
 const actionBusy = ref(false);
 const errorMessage = ref('');
@@ -484,11 +515,11 @@ const operator = computed(() => operatorName(
 ));
 const currentRsrp = computed(() => numeric(firstValue(signal.value.Z5g_rsrp, signal.value.lte_rsrp, signal.value.rssi)));
 const currentSinr = computed(() => numeric(firstValue(signal.value.Z5g_SINR, signal.value.Z5g_snr, signal.value.lte_snr)));
-const signalBars = computed(() => currentRsrp.value == null ? 0 : currentRsrp.value >= -80 ? 5 : currentRsrp.value >= -90 ? 4 : currentRsrp.value >= -100 ? 3 : currentRsrp.value >= -110 ? 2 : 1);
 const caState = computed(() => {
   if (signal.value.nr_ca_dl_state || signal.value.nr_multi_ca_scell_info) return 'NR CA';
   return signal.value.wan_lte_ca === 'ca_activated' ? 'LTE CA ON' : 'OFF';
 });
+const signalBars = computed(() => currentRsrp.value == null ? 0 : currentRsrp.value >= -80 ? 5 : currentRsrp.value >= -90 ? 4 : currentRsrp.value >= -100 ? 3 : currentRsrp.value >= -110 ? 2 : 1);
 const candidates = computed(() => buildCellCandidates(data.value));
 const displayedCandidates = computed(() => {
   const query = neighborQuery.value.trim().toLowerCase();
@@ -497,22 +528,14 @@ const displayedCandidates = computed(() => {
 });
 const selectedCandidate = computed(() => candidates.value.find(item => item.key === selectedCellKey.value) || candidates.value[0]);
 
-const snapshotMetrics = computed(() => [
-  { label: 'LAN IP', value: firstValue(status.value.lan_ipaddr) },
-  { label: 'WAN IP', value: firstValue(status.value.wan_ipaddr) },
-  { label: '运行模式', value: firstValue(status.value.opms_wan_mode) },
-  { label: '接入数', value: `${stations.value.length + cableStations.value.length} 台` },
-  { label: 'IMEI', value: firstValue(status.value.imei), className: 'wide' },
-  { label: '联网时间', value: formatDuration(status.value.realtime_time), className: 'wide' },
-  { label: '月下行', value: formatBytes(status.value.monthly_rx_bytes) },
-  { label: '月上行', value: formatBytes(status.value.monthly_tx_bytes) },
-  { label: '电池电量', value: withUnit(firstValue(status.value.battery_vol_percent, status.value.battery_value), '%') },
-  { label: '充电状态', value: battery.value.charging ? '正在充电' : '电池供电' }
-]);
-
 const temperatureNames = { battery_temp: '电池温度', wifi_chip_temp: 'Wi-Fi 芯片', wifi_temp_level_1: 'Wi-Fi 传感器 1', wifi_temp_level_2: 'Wi-Fi 传感器 2', pm_sensor_pa1: '射频 PA', pm_sensor_mdm: 'Modem', pm_modem_5g: '5G Modem', cpu_temp: 'CPU 温度', cpu_temperature: 'CPU 温度', soc_temp: 'SoC 温度', board_temp: '主板温度', modem_temp: 'Modem 温度' };
 const temperatureMetrics = computed(() => Object.entries(temperature.value).filter(([key, value]) => /temp|sensor|temperature/i.test(key) && !/level|oom_temp_pro/i.test(key) && value !== '' && value != null).map(([key, value]) => ({ label: temperatureNames[key] || key, value: withUnit(value, '°C') })));
 const resourceItems = computed(() => compactEntries(resources.value).map(([label, value]) => ({ label, value })));
+const deviceIdentityDetails = computed(() => toItems({
+  'IMEI': firstValue(status.value.imei),
+  '固件版本': firstValue(status.value.wa_inner_version, login.value.firmware),
+  'LAN IP': firstValue(status.value.lan_ipaddr)
+}));
 
 const networkDetails = computed(() => toItems({
   '网络制式': networkType.value,
@@ -530,7 +553,6 @@ const servingCellDetails = computed(() => toItems({
   SINR: withUnit(firstValue(signal.value.Z5g_SINR, signal.value.Z5g_snr, signal.value.lte_snr), ' dB'),
   RSSI: withUnit(firstValue(signal.value.Z5g_rssi, signal.value.lte_rssi, signal.value.rssi), ' dBm'),
   PCI: displayPci(signal.value.nr5g_pci, signal.value.lte_pci),
-  'Cell ID': firstValue(signal.value.nr5g_cell_id, signal.value.Z5g_CELL_ID, signal.value.cell_id),
   '频段': firstValue(signal.value.nr5g_action_band, signal.value.lte_ca_pcell_band, signal.value.wan_active_band),
   '信道/ARFCN': firstValue(signal.value.nr5g_action_channel, signal.value.Z5g_dlEarfcn, signal.value.lte_ca_pcell_arfcn, signal.value.wan_active_channel),
   '带宽': firstValue(signal.value.nr5g_nsa_bandwidth, signal.value.lte_ca_pcell_bandwidth, signal.value.bandwidth)
@@ -547,27 +569,25 @@ const secondaryCellDetails = computed(() => compactEntries({
   'NR CA UL': signal.value.nr_ca_ul_state
 }).map(([label, value]) => ({ label, value })));
 
-const usageMetrics = computed(() => [
+const usageSummaryMetrics = computed(() => [
   { label: '当前会话', value: formatBytes((numeric(status.value.realtime_rx_bytes) || 0) + (numeric(status.value.realtime_tx_bytes) || 0)) },
-  { label: '本月合计', value: formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)) },
-  { label: '联网时长', value: formatDuration(status.value.realtime_time) },
-  { label: '连接设备', value: `${stations.value.length + cableStations.value.length} 台` }
+  { label: '本月合计', value: formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)) }
 ]);
-const realtimeUsageDetails = computed(() => toItems({ '下载': formatBytes(status.value.realtime_rx_bytes), '上传': formatBytes(status.value.realtime_tx_bytes), '下载速度': bytesPerSecond(status.value.realtime_rx_thrpt), '上传速度': bytesPerSecond(status.value.realtime_tx_thrpt), '蜂窝联网时长': formatDuration(status.value.realtime_time), '连接状态': firstValue(status.value.ppp_status, status.value.wan_connect_status) }));
-const monthlyUsageDetails = computed(() => toItems({ '本月下载': formatBytes(status.value.monthly_rx_bytes), '本月上传': formatBytes(status.value.monthly_tx_bytes), '本月合计': formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)), '累计联网': formatDuration(status.value.monthly_time), '统计月份': formatMonth(status.value.date_month) }));
+const usageDetails = computed(() => toItems({
+  '会话下载': formatBytes(status.value.realtime_rx_bytes),
+  '会话上传': formatBytes(status.value.realtime_tx_bytes),
+  '会话时长': formatDuration(status.value.realtime_time),
+  '本月下载': formatBytes(status.value.monthly_rx_bytes),
+  '本月上传': formatBytes(status.value.monthly_tx_bytes),
+  '累计联网': formatDuration(status.value.monthly_time)
+}));
 const batteryMetrics = computed(() => [
   { label: '电池电量', value: withUnit(firstValue(battery.value.percent, status.value.battery_vol_percent, status.value.battery_value), '%') },
   { label: '充电状态', value: battery.value.charging ? '正在充电' : '电池供电' },
   { label: '电池温度', value: withUnit(firstValue(temperature.value.battery_temp), '°C') },
   { label: '预计时间', value: battery.value.remainingHours == null ? '数据不足' : formatHours(battery.value.remainingHours) },
   { label: '变化速率', value: battery.value.ratePerHour == null ? '数据不足' : `${battery.value.ratePerHour.toFixed(2)}%/小时` },
-  { label: '充电类型', value: firstValue(status.value.battery_charg_type) },
-  { label: '外部供电', value: status.value.external_charging_flag === '1' ? '是' : '否' },
-  { label: '记录样本', value: `${batterySamples.value.length} 条` },
-  { label: '保存位置', value: '本机 · 12 小时' }
-]);
-const clientMetrics = computed(() => [
-  { label: '无线设备', value: `${stations.value.length} 台` }, { label: '有线设备', value: `${cableStations.value.length} 台` }, { label: '合计', value: `${stations.value.length + cableStations.value.length} 台` }, { label: '主 Wi-Fi', value: firstValue(status.value.wifi_chip1_ssid1_ssid) }, { label: '副 Wi-Fi', value: firstValue(status.value.wifi_chip2_ssid1_ssid) }
+  { label: '记录样本', value: `${batterySamples.value.length} 条` }
 ]);
 const runtimeDetails = computed(() => toItems({
   '当前数据通道': '局域网直连',
@@ -589,6 +609,7 @@ const signalChartOption = computed(() => lineOption([
   animation: false,
   axisWindowStepMs: 5000
 }));
+
 const throughputBuckets = computed(() => {
   const down = stableTimeBuckets(histories.down, 720);
   const up = stableTimeBuckets(histories.up, 720);
@@ -950,6 +971,7 @@ function mergeDashboard(previous, incoming) {
 function switchTab(id) {
   activeTab.value = id;
   menuOpen.value = false;
+  moreOpen.value = false;
   if (id === 'sms' && !messages.value.length) loadSms();
 }
 
