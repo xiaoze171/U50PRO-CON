@@ -6,7 +6,7 @@ U50PRO-CON 是为中兴 U50 Pro / MU5120 随身路由器制作的第三方管理
 
 项目将原厂 Web 管理后台中可用的数据和控制接口重新整理成一套适合电脑浏览器和 Android 手机使用的界面，并增加本地历史记录和续航估算能力。
 
-- 当前版本：`1.3.1`
+- 当前 Android 验证版本：`1.3.17`
 - Android 包名：`cn.mu5120.console`
 - 开发者：晓泽
 - 已验证固件：`BD_FLYMODEMMU5120V1.0.1B10`
@@ -67,11 +67,11 @@ U50PRO-CON/
 - RSRP、RSRQ、SINR、RSSI 和信号格数。
 - 当前下载、上传速度。
 - 设备和电池温度。
-- 最近 1 小时温度曲线。
+- 最近 24 小时温度曲线。
 - LAN IP、WAN IP、IMEI、联网时间。
 - 本月上行、下行流量。
 - 电池电量和充电状态。
-- 最近 1 小时信号波动图。
+- 最近 24 小时信号波动图，支持拖动和缩放查看历史。
 - 路由器固件和设备快照。
 
 #### 基站、CA 与锁定
@@ -94,7 +94,7 @@ U50PRO-CON/
 - 当前下载、上传速率。
 - 本月下载、上传和合计用量。
 - 当前联网时间和本月累计联网时间。
-- 最近 1 小时吞吐折线图。
+- 最近 24 小时吞吐折线图，支持拖动和缩放查看历史。
 
 #### 电池与续航
 
@@ -103,8 +103,8 @@ U50PRO-CON/
 - 电池温度和充电类型。
 - 本地充放电变化速率。
 - 根据历史百分比变化估算剩余续航或充满时间。
-- 最近 12 小时电量曲线。
-- 最近 12 小时续航样本仅保存在本机。
+- 最近 24 小时电量曲线。
+- 最近 24 小时续航样本仅保存在本机。
 
 #### 短信
 
@@ -138,7 +138,7 @@ U50PRO-CON/
 - 页面在前台时由 WebView 将实时上下行、电量和温度同步到通知栏。
 - 页面退到后台约 15 秒后，由原生服务接管轻量接口轮询，避免和前台登录会话互相挤占。
 - 原生服务每 1 秒刷新通知中的上传、下载速度，与前台频率一致；每分钟保存一条电池记录。
-- 后台电池样本保存在 Android `SharedPreferences`，回到页面后与本地历史合并，仍只保留最近 12 小时。
+- 后台电池样本保存在 Android 本地文件，回到页面后与本地历史合并，保留最近 24 小时，最多约 1,445 条分钟级样本。
 - 监听开机和应用升级广播，手机重启或覆盖安装后自动恢复。
 - 使用前台服务、CPU 唤醒锁和 Wi-Fi 锁提高 vivo 等系统上的持续运行能力。
 
@@ -257,7 +257,7 @@ Content-Type: application/x-www-form-urlencoded
 - 路由器实际返回的温度传感器值。
 - 电池百分比、充放电状态和电池温度。
 
-图表数据使用 `mu5120-chart-history-v1` 保存最近 1 小时，每 5 秒保留一个原始点；电池记录使用 `mu5120-battery-history` 保存最近 12 小时的分钟级样本。
+图表数据使用 `mu5120-chart-history-v1` 保存最近 24 小时，并按分钟桶化；电池记录也保存最近 24 小时的分钟级样本。
 
 ### 6.2 折线图修复
 
@@ -295,8 +295,8 @@ Content-Type: application/x-www-form-urlencoded
 ## 8. 本地数据保存
 
 - 路由器地址和统一登录密码保存在 `mu5120-config`。
-- 信号、温度和吞吐历史保存在 `mu5120-chart-history-v1`，只保留最近 1 小时。
-- 电池历史保存在 `mu5120-battery-history`，只保留最近 12 小时。
+- 信号、温度和吞吐历史保存在 `mu5120-chart-history-v1`，只保留最近 24 小时。
+- 电池历史保存在 `mu5120-battery-history`，只保留最近 24 小时。
 - 数据不会上传到 MySQL 或其他服务器，多台设备之间不自动共享。
 
 ## 9. H5 与 Android 数据通道
@@ -351,8 +351,9 @@ npm run build:h5
 
 当前 Android 工程使用：
 
-- JDK：`D:\config\jdk1.8.0_181`
-- Gradle：`D:\config\gradle-6.9.4`
+- JDK 17：`C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`
+- Android SDK：`D:\config\android-sdk`
+- 旧电脑兼容环境：JDK 8 `D:\config\jdk1.8.0_181`，Gradle `D:\config\gradle-6.9.4`
 - compileSdk：30
 - minSdk：23
 - targetSdk：30
@@ -360,17 +361,25 @@ npm run build:h5
 构建命令：
 
 ```powershell
-$env:JAVA_HOME='D:\config\jdk1.8.0_181'
+$env:JAVA_HOME='C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot'
 $env:Path="$env:JAVA_HOME\bin;$env:Path"
 cd D:\code\github\e\U50PRO-CON\router-console-uniapp\android-wrapper
 D:\config\gradle-6.9.4\bin\gradle.bat :app:assembleRelease
 ```
 
-当前安装包：[`router-console-uniapp/U50PRO-Console-v1.3.1.apk`](router-console-uniapp/U50PRO-Console-v1.3.1.apk)
+旧电脑仍使用 Java 8 时，改用：
+
+```powershell
+$env:JAVA_HOME='D:\config\jdk1.8.0_181'
+$env:Path="$env:JAVA_HOME\bin;$env:Path"
+D:\config\gradle-6.9.4\bin\gradle.bat :app:assembleRelease
+```
+
+当前验证安装包：`router-console-uniapp/android-wrapper/build/manual/U50PRO-Console-v1.3.17-debug.apk`
 
 ```text
-versionCode: 15
-versionName: 1.3.1
+versionCode: 31
+versionName: 1.3.17
 SHA-256: 3BA00B8EFD0C903271CFA980A34E962E71716707047FECD02390ABB6240117BE
 ```
 
@@ -396,3 +405,12 @@ SHA-256: 3BA00B8EFD0C903271CFA980A34E962E71716707047FECD02390ABB6240117BE
 - 增加数据导出和更长周期的信号、温度、流量统计。
 - 清理 Android WebView 旧 API 警告并升级 Android Gradle 工具链。
 - 为路由器接口解析、登录算法和电池估算补充自动化测试。
+
+## 14. 当前实现说明
+
+本轮实现已更新到 Android 验证版本 `1.3.17`：
+
+- 指标、温度、吞吐和电池图表保留最近 24 小时数据，并按分钟桶化。
+- 折线图在数据较少时自动放大显示，支持拖动和缩放查看历史；刷新数据不会强制跳回当前时间。
+- Android 悬浮窗固定为约 `250dp × 32dp`，背景透明，下载和上传速度统一显示为 `MB/s`，数值变化不会改变窗口位置。
+- Android 离线构建使用 JDK 17（`C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`）和 SDK（`D:\config\android-sdk`）。

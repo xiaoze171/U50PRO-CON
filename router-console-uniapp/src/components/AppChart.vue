@@ -26,6 +26,7 @@ import * as echarts from 'echarts';
 export default {
   mounted() {
     this.lastOption = this.option;
+    this.zoomState = null;
     this.resizeHandler = () => this.scheduleRender(true);
     this.visibilityHandler = () => {
       if (!document.hidden) this.recoverChart();
@@ -67,6 +68,15 @@ export default {
           useDirtyRect: false,
           devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
         });
+        this.instance.on('datazoom', event => {
+          const batch = event?.batch?.[0] || event || {};
+          const current = this.instance?.getOption()?.dataZoom?.[0] || {};
+          const start = Number(batch.start ?? current.start);
+          const end = Number(batch.end ?? current.end);
+          this.zoomState = Number.isFinite(start) && Number.isFinite(end) && end < 99.5
+            ? { start, end }
+            : null;
+        });
         this.hasRendered = false;
       }
       return true;
@@ -91,7 +101,17 @@ export default {
           height: this.$el.clientHeight,
           silent: true
         });
-        this.instance.setOption(option, { notMerge: force, lazyUpdate: false, silent: true });
+        const renderOption = this.zoomState && Array.isArray(option.dataZoom)
+          ? {
+              ...option,
+              dataZoom: option.dataZoom.map(item => {
+                if (item.type !== 'inside' && item.type !== 'slider') return item;
+                const { startValue, endValue, ...rest } = item;
+                return { ...rest, start: this.zoomState.start, end: this.zoomState.end };
+              })
+            }
+          : option;
+        this.instance.setOption(renderOption, { notMerge: force, lazyUpdate: false, silent: true });
         this.instance.getZr().refreshImmediately();
         this.hasRendered = true;
       });

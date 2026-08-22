@@ -57,8 +57,8 @@ public final class BackgroundMonitorService extends Service {
     private static final String ACTION_CLEAR_SESSION = "cn.mu5120.console.monitor.CLEAR_SESSION";
     private static final String ACTION_OVERLAY = "cn.mu5120.console.monitor.OVERLAY";
     static final String ACTION_POLL = "cn.mu5120.console.monitor.POLL";
-    private static final long BATTERY_WINDOW_MS = 12L * 60L * 60L * 1000L;
-    private static final int BATTERY_MAX_POINTS = 725;
+    private static final long BATTERY_WINDOW_MS = 24L * 60L * 60L * 1000L;
+    private static final int BATTERY_MAX_POINTS = 1445;
     private static final Object HISTORY_LOCK = new Object();
     private static volatile BackgroundMonitorService instance;
 

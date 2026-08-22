@@ -100,7 +100,7 @@
               <view class="panel-header compact">
                 <view>
                   <text class="panel-title">设备温度</text>
-                  <text class="panel-subtitle">最近 1 小时温度记录，本地自动保存</text>
+                  <text class="panel-subtitle">最近 24 小时温度记录，本地自动保存</text>
                 </view>
                 <Thermometer :size="20" />
               </view>
@@ -154,7 +154,7 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">无线质量趋势</text>
-                  <text class="panel-subtitle">最近 1 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
+                  <text class="panel-subtitle">最近 24 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="260px" />
@@ -266,7 +266,7 @@
           <template v-else-if="activeTab === 'usage'">
             <MetricGrid :items="usageSummaryMetrics" />
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 1 小时下载与上传速率，本地自动保存</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 24 小时下载与上传速率，本地自动保存</text></view></view>
               <AppChart :option="trafficChartOption" height="300px" />
             </section>
             <section class="panel">
@@ -278,7 +278,7 @@
           <template v-else-if="activeTab === 'battery'">
             <MetricGrid :items="batteryMetrics" />
             <section class="panel section-gap">
-              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 12 小时电量记录，仅保存在本机</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 24 小时电量记录，可拖动查看</text></view></view>
               <AppChart :option="batteryChartOption" height="280px" />
             </section>
             <section class="panel">
@@ -428,11 +428,11 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.9';
+const APP_VERSION = '1.3.17';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
-const METRIC_HISTORY_WINDOW_MS = 60 * 60 * 1000;
-const BATTERY_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
-const CHART_HISTORY_SAMPLE_MS = 5000;
+const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const CHART_HISTORY_SAMPLE_MS = 60 * 1000;
 const CHART_HISTORY_MAX_POINTS = Math.ceil(METRIC_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
 
 const tabs = [
@@ -594,7 +594,7 @@ const runtimeDetails = computed(() => toItems({
   'H5 开发预览': '通过本机代理访问路由器',
   'Android App': '原生 HTTP 直连路由器',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
-  '历史记录': '电池 12 小时，其他指标 1 小时，仅保存在本机',
+  '历史记录': '电池 12 小时，其他指标 24 小时，仅保存在本机',
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
@@ -607,7 +607,7 @@ const signalChartOption = computed(() => lineOption([
   { name: 'RSRQ', data: histories.rsrq, color: '#2dd4bf' }
 ], false, { min: -140, max: 50 }, {
   animation: false,
-  axisWindowStepMs: 5000
+  axisWindowStepMs: CHART_HISTORY_SAMPLE_MS
 }));
 
 const throughputBuckets = computed(() => {
@@ -617,9 +617,9 @@ const throughputBuckets = computed(() => {
 });
 const speedChartOption = computed(() => miniLineOption(throughputBuckets.value.down, throughputBuckets.value.up, throughputBuckets.value.axisMax));
 const trafficChartOption = computed(() => lineOption([
-  { name: '下载', data: throughputBuckets.value.down, color: '#5b8def', bucketed: true, area: true },
-  { name: '上传', data: throughputBuckets.value.up, color: '#2dd4bf', bucketed: true, area: true }
-], false, { min: 0, max: throughputBuckets.value.axisMax }));
+  { name: '下载', data: throughputBuckets.value.down, color: '#5b8def', bucketed: true, area: true, emptyValue: 0 },
+  { name: '上传', data: throughputBuckets.value.up, color: '#2dd4bf', bucketed: true, area: true, emptyValue: 0 }
+], false, { min: 0, max: throughputBuckets.value.axisMax }, { axisWindowStepMs: CHART_HISTORY_SAMPLE_MS }));
 const temperatureChartOption = computed(() => {
   const colors = ['#fb923c', '#34d399', '#5b8def', '#a78bfa', '#f472b6', '#2dd4bf'];
   const series = Object.entries(histories.temperatures || {})
@@ -772,18 +772,31 @@ function niceAxisMax(values) {
 }
 
 function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
-  const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || 1000);
+  const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || CHART_HISTORY_SAMPLE_MS);
   const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
   const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
   const animate = behavior.animation !== false;
   const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
+  const hasData = series.some(item => Array.isArray(item.data) && item.data.length);
+  const timestamps = series.flatMap(item => (Array.isArray(item.data) ? item.data : []))
+    .map(point => Number(point?.[0]))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+  const dataStart = timestamps[0] || chartNow;
+  const dataEnd = timestamps.at(-1) || chartNow;
+  const dataSpan = Math.max(CHART_HISTORY_SAMPLE_MS, dataEnd - dataStart);
+  const minimumVisibleWindow = Number(behavior.minimumVisibleWindow) || 30 * 60 * 1000;
+  const visibleWindow = Math.min(windowMs, Math.max(minimumVisibleWindow, dataSpan * 1.25));
+  const visibleEnd = chartNow;
+  const visibleStart = Math.max(chartNow - windowMs, visibleEnd - visibleWindow);
+  const zoomEnabled = behavior.zoom !== false;
   return {
     animation: animate,
     animationDuration: 0,
     animationDurationUpdate: animate ? 480 : 0,
     animationEasingUpdate: 'cubicOut',
     color: series.map(item => item.color),
-    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: 22, containLabel: true },
+    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? 46 : 22, containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(15,23,42,.92)',
@@ -795,12 +808,58 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.5)', width: 1, type: 'dashed' } }
     },
     legend: { top: 0, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
+    graphic: hasData ? [] : [{
+      type: 'text',
+      left: 'center',
+      top: '42%',
+      silent: true,
+      style: { text: '等待采集数据，曲线将自动滚动显示', fill: '#94a3b8', fontSize: 12 }
+    }],
     xAxis: { type: 'time', min: chartNow - windowMs, max: chartNow, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 9, hideOverlap: true, margin: 10 }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#eef2f7' } }, splitLine: { show: false } },
+    dataZoom: zoomEnabled ? [
+      {
+        id: 'history-inside',
+        type: 'inside',
+        xAxisIndex: 0,
+        filterMode: 'none',
+        startValue: visibleStart,
+        endValue: visibleEnd,
+        minValueSpan: 5 * 60 * 1000,
+        maxValueSpan: windowMs,
+        zoomOnMouseWheel: true,
+        moveOnMouseMove: true,
+        moveOnMouseWheel: true,
+        preventDefaultMouseMove: true
+      },
+      {
+        id: 'history-slider',
+        type: 'slider',
+        xAxisIndex: 0,
+        filterMode: 'none',
+        startValue: visibleStart,
+        endValue: visibleEnd,
+        minValueSpan: 5 * 60 * 1000,
+        maxValueSpan: windowMs,
+        height: 14,
+        bottom: 4,
+        borderColor: 'transparent',
+        backgroundColor: '#f1f5f9',
+        fillerColor: 'rgba(91,141,239,.16)',
+        dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
+        selectedDataBackground: { lineStyle: { color: '#5b8def' }, areaStyle: { color: '#93c5fd', opacity: .22 } },
+        handleSize: 12,
+        handleStyle: { color: '#ffffff', borderColor: '#5b8def', borderWidth: 1 },
+        moveHandleSize: 4,
+        moveHandleStyle: { color: '#5b8def', opacity: .55 },
+        showDetail: false,
+        brushSelect: false
+      }
+    ] : [],
     yAxis: dualAxis ? [
       { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } },
       { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
     ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } }],
-    series: series.map(item => buildLineSeries(item, windowMs))
+    series: series.map(item => buildLineSeries(item, windowMs, chartNow))
   };
 }
 
@@ -849,9 +908,24 @@ function markLivePoint(data, color) {
   });
 }
 
-function buildLineSeries(item, windowMs) {
+function ensureVisibleSeries(data, chartNow, windowMs, emptyValue) {
+  if (Array.isArray(data) && data.length > 1) return data;
+  if (Array.isArray(data) && data.length === 1) {
+    const point = data[0];
+    const timestamp = Number(point?.[0]);
+    const value = numeric(point?.[1]);
+    if (Number.isFinite(timestamp) && value != null) {
+      return [[Math.max(chartNow - windowMs, timestamp - CHART_HISTORY_SAMPLE_MS), value], point];
+    }
+  }
+  if (emptyValue == null) return [];
+  return [[chartNow - windowMs, emptyValue], [chartNow, emptyValue]];
+}
+
+function buildLineSeries(item, windowMs, chartNow) {
   const color = item.color;
-  const data = markLivePoint(item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs), color);
+  const bucketed = item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs);
+  const data = markLivePoint(ensureVisibleSeries(bucketed, chartNow, windowMs, item.emptyValue), color);
   return {
     id: item.name,
     name: item.name,
@@ -870,9 +944,11 @@ function buildLineSeries(item, windowMs) {
 }
 
 function miniLineOption(download, upload, axisMax) {
-  const chartNow = Date.now();
+  const chartNow = Math.ceil(Date.now() / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
   const downColor = '#5b8def';
   const upColor = '#2dd4bf';
+  const downData = ensureVisibleSeries(stableTimeBuckets(download, 240), chartNow, METRIC_HISTORY_WINDOW_MS, 0);
+  const upData = ensureVisibleSeries(stableTimeBuckets(upload, 240), chartNow, METRIC_HISTORY_WINDOW_MS, 0);
   return {
     animation: true,
     animationDuration: 0,
@@ -883,13 +959,13 @@ function miniLineOption(download, upload, axisMax) {
     yAxis: { type: 'value', min: 0, max: axisMax, show: false },
     series: [
       {
-        id: 'download-mini', type: 'line', data: markLivePoint(stableTimeBuckets(download, 240), downColor),
+        id: 'download-mini', type: 'line', data: markLivePoint(downData, downColor),
         showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
         lineStyle: { width: 2, color: lineGradient(downColor), shadowColor: `${downColor}4d`, shadowBlur: 6 },
         areaStyle: areaGradient(downColor)
       },
       {
-        id: 'upload-mini', type: 'line', data: markLivePoint(stableTimeBuckets(upload, 240), upColor),
+        id: 'upload-mini', type: 'line', data: markLivePoint(upData, upColor),
         showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
         lineStyle: { width: 2, color: lineGradient(upColor), shadowColor: `${upColor}4d`, shadowBlur: 6 }
       }
