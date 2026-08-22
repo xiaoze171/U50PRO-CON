@@ -32,7 +32,6 @@
       </view>
 
       <view class="sidebar-footer">
-        <text>每秒自动刷新</text>
         <text>v{{ APP_VERSION }} · 开发者 晓泽</text>
         <text>{{ clock }}</text>
       </view>
@@ -54,7 +53,7 @@
         </view>
       </header>
 
-      <scroll-view class="content-scroll" scroll-y>
+      <scroll-view :key="activeTab" class="content-scroll" scroll-y>
         <view class="content-wrap">
           <view v-if="errorMessage" class="error-banner">
             <CircleAlert :size="18" />
@@ -92,7 +91,6 @@
                   <text>实时上传</text>
                   <b>{{ bytesPerSecond(status.realtime_tx_thrpt) }}</b>
                 </view>
-                <AppChart :option="speedChartOption" height="94px" class="speed-chart" />
               </section>
             </view>
 
@@ -279,10 +277,6 @@
               <view class="action-row"><button class="primary-button" :disabled="actionBusy" @click="saveTrafficPlan"><Save :size="17" />保存流量设置</button><button class="secondary-button" :disabled="actionBusy || trafficPlanForm.usedGb === ''" @click="calibrateTraffic"><Save :size="17" />校准已用 GB</button><text class="action-result">{{ featureResult }}</text></view>
             </section>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 24 小时下载与上传速率，本地自动保存</text></view></view>
-              <AppChart :option="trafficChartOption" height="300px" />
-            </section>
-            <section class="panel">
               <view class="panel-header"><view><text class="panel-title">用量明细</text><text class="panel-subtitle">当前会话与 {{ formatMonth(status.date_month) }} 月统计</text></view></view>
               <DataList :items="usageDetails" />
             </section>
@@ -348,7 +342,6 @@
               <view class="settings-form">
                 <label><text>路由器地址</text><input v-model="settingsForm.routerUrl" placeholder="http://192.168.0.1" /></label>
                 <label><text>登录与开发者密码</text><input v-model="settingsForm.password" password /></label>
-                <label><text>刷新间隔</text><input value="1000 ms（固定）" disabled /></label>
               </view>
               <view class="action-row">
                 <button class="primary-button" @click="saveSettings"><Save :size="17" />保存并登录</button>
@@ -634,7 +627,6 @@ const runtimeDetails = computed(() => toItems({
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
-  '刷新频率': '1000 ms'
 }));
 
 const signalChartOption = computed(() => lineOption([
@@ -646,16 +638,6 @@ const signalChartOption = computed(() => lineOption([
   axisWindowStepMs: CHART_HISTORY_SAMPLE_MS
 }));
 
-const throughputBuckets = computed(() => {
-  const down = stableTimeBuckets(histories.down, 720);
-  const up = stableTimeBuckets(histories.up, 720);
-  return { down, up, axisMax: niceAxisMax([...down, ...up].map(item => item[1])) };
-});
-const speedChartOption = computed(() => miniLineOption(throughputBuckets.value.down, throughputBuckets.value.up, throughputBuckets.value.axisMax));
-const trafficChartOption = computed(() => lineOption([
-  { name: '下载', data: throughputBuckets.value.down, color: '#5b8def', bucketed: true, area: true, emptyValue: 0 },
-  { name: '上传', data: throughputBuckets.value.up, color: '#2dd4bf', bucketed: true, area: true, emptyValue: 0 }
-], false, { min: 0, max: throughputBuckets.value.axisMax }, { axisWindowStepMs: CHART_HISTORY_SAMPLE_MS }));
 const temperatureChartOption = computed(() => {
   const colors = ['#fb923c', '#34d399', '#5b8def', '#a78bfa', '#f472b6', '#2dd4bf'];
   const series = Object.entries(histories.temperatures || {})
@@ -795,16 +777,6 @@ function smoothSeries(values, windowSize = 3) {
     }
     return count ? [t, Number((sum / count).toFixed(2))] : point;
   });
-}
-
-function niceAxisMax(values) {
-  const maximum = Math.max(0, ...values.filter(value => Number.isFinite(value)));
-  if (maximum <= 0) return 1024;
-  const padded = maximum * 1.12;
-  const magnitude = 10 ** Math.floor(Math.log10(padded));
-  const normalized = padded / magnitude;
-  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return nice * magnitude;
 }
 
 function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
@@ -998,36 +970,6 @@ function buildLineSeries(item, windowMs, chartNow) {
     lineStyle: { width: 2.2, cap: 'round', color: lineGradient(color), shadowColor: `${color}59`, shadowBlur: 8 },
     emphasis: { focus: 'series', lineStyle: { width: 3 } },
     areaStyle: item.area ? areaGradient(color) : undefined
-  };
-}
-
-function miniLineOption(download, upload, axisMax) {
-  const chartNow = Math.ceil(Date.now() / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
-  const downColor = '#5b8def';
-  const upColor = '#2dd4bf';
-  const downData = ensureVisibleSeries(stableTimeBuckets(download, 240), chartNow, METRIC_HISTORY_WINDOW_MS, 0);
-  const upData = ensureVisibleSeries(stableTimeBuckets(upload, 240), chartNow, METRIC_HISTORY_WINDOW_MS, 0);
-  return {
-    animation: true,
-    animationDuration: 0,
-    animationDurationUpdate: 480,
-    animationEasingUpdate: 'cubicOut',
-    grid: { left: 2, right: 4, top: 4, bottom: 2 },
-    xAxis: { type: 'time', min: chartNow - METRIC_HISTORY_WINDOW_MS, max: chartNow, boundaryGap: false, show: false },
-    yAxis: { type: 'value', min: 0, max: axisMax, show: false },
-    series: [
-      {
-        id: 'download-mini', type: 'line', data: markLivePoint(downData, downColor),
-        showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
-        lineStyle: { width: 2, color: lineGradient(downColor), shadowColor: `${downColor}4d`, shadowBlur: 6 },
-        areaStyle: areaGradient(downColor)
-      },
-      {
-        id: 'upload-mini', type: 'line', data: markLivePoint(upData, upColor),
-        showSymbol: false, symbol: 'circle', symbolSize: 5, smooth: 0.3,
-        lineStyle: { width: 2, color: lineGradient(upColor), shadowColor: `${upColor}4d`, shadowBlur: 6 }
-      }
-    ]
   };
 }
 

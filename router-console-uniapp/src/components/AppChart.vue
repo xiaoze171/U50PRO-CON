@@ -68,10 +68,11 @@ export default {
       const touch = event.touches?.[0];
       const option = this.instance?.getOption?.();
       const dataZoom = option?.dataZoom || [];
-      if (!touch || !this.instance || !dataZoom.some(item => item.type === 'slider')) return;
+      if (!touch || !this.instance) return;
       const rect = this.$el.getBoundingClientRect();
       const y = touch.clientY - rect.top;
-      if (y < rect.height - 42) return;
+      this.pageTouch = { x: touch.clientX, y: touch.clientY };
+      if (!dataZoom.some(item => item.type === 'slider') || y < rect.height - 42) return;
       const dataZoomIndex = dataZoom.findIndex(item => item.type === 'slider');
       const current = dataZoom[dataZoomIndex] || dataZoom[0];
       const start = Number(current.start);
@@ -91,7 +92,15 @@ export default {
     handleTouchMove(event) {
       const touch = event.touches?.[0];
       const state = this.touchZoom;
-      if (!touch || !state || !this.instance) return;
+      if (!touch || !this.instance) return;
+      if (!state) {
+        const initial = this.pageTouch;
+        if (!initial) return;
+        const dx = touch.clientX - initial.x;
+        const dy = touch.clientY - initial.y;
+        if (Math.abs(dy) > 4 && Math.abs(dy) >= Math.abs(dx)) event.stopPropagation();
+        return;
+      }
       const delta = ((touch.clientX - state.x) / state.width) * 100;
       const span = state.end - state.start;
       const start = Math.max(0, Math.min(100 - span, state.start + delta));
@@ -119,6 +128,7 @@ export default {
       event.stopImmediatePropagation();
     },
     handleTouchEnd(event) {
+      this.pageTouch = null;
       if (!this.touchZoom) return;
       if (this.touchZoomFrame) {
         cancelAnimationFrame(this.touchZoomFrame);
@@ -211,7 +221,7 @@ export default {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

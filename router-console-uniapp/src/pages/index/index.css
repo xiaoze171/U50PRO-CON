@@ -391,8 +391,10 @@
 .speed-hero {
   position: relative;
   display: grid;
+  min-height: 104px;
   grid-template-columns: 1fr 1fr;
-  align-content: start;
+  align-content: center;
+  align-self: center;
   border: 1px solid #e1e7ef;
   background: #fff;
 }
@@ -400,7 +402,7 @@
 .speed-column {
   position: relative;
   z-index: 2;
-  padding: 20px 18px 0;
+  padding: 0 18px;
 }
 
 .speed-column + .speed-column {
@@ -426,13 +428,6 @@
   margin-top: 5px;
   font-size: 17px;
   line-height: 1.2;
-}
-
-.speed-chart {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
 }
 
 .panel {
@@ -1648,6 +1643,10 @@ textarea {
     width: calc(100vw - 20px);
     max-width: calc(100vw - 20px);
     min-height: 166px;
+  }
+
+  .speed-hero {
+    min-height: 104px;
   }
 
   .panel {
