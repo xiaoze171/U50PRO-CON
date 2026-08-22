@@ -28,6 +28,12 @@ const statusFields = [
   'battery_time', 'battery_remain_time', 'battery_remaining_time', 'battery_capacity', 'battery_health', 'battery_voltage', 'battery_current', 'sms_unread_num'
 ];
 
+// 流量页面使用的原厂字段。接口层保留路由器的原始格式，页面再转换为 GB。
+const featureFields = [
+  'data_volume_limit_switch', 'data_volume_limit_unit', 'data_volume_limit_size',
+  'data_volume_alert_percent', 'wan_auto_clear_flow_data_switch', 'traffic_clear_date'
+];
+
 const temperatureFields = [
   'battery_temp', 'wifi_chip_temp', 'wifi_temp_level_1', 'wifi_temp_level_2', 'pm_sensor_pa1', 'pm_sensor_mdm', 'pm_modem_5g',
   'therm_pa_level', 'therm_pa_frl_level', 'therm_tj_level', 'OOM_TEMP_PRO', 'cpu_temp', 'cpu_temperature', 'soc_temp', 'board_temp', 'modem_temp'
@@ -367,7 +373,7 @@ async function ensureDeveloperAccess() {
 
 async function dashboard() {
   await ensureLogin();
-  const [status, signal, temperature, resources, locks, stations, cable, neighbors] = await Promise.all([
+  const [status, signal, temperature, resources, locks, stations, cable, neighbors, features] = await Promise.all([
     getFields(statusFields),
     getFields(signalFields),
     getFields(temperatureFields),
@@ -375,7 +381,8 @@ async function dashboard() {
     getFields(lockFields),
     getCommand('station_list').catch(() => ({ station_list: [] })),
     getCommand('lan_station_list').catch(() => ({ lan_station_list: [] })),
-    getFields(['network_type', 'lte_ngbr_cell_info_ext', 'sa_ngbr_cell_manual_result_ext']).catch(() => ({}))
+    getFields(['network_type', 'lte_ngbr_cell_info_ext', 'sa_ngbr_cell_manual_result_ext']).catch(() => ({})),
+    getFields(featureFields).catch(() => ({}))
   ]);
   mergeNativeBatteryHistory();
   const sample = recordBattery(status, temperature);
@@ -399,8 +406,51 @@ async function dashboard() {
     stations: normalizeList(stations.station_list),
     cableStations: normalizeList(cable.lan_station_list || cable.station_list),
     neighbors,
+    features,
     battery
   };
+}
+
+function trafficSizeValue(gigabytes) {
+  const value = Number(gigabytes);
+  if (!Number.isFinite(value) || value < 0) throw new Error('套餐流量必须是大于等于 0 的数字');
+  // 原厂 data 格式为“数量_1024”，表示数量 GB。
+  return `${Math.round(value * 100) / 100}_1024`;
+}
+
+async function setTrafficPlan(values = {}) {
+  await ensureLogin();
+  const size = trafficSizeValue(values.sizeGb);
+  const alert = Number(values.alertPercent);
+  if (!Number.isFinite(alert) || alert < 0 || alert > 100) throw new Error('提醒百分比必须在 0-100 之间');
+  const clearDate = String(values.clearDate ?? '').trim();
+  if (clearDate && (!/^\d{1,2}$/.test(clearDate) || Number(clearDate) < 1 || Number(clearDate) > 31)) {
+    throw new Error('清零日期必须是 1-31');
+  }
+  const result = await setGoform('DATA_LIMIT_SETTING', {
+    data_volume_limit_switch: values.enabled ? '1' : '0',
+    data_volume_limit_unit: 'data',
+    data_volume_limit_size: size,
+    data_volume_alert_percent: String(Math.round(alert)),
+    wan_auto_clear_flow_data_switch: values.autoClear ? 'on' : 'off',
+    traffic_clear_date: clearDate || '1'
+  });
+  assertSuccess(result, '流量设置');
+  return result;
+}
+
+async function calibrateTraffic(values = {}) {
+  await ensureLogin();
+  const gigabytes = Number(values.gigabytes);
+  if (!Number.isFinite(gigabytes) || gigabytes < 0) throw new Error('已用流量必须是大于等于 0 的数字');
+  const bytes = Math.round(gigabytes * 1024 ** 3);
+  const result = await setGoform('FLOW_CALIBRATION_MANUAL', {
+    calibration_way: 'data',
+    data: String(bytes),
+    time: '0'
+  });
+  assertSuccess(result, '已用流量校准');
+  return result;
 }
 
 function normalizeList(value) {
@@ -654,6 +704,8 @@ export const routerApi = {
   login,
   developerLogin,
   dashboard,
+  setTrafficPlan,
+  calibrateTraffic,
   listSms,
   sendSms,
   scanNeighbors,

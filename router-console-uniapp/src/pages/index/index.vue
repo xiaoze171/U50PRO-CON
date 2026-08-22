@@ -265,6 +265,19 @@
 
           <template v-else-if="activeTab === 'usage'">
             <MetricGrid :items="usageSummaryMetrics" />
+            <section class="panel traffic-plan-panel">
+              <view class="panel-header"><view><text class="panel-title">流量管理</text><text class="panel-subtitle">默认使用 GB，显示套餐、已用和剩余流量</text></view><Gauge :size="20" /></view>
+              <MetricGrid :items="trafficPlanMetrics" />
+              <view class="settings-form feature-form">
+                <label><text>启用套餐</text><switch :checked="trafficPlanForm.enabled" color="#2563eb" @change="trafficPlanForm.enabled = Boolean($event.detail.value)" /></label>
+                <label><text>每月套餐（GB）</text><input v-model="trafficPlanForm.sizeGb" type="number" min="0" step="0.1" placeholder="例如 100" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
+                <label><text>提醒百分比</text><input v-model="trafficPlanForm.alertPercent" type="number" placeholder="例如 80" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
+                <label><text>自动清零</text><switch :checked="trafficPlanForm.autoClear" color="#2563eb" @change="trafficPlanForm.autoClear = Boolean($event.detail.value)" /></label>
+                <label><text>清零日期</text><input v-model="trafficPlanForm.clearDate" placeholder="例如 1" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
+                <label><text>校准已用（GB）</text><input v-model="trafficPlanForm.usedGb" type="number" min="0" step="0.1" placeholder="可选" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
+              </view>
+              <view class="action-row"><button class="primary-button" :disabled="actionBusy" @click="saveTrafficPlan"><Save :size="17" />保存流量设置</button><button class="secondary-button" :disabled="actionBusy || trafficPlanForm.usedGb === ''" @click="calibrateTraffic"><Save :size="17" />校准已用 GB</button><text class="action-result">{{ featureResult }}</text></view>
+            </section>
             <section class="panel">
               <view class="panel-header"><view><text class="panel-title">实时吞吐波动</text><text class="panel-subtitle">最近 24 小时下载与上传速率，本地自动保存</text></view></view>
               <AppChart :option="trafficChartOption" height="300px" />
@@ -424,7 +437,7 @@ import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import {
-  bytesPerSecond, compactEntries, displayPci, firstValue, formatBytes, formatDate, formatDuration, formatHours,
+  bytesPerSecond, compactEntries, displayPci, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
@@ -465,7 +478,7 @@ const actionBusy = ref(false);
 const errorMessage = ref('');
 const lastUpdate = ref('—');
 const clock = ref('');
-const data = ref({ status: {}, signal: {}, temperature: {}, resources: {}, locks: {}, stations: [], cableStations: [], neighbors: {}, battery: {}, login: {} });
+const data = ref({ status: {}, signal: {}, temperature: {}, resources: {}, locks: {}, stations: [], cableStations: [], neighbors: {}, features: {}, battery: {}, login: {} });
 const histories = reactive(loadChartHistory());
 const selectedCellKey = ref('');
 const neighborQuery = ref('');
@@ -499,6 +512,11 @@ const stations = computed(() => data.value.stations || []);
 const cableStations = computed(() => data.value.cableStations || []);
 const battery = computed(() => data.value.battery || {});
 const batterySamples = computed(() => battery.value.samples || []);
+const features = computed(() => data.value.features || {});
+const featureResult = ref('');
+const featureFormEditing = ref(false);
+const featureFormsInitialized = ref(false);
+const trafficPlanForm = reactive({ enabled: false, sizeGb: '', alertPercent: '', autoClear: false, clearDate: '', usedGb: '' });
 const activeTabInfo = computed(() => tabs.find(tab => tab.id === activeTab.value) || tabs[0]);
 const connected = computed(() => !data.value.stale && (login.value.loggedIn || status.value.loginfo === 'ok'));
 const overlayStateText = computed(() => {
@@ -573,6 +591,24 @@ const usageSummaryMetrics = computed(() => [
   { label: '当前会话', value: formatBytes((numeric(status.value.realtime_rx_bytes) || 0) + (numeric(status.value.realtime_tx_bytes) || 0)) },
   { label: '本月合计', value: formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)) }
 ]);
+const trafficPlanMetrics = computed(() => {
+  const enabled = features.value.data_volume_limit_switch === '1';
+  const usedBytes = (numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0);
+  const planGb = trafficPlanGb(features.value.data_volume_limit_size);
+  const remainingGb = planGb == null ? null : Math.max(0, planGb - usedBytes / (1024 ** 3));
+  return [
+    { label: '状态', value: enabled ? '已启用' : '未启用' },
+    { label: '套餐', value: planGb == null ? '未设置' : `${planGb} GB` },
+    { label: '已用', value: formatGigabytes(usedBytes) },
+    { label: '剩余', value: remainingGb == null ? '—' : `${remainingGb.toFixed(2)} GB` }
+  ];
+});
+function trafficPlanGb(raw) {
+  const [amount, multiplier = '1024'] = String(raw ?? '').split('_');
+  const value = Number(amount);
+  const unit = Number(multiplier);
+  return Number.isFinite(value) && Number.isFinite(unit) ? value * unit / 1024 : null;
+}
 const usageDetails = computed(() => toItems({
   '会话下载': formatBytes(status.value.realtime_rx_bytes),
   '会话上传': formatBytes(status.value.realtime_tx_bytes),
@@ -815,7 +851,29 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       silent: true,
       style: { text: '等待采集数据，曲线将自动滚动显示', fill: '#94a3b8', fontSize: 12 }
     }],
-    xAxis: { type: 'time', min: chartNow - windowMs, max: chartNow, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 9, hideOverlap: true, margin: 10 }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#eef2f7' } }, splitLine: { show: false } },
+    xAxis: {
+      type: 'time',
+      min: chartNow - windowMs,
+      max: chartNow,
+      boundaryGap: false,
+      splitNumber: 4,
+      axisLabel: {
+        color: '#94a3b8',
+        fontSize: 9,
+        hideOverlap: true,
+        showMinLabel: true,
+        showMaxLabel: true,
+        margin: 10,
+        formatter: value => {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return '';
+          return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+      },
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#eef2f7' } },
+      splitLine: { show: false }
+    },
     dataZoom: zoomEnabled ? [
       {
         id: 'history-inside',
@@ -1007,6 +1065,7 @@ async function refresh(manual = false) {
     const payload = await routerApi.dashboard();
     const merged = mergeDashboard(data.value, payload);
     data.value = merged;
+    syncTrafficPlanForm();
     captureHistory(merged);
     applyInitialBands();
     syncCandidate();
@@ -1038,6 +1097,7 @@ function mergeDashboard(previous, incoming) {
     resources: mergeRecord(previous?.resources, incoming?.resources),
     locks: mergeRecord(previous?.locks, incoming?.locks),
     neighbors: mergeRecord(previous?.neighbors, incoming?.neighbors),
+    features: mergeRecord(previous?.features, incoming?.features),
     battery: mergeRecord(previous?.battery, incoming?.battery),
     stations: Array.isArray(incoming?.stations) ? incoming.stations : (previous?.stations || []),
     cableStations: Array.isArray(incoming?.cableStations) ? incoming.cableStations : (previous?.cableStations || [])
@@ -1049,6 +1109,46 @@ function switchTab(id) {
   menuOpen.value = false;
   moreOpen.value = false;
   if (id === 'sms' && !messages.value.length) loadSms();
+}
+
+function beginFeatureEdit() {
+  featureFormEditing.value = true;
+}
+
+function endFeatureEdit() {
+  featureFormEditing.value = false;
+}
+
+async function saveTrafficPlan() {
+  actionBusy.value = true;
+  try {
+    await routerApi.setTrafficPlan(trafficPlanForm);
+    featureResult.value = '流量设置已保存';
+    await refresh(true);
+  } catch (error) { featureResult.value = error.message; }
+  finally { actionBusy.value = false; }
+}
+
+async function calibrateTraffic() {
+  actionBusy.value = true;
+  try {
+    await routerApi.calibrateTraffic({ gigabytes: Number(trafficPlanForm.usedGb) });
+    featureResult.value = '已用流量已校准';
+    trafficPlanForm.usedGb = '';
+    await refresh(true);
+  } catch (error) { featureResult.value = error.message; }
+  finally { actionBusy.value = false; }
+}
+
+function syncTrafficPlanForm() {
+  const item = features.value;
+  if (!Object.keys(item).length || featureFormEditing.value || featureFormsInitialized.value) return;
+  trafficPlanForm.enabled = item.data_volume_limit_switch === '1';
+  trafficPlanForm.sizeGb = trafficPlanGb(item.data_volume_limit_size) ?? '';
+  trafficPlanForm.alertPercent = item.data_volume_alert_percent || '';
+  trafficPlanForm.autoClear = item.wan_auto_clear_flow_data_switch === 'on';
+  trafficPlanForm.clearDate = item.traffic_clear_date || '';
+  featureFormsInitialized.value = true;
 }
 
 function selectCandidate(candidate) {

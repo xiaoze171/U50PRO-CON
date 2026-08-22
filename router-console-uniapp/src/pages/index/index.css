@@ -1260,6 +1260,93 @@ textarea {
   max-width: 980px;
 }
 
+.client-actions {
+  display: flex;
+  gap: 5px;
+  margin-left: 8px;
+}
+
+.icon-button.small {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.danger-icon svg {
+  color: #d34d50;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feature-form {
+  margin-top: 16px;
+}
+
+.traffic-plan-panel > .metric-grid {
+  margin-bottom: 16px;
+}
+
+.traffic-plan-panel .feature-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid #edf1f5;
+}
+
+.traffic-plan-panel .feature-form label {
+  min-height: 68px;
+  padding: 10px 11px;
+  justify-content: space-between;
+  border: 1px solid #e1e7ef;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.traffic-plan-panel .feature-form label:first-child,
+.traffic-plan-panel .feature-form label:nth-child(4) {
+  flex-direction: row;
+  align-items: center;
+}
+
+.traffic-plan-panel .feature-form label:first-child { order: 1; }
+.traffic-plan-panel .feature-form label:nth-child(4) { order: 2; }
+.traffic-plan-panel .feature-form label:nth-child(2) { order: 3; }
+.traffic-plan-panel .feature-form label:nth-child(3) { order: 4; }
+.traffic-plan-panel .feature-form label:nth-child(5) { order: 5; }
+.traffic-plan-panel .feature-form label:nth-child(6) { order: 6; }
+
+.traffic-plan-panel .feature-form input {
+  height: 34px;
+  min-height: 34px;
+  background: #fff;
+}
+
+.traffic-plan-panel .action-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.traffic-plan-panel .action-result:empty {
+  display: none;
+}
+
+.picker-value {
+  box-sizing: border-box;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid #dce3ec;
+  border-radius: 6px;
+  background: #fff;
+  color: #25324a;
+  font-size: 12px;
+}
+
 @media (max-width: 1180px) {
   .radio-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1623,6 +1710,10 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .traffic-plan-panel .feature-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .candidate-card {
     grid-template-columns: 30px minmax(0, 1fr);
     gap: 9px;
@@ -1641,6 +1732,12 @@ textarea {
 
   .action-row {
     align-items: stretch;
+  }
+
+  .traffic-plan-panel .action-row .primary-button,
+  .traffic-plan-panel .action-row .secondary-button {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 0;
   }
 
   .primary-button,

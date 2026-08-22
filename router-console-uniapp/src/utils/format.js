@@ -47,6 +47,13 @@ export function formatBytes(raw) {
   return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[index]}`;
 }
 
+export function formatGigabytes(rawBytes) {
+  const bytes = numeric(rawBytes);
+  if (bytes == null) return '—';
+  const gigabytes = bytes / (1024 ** 3);
+  return `${gigabytes.toFixed(gigabytes >= 100 ? 0 : 2)} GB`;
+}
+
 export function bytesPerSecond(raw) {
   const number = numeric(raw);
   if (number == null) return '—';
