@@ -4,6 +4,7 @@ dist/
 .hbuilderx/
 unpackage/
 *.log
+.gradle/
 .android-sdk/
 android-wrapper/.gradle/
 android-wrapper/build/
