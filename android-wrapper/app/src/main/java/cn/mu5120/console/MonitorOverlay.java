@@ -19,8 +19,8 @@ final class MonitorOverlay {
     private static final String PREFS = "u50pro_background_monitor";
     private static final String KEY_X = "overlayX";
     private static final String KEY_Y = "overlayY";
-    private static final int OVERLAY_WIDTH_DP = 250;
-    private static final int OVERLAY_HEIGHT_DP = 32;
+    private static final int OVERLAY_WIDTH_DP = 290;
+    private static final int OVERLAY_HEIGHT_DP = 34;
 
     private final Context context;
     private final SharedPreferences preferences;

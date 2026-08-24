@@ -1,14 +1,17 @@
 <script>
 export default {
   onLaunch() {
-    const current = uni.getStorageSync('mu5120-config');
-    if (!current) {
-      uni.setStorageSync('mu5120-config', {
-        routerUrl: 'http://192.168.0.1',
-        password: '111111',
-        developerPassword: '111111',
-        pollIntervalMs: 1000
-      });
+    let current = null;
+    try { current = uni.getStorageSync('mu5120-config'); } catch {}
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      try {
+        uni.setStorageSync('mu5120-config', {
+          routerUrl: 'http://192.168.0.1',
+          password: '111111',
+          developerPassword: '111111',
+          pollIntervalMs: 1000
+        });
+      } catch {}
     }
   }
 };

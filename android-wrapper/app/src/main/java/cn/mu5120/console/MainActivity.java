@@ -13,6 +13,7 @@ import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -42,6 +43,9 @@ public final class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setBackgroundColor(0xFFF3F5F8);
         webView.getSettings().setJavaScriptEnabled(true);
+        // The asset entry point keeps the same URL across APK updates. Avoid
+        // reusing a cached index that still points at an older hashed bundle.
+        webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
         webView.getSettings().setDomStorageEnabled(true);
         webView.getSettings().setAllowFileAccess(false);
         webView.getSettings().setAllowContentAccess(false);
@@ -106,7 +110,9 @@ public final class MainActivity extends Activity {
 
         try {
             InputStream stream = getAssets().open("www/" + path);
-            return new WebResourceResponse(mimeType(path), textEncoding(path), stream);
+            WebResourceResponse response = new WebResourceResponse(mimeType(path), textEncoding(path), stream);
+            response.setResponseHeaders(Collections.singletonMap("Cache-Control", "no-store, no-cache, must-revalidate"));
+            return response;
         } catch (IOException ignored) {
             return notFoundResponse();
         }

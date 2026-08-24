@@ -56,6 +56,7 @@ let lastNativeBatteryMerge = 0;
 let isH5 = false;
 let nativeRequestSequence = 0;
 const nativeRequests = new Map();
+let writeQueue = Promise.resolve();
 
 // #ifdef H5
 isH5 = true;
@@ -109,7 +110,11 @@ function nativeBridgeRequest(bridge, path, options, headers) {
 }
 
 function loadConfig() {
-  const stored = uni.getStorageSync('mu5120-config');
+  let stored = {};
+  try {
+    const value = uni.getStorageSync('mu5120-config');
+    if (value && typeof value === 'object' && !Array.isArray(value)) stored = value;
+  } catch {}
   return {
     ...DEFAULT_CONFIG,
     routerUrl: stored?.routerUrl || DEFAULT_CONFIG.routerUrl,
@@ -120,13 +125,17 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  uni.setStorageSync('mu5120-config', config);
+  try { uni.setStorageSync('mu5120-config', config); } catch {}
 }
 
 function loadBatteryHistory() {
-  const stored = uni.getStorageSync('mu5120-battery-history');
+  let stored = [];
+  try {
+    const value = uni.getStorageSync('mu5120-battery-history');
+    if (Array.isArray(value)) stored = value;
+  } catch {}
   const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
-  return mergeBatterySamples(Array.isArray(stored) ? stored : [], readNativeBatteryHistory(), cutoff);
+  return mergeBatterySamples(stored, readNativeBatteryHistory(), cutoff);
 }
 
 function readNativeBatteryHistory() {
@@ -297,15 +306,23 @@ async function accessibleId() {
   return sha256(sha256(accessIdSeed) + token.RD);
 }
 
-async function setGoform(goformId, data = {}) {
-  const values = { isTest: 'false', goformId, ...data };
-  if (goformId !== 'LOGIN' && goformId !== 'SET_WEB_LANGUAGE') values.AD = await accessibleId();
-  const response = await requestRouter('/goform/goform_set_cmd_process', {
-    method: 'POST',
-    header: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-    data: queryString(values)
+function enqueueWrite(task) {
+  const pending = writeQueue.then(task, task);
+  writeQueue = pending.catch(() => {});
+  return pending;
+}
+
+function setGoform(goformId, data = {}) {
+  return enqueueWrite(async () => {
+    const values = { isTest: 'false', goformId, ...data };
+    if (goformId !== 'LOGIN' && goformId !== 'SET_WEB_LANGUAGE') values.AD = await accessibleId();
+    const response = await requestRouter('/goform/goform_set_cmd_process', {
+      method: 'POST',
+      header: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      data: queryString(values)
+    });
+    return typeof response === 'string' ? safeJson(response) : response;
   });
-  return typeof response === 'string' ? safeJson(response) : response;
 }
 
 function safeJson(value) {
@@ -509,7 +526,11 @@ function batterySummary(status) {
 }
 
 function saveBatteryHistory() {
-  uni.setStorageSync('mu5120-battery-history', batteryHistory);
+  try {
+    const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
+    batteryHistory = mergeBatterySamples(batteryHistory, [], cutoff);
+    uni.setStorageSync('mu5120-battery-history', batteryHistory);
+  } catch {}
 }
 
 async function listSms() {
@@ -587,31 +608,99 @@ async function setLteCellLock(values) {
 }
 
 async function setLteBands(bands) {
-  await ensureDeveloperAccess();
-  const values = parseBands(bands, new Set(Object.keys(lteBandMasks).map(Number)));
+  const values = parseBands(bands, new Set(Object.keys(lteBandMasks).map(Number)), true);
   let mask = 0n;
   values.forEach(band => { mask |= BigInt(lteBandMasks[band]); });
-  const result = await setGoform('BAND_SELECT', { is_gw_band: 0, gw_band_mask: 0, is_lte_band: 1, lte_band_mask: `0x${mask.toString(16).padStart(16, '0')}` });
-  assertSuccess(result, 'LTE 锁频段');
-  return result;
+  return saveBandsWithRetry(
+    'BAND_SELECT',
+    {
+      is_gw_band: 0,
+      gw_band_mask: 0,
+      // The stock UI keeps this flag enabled even when the mask is 0.
+      is_lte_band: 1,
+      lte_band_mask: `0x${mask.toString(16).padStart(16, '0')}`
+    },
+    'LTE 锁频段',
+    () => verifyLteBandMask(mask)
+  );
 }
 
 async function setNrBands(type, bands) {
-  await ensureDeveloperAccess();
-  const values = parseBands(bands, nrBandSet);
-  const result = await setGoform('WAN_PERFORM_NR5G_SANSA_BAND_LOCK', { nr5g_band_mask: values.join(','), type: type === 'nsa' ? '1' : '0' });
-  assertSuccess(result, `5G ${type.toUpperCase()} 锁频段`);
-  return result;
+  const values = parseBands(bands, nrBandSet, true);
+  return saveBandsWithRetry(
+    'WAN_PERFORM_NR5G_SANSA_BAND_LOCK',
+    // The firmware rejects an empty form value. "0" is its unlock/no-mask value.
+    { nr5g_band_mask: values.length ? values.join(',') : '0', type: type === 'nsa' ? '1' : '0' },
+    `5G ${type.toUpperCase()} 锁频段`,
+    () => verifyNrBandList(type, values)
+  );
 }
 
-function parseBands(input, allowed) {
-  const values = [...new Set((Array.isArray(input) ? input : String(input || '').split(',')).map(Number).filter(Number.isFinite))];
-  if (!values.length || values.some(value => !allowed.has(value))) throw new Error('频段列表包含不支持的值');
+async function saveBandsWithRetry(goformId, payload, label, verify) {
+  let lastResult = null;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await ensureDeveloperAccess();
+      lastResult = await setGoform(goformId, payload);
+      assertSuccess(lastResult, label);
+      if (verify) await verify();
+      return lastResult;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) {
+        await delay(250);
+        await developerLogin();
+      }
+    }
+  }
+  throw lastError || new Error(`${label}保存失败：${JSON.stringify(lastResult)}`);
+}
+
+async function verifyLteBandMask(expectedMask) {
+  let actual = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const state = await getFields(['lte_band_lock']);
+    actual = String(state.lte_band_lock ?? '').trim();
+    try {
+      const actualMask = actual === '' ? 0n : BigInt(actual);
+      if (actualMask === expectedMask) return;
+    } catch {}
+    await delay(350);
+  }
+  throw new Error(`路由器未确认 LTE 频段已保存（返回：${actual || '空'}）`);
+}
+
+async function verifyNrBandList(type, expectedValues) {
+  const field = type === 'nsa' ? 'nr5g_nsa_band_lock' : 'nr5g_sa_band_lock';
+  const expected = [...expectedValues].sort((left, right) => left - right);
+  let actual = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const state = await getFields([field]);
+    actual = String(state[field] ?? '').trim();
+    const actualValues = actual === '' || actual === '0'
+      ? []
+      : actual.split(',').map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+    if (actualValues.length === expected.length && actualValues.every((value, index) => value === expected[index])) return;
+    await delay(350);
+  }
+  throw new Error(`路由器未确认 5G ${type.toUpperCase()} 频段已保存（返回：${actual || '空'}）`);
+}
+
+function parseBands(input, allowed, allowEmpty = false) {
+  const source = Array.isArray(input) ? input : String(input || '').split(',');
+  const values = [...new Set(source
+    .map(value => String(value).trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter(Number.isFinite))];
+  if ((!allowEmpty && !values.length) || values.some(value => !allowed.has(value))) throw new Error('频段列表包含不支持的值');
   return values;
 }
 
 function assertSuccess(result, label) {
-  if (result?.result !== 'success') throw new Error(`固件拒绝${label}：${result?.result || JSON.stringify(result)}`);
+  const accepted = ['success', '0', '4', 0, 4, true].includes(result?.result) || result?.result === true;
+  if (!accepted) throw new Error(`固件拒绝${label}：${result?.result || JSON.stringify(result)}`);
 }
 
 function integer(value, min, max, label) {

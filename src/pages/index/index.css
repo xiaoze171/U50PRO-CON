@@ -652,7 +652,7 @@
 }
 
 .radio-overview-grid .panel {
-  height: auto;
+  min-height: 242px;
 }
 
 .radio-overview-grid .secondary-info-panel {
@@ -1399,6 +1399,7 @@ textarea {
     width: auto;
     max-width: none;
     min-width: 0;
+    min-height: 216px;
     padding: 10px;
   }
 

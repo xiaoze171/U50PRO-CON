@@ -108,28 +108,16 @@
               </view>
             </section>
 
-            <view class="health-grid">
-              <section v-if="resourceItems.length" class="panel">
-                <view class="panel-header compact">
-                  <view>
-                    <text class="panel-title">CPU 与内存</text>
-                    <text class="panel-subtitle">不显示空字段</text>
-                  </view>
-                  <Cpu :size="20" />
+            <section class="panel">
+              <view class="panel-header compact">
+                <view>
+                  <text class="panel-title">设备信息</text>
+                  <text class="panel-subtitle">仅保留设备自身标识</text>
                 </view>
-                <DataList :items="resourceItems" />
-              </section>
-              <section class="panel">
-                <view class="panel-header compact">
-                  <view>
-                    <text class="panel-title">设备信息</text>
-                    <text class="panel-subtitle">仅保留设备自身标识</text>
-                  </view>
-                  <RouterIcon :size="20" />
-                </view>
-                <DataList :items="deviceIdentityDetails" />
-              </section>
-            </view>
+                <RouterIcon :size="20" />
+              </view>
+              <DataList :items="deviceIdentityDetails" />
+            </section>
           </template>
 
           <template v-else-if="activeTab === 'radio'">
@@ -227,11 +215,11 @@
                     <text class="band-network-tag">4G</text>
                   </view>
                   <view class="band-options">
-                    <button v-for="band in lteBands" :key="band" class="band-chip" :class="{ checked: selectedLteBands.includes(band) }" @click="toggleBand('lte', band)">
+                    <button v-for="band in lteBands" :key="band" class="band-chip" :class="{ checked: selectedLteBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('lte', band)">
                       <Check v-if="selectedLteBands.includes(band)" :size="14" :stroke-width="2.5" /><text>B{{ band }}</text>
                     </button>
                   </view>
-                  <button class="band-save-button" @click="saveBands('lte')"><Save :size="16" />保存 LTE 频段</button>
+                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('lte')"><Save :size="16" />保存 LTE 频段</button>
                 </view>
                 <view class="band-group">
                   <view class="band-group-header">
@@ -239,11 +227,11 @@
                     <text class="band-network-tag sa">SA</text>
                   </view>
                   <view class="band-options">
-                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedSaBands.includes(band) }" @click="toggleBand('sa', band)">
+                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedSaBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('sa', band)">
                       <Check v-if="selectedSaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
                     </button>
                   </view>
-                  <button class="band-save-button" @click="saveBands('sa')"><Save :size="16" />保存 SA 频段</button>
+                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('sa')"><Save :size="16" />保存 SA 频段</button>
                 </view>
                 <view class="band-group">
                   <view class="band-group-header">
@@ -251,11 +239,11 @@
                     <text class="band-network-tag nsa">NSA</text>
                   </view>
                   <view class="band-options">
-                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedNsaBands.includes(band) }" @click="toggleBand('nsa', band)">
+                    <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedNsaBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('nsa', band)">
                       <Check v-if="selectedNsaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
                     </button>
                   </view>
-                  <button class="band-save-button" @click="saveBands('nsa')"><Save :size="16" />保存 NSA 频段</button>
+                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('nsa')"><Save :size="16" />保存 NSA 频段</button>
                 </view>
               </view>
             </section>
@@ -415,7 +403,7 @@ import { onLoad } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
-  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCpu as Cpu,
+  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2,
   IconDeviceFloppy as Save, IconDevices as Smartphone, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
@@ -440,6 +428,7 @@ const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 60 * 1000;
 const CHART_HISTORY_MAX_POINTS = Math.ceil(METRIC_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
+const CELL_DISPLAY_REFRESH_MS = 3000;
 
 const tabs = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
@@ -472,6 +461,7 @@ const errorMessage = ref('');
 const lastUpdate = ref('—');
 const clock = ref('');
 const data = ref({ status: {}, signal: {}, temperature: {}, resources: {}, locks: {}, stations: [], cableStations: [], neighbors: {}, features: {}, battery: {}, login: {} });
+const cellDisplay = ref({ signal: {}, neighbors: {} });
 const histories = reactive(loadChartHistory());
 const selectedCellKey = ref('');
 const neighborQuery = ref('');
@@ -482,6 +472,7 @@ const nrBands = [1, 3, 5, 8, 28, 41, 77, 78];
 const selectedLteBands = ref([]);
 const selectedSaBands = ref([]);
 const selectedNsaBands = ref([]);
+const bandSelectionsInitialized = reactive({ lte: false, sa: false, nsa: false });
 const messages = ref([]);
 const smsCapacity = ref('尚未读取');
 const smsNumber = ref('');
@@ -494,12 +485,16 @@ const overlayState = reactive(routerApi.getOverlayState());
 let pollTimer = null;
 let clockTimer = null;
 let lastChartHistorySave = 0;
+let lastCellDisplayUpdate = 0;
+let lastCellDisplaySignature = '';
+let lastSyncedCandidateKey = '';
+let pendingRefresh = false;
 
 const status = computed(() => data.value.status || {});
 const signal = computed(() => data.value.signal || {});
+const cellSignal = computed(() => cellDisplay.value.signal || {});
 const connectionAddress = computed(() => config.routerUrl);
 const temperature = computed(() => data.value.temperature || {});
-const resources = computed(() => data.value.resources || {});
 const login = computed(() => data.value.login || {});
 const stations = computed(() => data.value.stations || []);
 const cableStations = computed(() => data.value.cableStations || []);
@@ -531,7 +526,7 @@ const caState = computed(() => {
   return signal.value.wan_lte_ca === 'ca_activated' ? 'LTE CA ON' : 'OFF';
 });
 const signalBars = computed(() => currentRsrp.value == null ? 0 : currentRsrp.value >= -80 ? 5 : currentRsrp.value >= -90 ? 4 : currentRsrp.value >= -100 ? 3 : currentRsrp.value >= -110 ? 2 : 1);
-const candidates = computed(() => buildCellCandidates(data.value));
+const candidates = computed(() => buildCellCandidates(cellDisplay.value));
 const displayedCandidates = computed(() => {
   const query = neighborQuery.value.trim().toLowerCase();
   if (!query) return candidates.value;
@@ -541,7 +536,6 @@ const selectedCandidate = computed(() => candidates.value.find(item => item.key 
 
 const temperatureNames = { battery_temp: '电池温度', wifi_chip_temp: 'Wi-Fi 芯片', wifi_temp_level_1: 'Wi-Fi 传感器 1', wifi_temp_level_2: 'Wi-Fi 传感器 2', pm_sensor_pa1: '射频 PA', pm_sensor_mdm: 'Modem', pm_modem_5g: '5G Modem', cpu_temp: 'CPU 温度', cpu_temperature: 'CPU 温度', soc_temp: 'SoC 温度', board_temp: '主板温度', modem_temp: 'Modem 温度' };
 const temperatureMetrics = computed(() => Object.entries(temperature.value).filter(([key, value]) => /temp|sensor|temperature/i.test(key) && !/level|oom_temp_pro/i.test(key) && value !== '' && value != null).map(([key, value]) => ({ label: temperatureNames[key] || key, value: withUnit(value, '°C') })));
-const resourceItems = computed(() => compactEntries(resources.value).map(([label, value]) => ({ label, value })));
 const deviceIdentityDetails = computed(() => toItems({
   'IMEI': firstValue(status.value.imei),
   '固件版本': firstValue(status.value.wa_inner_version, login.value.firmware),
@@ -559,26 +553,40 @@ const networkDetails = computed(() => toItems({
 }));
 
 const servingCellDetails = computed(() => toItems({
-  RSRP: withUnit(firstValue(signal.value.Z5g_rsrp, signal.value.lte_rsrp), ' dBm'),
-  RSRQ: withUnit(firstValue(signal.value.Z5g_rsrq, signal.value.lte_rsrq), ' dB'),
-  SINR: withUnit(firstValue(signal.value.Z5g_SINR, signal.value.Z5g_snr, signal.value.lte_snr), ' dB'),
-  RSSI: withUnit(firstValue(signal.value.Z5g_rssi, signal.value.lte_rssi, signal.value.rssi), ' dBm'),
-  PCI: displayPci(signal.value.nr5g_pci, signal.value.lte_pci),
-  '频段': firstValue(signal.value.nr5g_action_band, signal.value.lte_ca_pcell_band, signal.value.wan_active_band),
-  '信道/ARFCN': firstValue(signal.value.nr5g_action_channel, signal.value.Z5g_dlEarfcn, signal.value.lte_ca_pcell_arfcn, signal.value.wan_active_channel),
-  '带宽': firstValue(signal.value.nr5g_nsa_bandwidth, signal.value.lte_ca_pcell_bandwidth, signal.value.bandwidth)
+  RSRP: withUnit(firstValue(cellSignal.value.Z5g_rsrp, cellSignal.value.lte_rsrp), ' dBm'),
+  RSRQ: withUnit(firstValue(cellSignal.value.Z5g_rsrq, cellSignal.value.lte_rsrq), ' dB'),
+  SINR: withUnit(firstValue(cellSignal.value.Z5g_SINR, cellSignal.value.Z5g_snr, cellSignal.value.lte_snr), ' dB'),
+  RSSI: withUnit(firstValue(cellSignal.value.Z5g_rssi, cellSignal.value.lte_rssi, cellSignal.value.rssi), ' dBm'),
+  PCI: displayPci(cellSignal.value.nr5g_pci, cellSignal.value.lte_pci),
+  '频段': firstValue(cellSignal.value.nr5g_action_band, cellSignal.value.lte_ca_pcell_band, cellSignal.value.wan_active_band),
+  '信道/ARFCN': firstValue(cellSignal.value.nr5g_action_channel, cellSignal.value.Z5g_dlEarfcn, cellSignal.value.lte_ca_pcell_arfcn, cellSignal.value.wan_active_channel),
+  '带宽': firstValue(cellSignal.value.nr5g_nsa_bandwidth, cellSignal.value.lte_ca_pcell_bandwidth, cellSignal.value.bandwidth)
 }));
 
-const secondaryCellDetails = computed(() => compactEntries({
-  'LTE SCell Band': signal.value.lte_ca_scell_band,
-  'LTE SCell BW': signal.value.lte_ca_scell_bandwidth,
-  'LTE SCell ARFCN': signal.value.lte_ca_scell_arfcn,
-  'LTE 多载波': signal.value.lte_multi_ca_scell_info,
-  'LTE 辅载波信号': signal.value.lte_multi_ca_scell_sig_info,
-  'NR 多载波': signal.value.nr_multi_ca_scell_info,
-  'NR CA DL': signal.value.nr_ca_dl_state,
-  'NR CA UL': signal.value.nr_ca_ul_state
-}).map(([label, value]) => ({ label, value })));
+const secondaryCellDetails = computed(() => {
+  const caState = String(cellSignal.value.wan_lte_ca || '').trim();
+  const multiLte = cellSignal.value.lte_multi_ca_scell_info;
+  const multiNr = cellSignal.value.nr_multi_ca_scell_info;
+  const hasCarrierPayload = caState === 'ca_activated'
+    || [multiLte, multiNr, cellSignal.value.lte_multi_ca_scell_sig_info].some(value => value !== undefined && value !== null && String(value).trim() !== '' && !['0', '1'].includes(String(value).trim()));
+  const valueForDisplay = value => {
+    if (value === undefined || value === null || value === '') return '';
+    // Some firmware returns the default flag "1" for an empty SCell field.
+    // Do not present that flag as a real auxiliary carrier until CA data exists.
+    if (!hasCarrierPayload && String(value).trim() === '1') return '';
+    return value;
+  };
+  return compactEntries({
+    'LTE SCell Band': valueForDisplay(cellSignal.value.lte_ca_scell_band),
+    'LTE SCell BW': valueForDisplay(cellSignal.value.lte_ca_scell_bandwidth),
+    'LTE SCell ARFCN': valueForDisplay(cellSignal.value.lte_ca_scell_arfcn),
+    'LTE 多载波': valueForDisplay(multiLte),
+    'LTE 辅载波信号': valueForDisplay(cellSignal.value.lte_multi_ca_scell_sig_info),
+    'NR 多载波': valueForDisplay(multiNr),
+    'NR CA DL': valueForDisplay(cellSignal.value.nr_ca_dl_state),
+    'NR CA UL': valueForDisplay(cellSignal.value.nr_ca_ul_state)
+  }).map(([label, value]) => ({ label, value }));
+});
 
 const usageSummaryMetrics = computed(() => [
   { label: '当前会话', value: formatBytes((numeric(status.value.realtime_rx_bytes) || 0) + (numeric(status.value.realtime_tx_bytes) || 0)) },
@@ -674,9 +682,16 @@ function normalizePointList(value, cutoff) {
 
 function loadChartHistory() {
   const cutoff = Date.now() - METRIC_HISTORY_WINDOW_MS;
-  const stored = uni.getStorageSync(CHART_HISTORY_KEY) || {};
+  let stored = {};
+  try {
+    const value = uni.getStorageSync(CHART_HISTORY_KEY);
+    if (value && typeof value === 'object' && !Array.isArray(value)) stored = value;
+  } catch {}
   const temperatures = {};
-  Object.entries(stored.temperatures || {}).forEach(([key, values]) => {
+  const storedTemperatures = stored.temperatures && typeof stored.temperatures === 'object' && !Array.isArray(stored.temperatures)
+    ? stored.temperatures
+    : {};
+  Object.entries(storedTemperatures).forEach(([key, values]) => {
     const normalized = normalizePointList(values, cutoff);
     if (normalized.length) temperatures[key] = normalized;
   });
@@ -694,14 +709,18 @@ function persistChartHistory(force = false) {
   const now = Date.now();
   if (!force && now - lastChartHistorySave < 5000) return;
   lastChartHistorySave = now;
-  uni.setStorageSync(CHART_HISTORY_KEY, {
-    rsrp: histories.rsrp,
-    sinr: histories.sinr,
-    rsrq: histories.rsrq,
-    down: histories.down,
-    up: histories.up,
-    temperatures: histories.temperatures
-  });
+  try {
+    uni.setStorageSync(CHART_HISTORY_KEY, {
+      rsrp: normalizePointList(histories.rsrp, now - METRIC_HISTORY_WINDOW_MS),
+      sinr: normalizePointList(histories.sinr, now - METRIC_HISTORY_WINDOW_MS),
+      rsrq: normalizePointList(histories.rsrq, now - METRIC_HISTORY_WINDOW_MS),
+      down: normalizePointList(histories.down, now - METRIC_HISTORY_WINDOW_MS),
+      up: normalizePointList(histories.up, now - METRIC_HISTORY_WINDOW_MS),
+      temperatures: Object.fromEntries(Object.entries(histories.temperatures || {})
+        .map(([key, values]) => [key, normalizePointList(values, now - METRIC_HISTORY_WINDOW_MS)])
+        .filter(([, values]) => values.length))
+    });
+  } catch {}
 }
 
 function pushHistory(list, timestamp, value) {
@@ -720,6 +739,8 @@ function pruneHistory(list, timestamp) {
 }
 
 function captureHistory(payload) {
+  // Do not turn a disconnected/stale snapshot into fresh history points.
+  if (!payload || payload.stale === true) return;
   const timestamp = Number(payload.timestamp) || Date.now();
   const nextSignal = payload.signal || {};
   const nextStatus = payload.status || {};
@@ -975,13 +996,29 @@ function buildLineSeries(item, windowMs, chartNow) {
 
 function applyInitialBands() {
   const locks = data.value.locks || {};
-  if (!selectedSaBands.value.length) selectedSaBands.value = parseBandText(locks.nr5g_sa_band_lock || locks.nr5g_band_lock);
-  if (!selectedNsaBands.value.length) selectedNsaBands.value = parseBandText(locks.nr5g_nsa_band_lock);
-  if (!selectedLteBands.value.length && locks.lte_band_lock) selectedLteBands.value = lteBands.filter(band => isBandInMask(locks.lte_band_lock, band));
+  const saRaw = locks.nr5g_sa_band_lock || locks.nr5g_band_lock;
+  if (!bandSelectionsInitialized.sa && saRaw !== undefined && saRaw !== null && saRaw !== '') {
+    selectedSaBands.value = parseBandText(saRaw).filter(band => nrBands.includes(band));
+    bandSelectionsInitialized.sa = true;
+  }
+  const nsaRaw = locks.nr5g_nsa_band_lock;
+  if (!bandSelectionsInitialized.nsa && nsaRaw !== undefined && nsaRaw !== null && nsaRaw !== '') {
+    selectedNsaBands.value = parseBandText(nsaRaw).filter(band => nrBands.includes(band));
+    bandSelectionsInitialized.nsa = true;
+  }
+  const lteRaw = locks.lte_band_lock;
+  if (!bandSelectionsInitialized.lte && lteRaw !== undefined && lteRaw !== null && lteRaw !== '') {
+    selectedLteBands.value = lteBands.filter(band => isBandInMask(lteRaw, band));
+    bandSelectionsInitialized.lte = true;
+  }
 }
 
 function parseBandText(value) {
-  return String(value || '').split(',').map(item => Number(String(item).replace(/\D/g, ''))).filter(Number.isFinite);
+  return String(value || '').split(',')
+    .map(item => String(item).replace(/\D/g, ''))
+    .filter(Boolean)
+    .map(Number)
+    .filter(value => Number.isInteger(value) && value > 0);
 }
 
 function isBandInMask(raw, band) {
@@ -991,22 +1028,35 @@ function isBandInMask(raw, band) {
 
 function syncCandidate() {
   const candidate = selectedCandidate.value;
-  if (!candidate) return;
+  if (!candidate) {
+    lastSyncedCandidateKey = '';
+    return;
+  }
   if (!selectedCellKey.value || !candidates.value.some(item => item.key === selectedCellKey.value)) selectedCellKey.value = candidates.value[0].key;
   const current = candidates.value.find(item => item.key === selectedCellKey.value) || candidates.value[0];
+  if (current.key === lastSyncedCandidateKey) return;
   lockForm.pci = current.pci;
   lockForm.arfcn = current.arfcn;
   lockForm.band = current.band;
   lockForm.scs = current.scs || 30;
+  lastSyncedCandidateKey = current.key;
 }
 
 async function refresh(manual = false) {
-  if (refreshing.value) return;
+  if (actionBusy.value) {
+    pendingRefresh = true;
+    return;
+  }
+  if (refreshing.value) {
+    pendingRefresh = true;
+    return;
+  }
   refreshing.value = true;
   try {
     const payload = await routerApi.dashboard();
     const merged = mergeDashboard(data.value, payload);
-    data.value = merged;
+    applyDashboardData(data.value, merged);
+    updateCellDisplay(merged, manual);
     syncTrafficPlanForm();
     captureHistory(merged);
     applyInitialBands();
@@ -1018,31 +1068,74 @@ async function refresh(manual = false) {
     if (manual) uni.showToast({ title: error.message, icon: 'none', duration: 2600 });
   } finally {
     refreshing.value = false;
+    if (pendingRefresh && !actionBusy.value) {
+      pendingRefresh = false;
+      setTimeout(() => refresh(), 0);
+    }
   }
 }
 
+function sameDashboardValue(current, next) {
+  if (Object.is(current, next)) return true;
+  if (!current || !next || typeof current !== 'object' || typeof next !== 'object') return false;
+  try { return JSON.stringify(current) === JSON.stringify(next); } catch { return false; }
+}
+
+function applyDashboardData(target, incoming) {
+  // Keep the root object and unchanged module references stable. Replacing the
+  // whole dashboard every second makes uni-app repaint unrelated cards.
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (!sameDashboardValue(target[key], value)) target[key] = value;
+  });
+}
+
+function updateCellDisplay(snapshot, force = false) {
+  if (!snapshot || snapshot.stale === true) return;
+  const now = Date.now();
+  const nextSignal = snapshot.signal || {};
+  const nextNeighbors = snapshot.neighbors || {};
+  const signature = `${JSON.stringify(nextSignal)}|${JSON.stringify(nextNeighbors)}`;
+  const current = cellDisplay.value.signal || {};
+  const servingChanged = [
+    'network_type', 'nr5g_action_band', 'nr5g_action_channel', 'nr5g_pci',
+    'lte_ca_pcell_band', 'lte_ca_pcell_arfcn', 'lte_pci', 'wan_active_band', 'wan_active_channel'
+  ].some(key => String(current[key] ?? '') !== String(nextSignal[key] ?? ''));
+  if (signature === lastCellDisplaySignature) return;
+  if (!force && !servingChanged && now - lastCellDisplayUpdate < CELL_DISPLAY_REFRESH_MS) return;
+  cellDisplay.value = { signal: { ...nextSignal }, neighbors: { ...nextNeighbors } };
+  lastCellDisplayUpdate = now;
+  lastCellDisplaySignature = signature;
+}
+
 function mergeDashboard(previous, incoming) {
-  const mergeRecord = (oldValue, newValue) => {
-    const result = { ...(oldValue || {}) };
-    Object.entries(newValue || {}).forEach(([key, value]) => {
-      if (value !== '' && value !== null && value !== undefined) result[key] = value;
-    });
-    return result;
+  const stale = incoming?.stale === true;
+  // A successful router response is authoritative, including empty fields.
+  // Keeping non-empty values from the previous poll makes cleared fields (for
+  // example bandwidth or CA state) look permanently active. Only an explicit
+  // stale snapshot is allowed to reuse the last live response.
+  const record = (key, fallback = {}) => {
+    if (stale) return previous?.[key] || fallback;
+    const value = incoming?.[key];
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback;
+  };
+  const list = (key) => {
+    if (stale) return Array.isArray(previous?.[key]) ? previous[key] : [];
+    return Array.isArray(incoming?.[key]) ? incoming[key] : [];
   };
   return {
     ...previous,
     ...incoming,
-    login: mergeRecord(previous?.login, incoming?.login),
-    status: mergeRecord(previous?.status, incoming?.status),
-    signal: mergeRecord(previous?.signal, incoming?.signal),
-    temperature: mergeRecord(previous?.temperature, incoming?.temperature),
-    resources: mergeRecord(previous?.resources, incoming?.resources),
-    locks: mergeRecord(previous?.locks, incoming?.locks),
-    neighbors: mergeRecord(previous?.neighbors, incoming?.neighbors),
-    features: mergeRecord(previous?.features, incoming?.features),
-    battery: mergeRecord(previous?.battery, incoming?.battery),
-    stations: Array.isArray(incoming?.stations) ? incoming.stations : (previous?.stations || []),
-    cableStations: Array.isArray(incoming?.cableStations) ? incoming.cableStations : (previous?.cableStations || [])
+    login: record('login'),
+    status: record('status'),
+    signal: record('signal'),
+    temperature: record('temperature'),
+    resources: record('resources'),
+    locks: record('locks'),
+    neighbors: record('neighbors'),
+    features: record('features'),
+    battery: record('battery'),
+    stations: list('stations'),
+    cableStations: list('cableStations')
   };
 }
 
@@ -1099,6 +1192,7 @@ function selectCandidate(candidate) {
   lockForm.arfcn = candidate.arfcn;
   lockForm.band = candidate.band;
   lockForm.scs = candidate.scs || 30;
+  lastSyncedCandidateKey = candidate.key;
 }
 
 async function scanNeighbors() {
@@ -1150,21 +1244,33 @@ async function unlockSelectedCell() {
 
 function toggleBand(group, band) {
   const target = group === 'lte' ? selectedLteBands : group === 'sa' ? selectedSaBands : selectedNsaBands;
-  target.value = target.value.includes(band) ? target.value.filter(item => item !== band) : [...target.value, band].sort((a, b) => a - b);
+  bandSelectionsInitialized[group] = true;
+  if (target.value.includes(band)) {
+    target.value = target.value.filter(item => item !== band);
+  } else {
+    target.value = [...target.value, band].sort((a, b) => a - b);
+  }
+  radioActionResult.value = '';
 }
 
 async function saveBands(group) {
+  const selected = group === 'lte' ? selectedLteBands.value : group === 'sa' ? selectedSaBands.value : selectedNsaBands.value;
+  while (refreshing.value) await new Promise(resolve => setTimeout(resolve, 80));
   actionBusy.value = true;
-  radioActionResult.value = '正在保存频段…';
+  radioActionResult.value = selected.length ? '正在保存频段…' : '正在解除该组频段限制…';
   try {
     if (group === 'lte') await routerApi.setLteBands(selectedLteBands.value);
     else await routerApi.setNrBands(group, group === 'sa' ? selectedSaBands.value : selectedNsaBands.value);
-    radioActionResult.value = `${group.toUpperCase()} 频段保存成功`;
+    radioActionResult.value = selected.length ? `${group.toUpperCase()} 频段保存成功` : `${group.toUpperCase()} 已解除频段限制`;
     await refresh();
   } catch (error) {
     radioActionResult.value = error.message;
   } finally {
     actionBusy.value = false;
+    if (pendingRefresh) {
+      pendingRefresh = false;
+      setTimeout(() => refresh(), 0);
+    }
   }
 }
 
