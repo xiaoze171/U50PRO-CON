@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [uni()],
   server: {
     host: '0.0.0.0',
-    port: 5130,
+    port: 5120,
     strictPort: false,
     proxy: {
       '/router-api': {
