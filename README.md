@@ -2,8 +2,8 @@
 
 中兴 U50 Pro / MU5120 路由器的第三方管理控制台。项目使用 Vue 3、uni-app、ECharts 和 Tabler Icons 实现界面，Android 端通过原生 WebView、HTTP 桥接、前台服务和系统悬浮窗运行。
 
-- 当前版本：`1.3.17`
-- Android versionCode：`31`
+- 当前版本：`1.3.18`
+- Android versionCode：`32`
 - Android 包名：`cn.mu5120.console`
 - 开发者：晓泽
 - 默认路由器地址：`http://192.168.0.1`
