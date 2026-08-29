@@ -2,8 +2,8 @@
 
 中兴 U50 Pro / MU5120 路由器的第三方管理控制台。项目使用 Vue 3、uni-app、ECharts 和 Tabler Icons 实现界面，Android 端通过原生 WebView、HTTP 桥接、前台服务和系统悬浮窗运行。
 
-- 当前版本：`1.3.18`
-- Android versionCode：`32`
+- 当前版本：`1.3.21`
+- Android versionCode：`35`
 - Android 包名：`cn.mu5120.console`
 - 开发者：晓泽
 - 默认路由器地址：`http://192.168.0.1`
@@ -124,6 +124,7 @@ CA 和辅载波：
 
 - 短信模块状态和容量。
 - 短信列表。
+- 自动识别短信中的验证码，支持一键复制。
 - UCS-2 十六进制内容解码。
 - 发送短信，内容上限 670 个字符。
 - 发送后轮询状态并显示结果。

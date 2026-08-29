@@ -94,6 +94,43 @@ export function formatDate(timestamp) {
   return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
 }
 
+export function extractVerificationCode(raw) {
+  const content = String(raw ?? '');
+  if (!content) return '';
+
+  const keywordPattern = /验证码|校验码|动态码|短信码|确认码|安全码|登录码|认证码|授权码|一次性密码|verification\s*code|verify\s*code|security\s*code|one[ -]?time\s*(?:password|code)|\b(?:OTP|PIN|code)\b/gi;
+  const contextPattern = /登录|注册|支付|身份|验证|认证|确认|绑定|动态|安全|有效|分钟|勿泄露|请勿告知|不要告诉|login|sign[ -]?in|register|payment|valid|minute|do not share/gi;
+  const codePattern = /(^|[^a-z0-9])([a-z0-9]{4,8})(?![a-z0-9])/gi;
+  const candidates = [...content.matchAll(codePattern)]
+    .map(match => {
+      const code = match[2];
+      const start = match.index + match[1].length;
+      return { code, start, end: start + code.length };
+    })
+    .filter(candidate => /\d/.test(candidate.code));
+  if (!candidates.length) return '';
+
+  const distanceTo = (candidate, markers) => Math.min(...markers.map(marker => (
+    candidate.end <= marker.start ? marker.start - candidate.end : Math.max(0, candidate.start - marker.end)
+  )));
+  const rank = (markers, maximumDistance) => candidates
+    .map(candidate => ({ ...candidate, distance: distanceTo(candidate, markers) }))
+    .filter(candidate => candidate.distance <= maximumDistance)
+    .sort((left, right) => (
+      left.distance - right.distance
+      || Math.abs(6 - left.code.length) - Math.abs(6 - right.code.length)
+      || left.start - right.start
+    ));
+
+  const keywords = [...content.matchAll(keywordPattern)].map(match => ({ start: match.index, end: match.index + match[0].length }));
+  if (keywords.length) return rank(keywords, 32)[0]?.code || '';
+
+  const contexts = [...content.matchAll(contextPattern)].map(match => ({ start: match.index, end: match.index + match[0].length }));
+  const contextualCandidates = contexts.length ? rank(contexts, 40) : [];
+
+  return contextualCandidates[0]?.code || '';
+}
+
 export function displayPci(nrRaw, lteRaw) {
   if (nrRaw !== undefined && nrRaw !== null && nrRaw !== '') {
     const text = String(nrRaw).trim();

@@ -53,7 +53,7 @@
         </view>
       </header>
 
-      <scroll-view :key="activeTab" class="content-scroll" scroll-y>
+      <scroll-view :key="`${activeTab}-${managementTab}`" class="content-scroll" scroll-y>
         <view class="content-wrap">
           <view v-if="errorMessage" class="error-banner">
             <CircleAlert :size="18" />
@@ -287,8 +287,23 @@
             </section>
           </template>
 
-          <template v-else-if="activeTab === 'sms'">
-            <section class="panel">
+          <template v-else-if="activeTab === 'manage'">
+            <view class="management-tabs" role="tablist" aria-label="管理功能">
+              <button
+                v-for="item in managementTabs"
+                :key="item.id"
+                class="management-tab"
+                :class="{ active: managementTab === item.id }"
+                :aria-selected="managementTab === item.id"
+                @click="switchManagementTab(item.id)"
+              >
+                <view class="management-tab-icon"><component :is="item.icon" :size="20" :stroke-width="managementTab === item.id ? 2.2 : 1.8" /></view>
+                <view class="management-tab-copy"><b>{{ item.label }}</b><text>{{ managementTabSummary(item.id) }}</text></view>
+              </button>
+            </view>
+
+            <template v-if="managementTab === 'sms'">
+            <section class="panel management-primary-panel">
               <view class="panel-header">
                 <view><text class="panel-title">发送短信</text><text class="panel-subtitle">通过路由器 SIM 卡发送</text></view>
                 <button class="secondary-button" @click="loadSms"><RefreshCw :size="17" />刷新收件箱</button>
@@ -300,18 +315,24 @@
               </view>
             </section>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">短信列表</text><text class="panel-subtitle">{{ smsCapacity }}</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">短信列表</text><text class="panel-subtitle">{{ smsCapacity }} · 验证码 {{ smsCodeCount }}</text></view></view>
               <view class="sms-list">
                 <view v-for="message in messages" :key="message.id || `${message.number}-${message.date}`" class="sms-card" :class="{ unread: String(message.tag) === '1' }">
                   <view class="sms-meta"><b>{{ message.number || '未知号码' }}</b><text>{{ formatSmsDate(message.date) }}</text></view>
                   <text class="sms-body">{{ message.content || '—' }}</text>
+                  <view class="sms-code-row" :class="{ empty: !message.verificationCode }">
+                    <view class="sms-code-value"><text>验证码</text><b>{{ message.verificationCode || '未识别' }}</b></view>
+                    <button class="sms-copy-button" :disabled="!message.verificationCode" :aria-label="message.verificationCode ? `复制验证码 ${message.verificationCode}` : '未识别到验证码'" :title="message.verificationCode ? `复制验证码 ${message.verificationCode}` : '未识别到验证码'" @click.stop="copyVerificationCode(message.verificationCode)">
+                      <Copy :size="16" /><text>复制</text>
+                    </button>
+                  </view>
                 </view>
                 <view v-if="!messages.length" class="empty-state">当前没有短信。</view>
               </view>
             </section>
-          </template>
+            </template>
 
-          <template v-else-if="activeTab === 'clients'">
+            <template v-else-if="managementTab === 'clients'">
             <view class="two-column">
               <section class="panel">
                 <view class="panel-header"><view><text class="panel-title">无线设备</text><text class="panel-subtitle">{{ stations.length }} 台</text></view><Wifi :size="20" /></view>
@@ -322,9 +343,9 @@
                 <view class="client-list"><view v-for="client in cableStations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!cableStations.length" class="empty-state">当前没有有线设备。</view></view>
               </section>
             </view>
-          </template>
+            </template>
 
-          <template v-else-if="activeTab === 'settings'">
+            <template v-else>
             <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">路由器连接</text><text class="panel-subtitle">手机连接 U50 Pro Wi-Fi 后直接访问 192.168.0.1</text></view><Settings :size="20" /></view>
               <view class="settings-form">
@@ -361,6 +382,7 @@
               <view class="panel-header"><view><text class="panel-title">运行方式</text><text class="panel-subtitle">同一套功能用于浏览器预览和 Android App</text></view></view>
               <DataList :items="runtimeDetails" />
             </section>
+            </template>
           </template>
         </view>
       </scroll-view>
@@ -377,22 +399,6 @@
         <component :is="item.icon" :size="21" :stroke-width="activeTab === item.id ? 2.2 : 1.8" />
         <text>{{ item.label }}</text>
       </button>
-      <button class="mobile-nav-button" :class="{ active: moreOpen || moreTabs.some(item => item.id === activeTab) }" @click="moreOpen = !moreOpen">
-        <Apps :size="21" :stroke-width="moreOpen ? 2.2 : 1.8" />
-        <text>更多</text>
-      </button>
-    </view>
-
-    <view v-if="moreOpen" class="more-sheet-mask" @click="moreOpen = false"></view>
-    <view v-if="moreOpen" class="more-sheet">
-      <view class="more-sheet-handle"></view>
-      <view class="more-sheet-title"><text>更多功能</text><button class="more-sheet-close" aria-label="关闭更多功能" @click="moreOpen = false"><X :size="18" /></button></view>
-      <view class="more-grid">
-        <button v-for="item in moreTabs" :key="item.id" class="more-item" @click="switchTab(item.id)">
-          <view class="more-item-icon"><component :is="item.icon" :size="21" :stroke-width="1.9" /></view>
-          <text>{{ item.label }}</text>
-        </button>
-      </view>
     </view>
   </view>
 </template>
@@ -403,14 +409,14 @@ import { onLoad } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
-  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2,
+  IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCopy as Copy,
   IconDeviceFloppy as Save, IconDevices as Smartphone, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
   IconSettings as Settings, IconTemperature as Thermometer, IconWifi as Wifi,
-  IconWifiOff as WifiOff, IconX as X
+  IconWifiOff as WifiOff
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
 import DataList from '../../components/DataList.vue';
@@ -418,11 +424,11 @@ import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import {
-  bytesPerSecond, compactEntries, displayPci, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
+  bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.18';
+const APP_VERSION = '1.3.21';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -435,26 +441,25 @@ const tabs = [
   { id: 'radio', label: '基站、CA 与锁定', icon: RadioTower },
   { id: 'usage', label: '流量与速率', icon: ChartNoAxesCombined },
   { id: 'battery', label: '电池与续航', icon: BatteryCharging },
-  { id: 'sms', label: '短信', icon: MessageSquareText },
-  { id: 'clients', label: '连接设备管理', icon: Smartphone },
-  { id: 'settings', label: '设置', icon: Settings }
+  { id: 'manage', label: '设备管理', icon: Apps }
 ];
 
 const mobileTabs = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
   { id: 'radio', label: '基站', icon: RadioTower },
   { id: 'usage', label: '流量', icon: ChartNoAxesCombined },
-  { id: 'battery', label: '电池', icon: BatteryCharging }
+  { id: 'battery', label: '电池', icon: BatteryCharging },
+  { id: 'manage', label: '管理', icon: Apps }
 ];
-const moreTabs = [
+const managementTabs = [
   { id: 'sms', label: '短信', icon: MessageSquareText },
   { id: 'clients', label: '连接设备', icon: Smartphone },
   { id: 'settings', label: '设置与控制', icon: Settings }
 ];
 
 const activeTab = ref('overview');
+const managementTab = ref('sms');
 const menuOpen = ref(false);
-const moreOpen = ref(false);
 const refreshing = ref(false);
 const actionBusy = ref(false);
 const errorMessage = ref('');
@@ -475,6 +480,7 @@ const selectedNsaBands = ref([]);
 const bandSelectionsInitialized = reactive({ lte: false, sa: false, nsa: false });
 const messages = ref([]);
 const smsCapacity = ref('尚未读取');
+const smsCodeCount = computed(() => messages.value.filter(message => message.verificationCode).length);
 const smsNumber = ref('');
 const smsMessage = ref('');
 const settingsResult = ref('');
@@ -1140,10 +1146,26 @@ function mergeDashboard(previous, incoming) {
 }
 
 function switchTab(id) {
-  activeTab.value = id;
+  if (managementTabs.some(tab => tab.id === id)) {
+    managementTab.value = id;
+    activeTab.value = 'manage';
+  } else {
+    activeTab.value = id;
+  }
   menuOpen.value = false;
-  moreOpen.value = false;
+  if (activeTab.value === 'manage' && managementTab.value === 'sms' && !messages.value.length) loadSms();
+}
+
+function switchManagementTab(id) {
+  if (!managementTabs.some(tab => tab.id === id)) return;
+  managementTab.value = id;
   if (id === 'sms' && !messages.value.length) loadSms();
+}
+
+function managementTabSummary(id) {
+  if (id === 'sms') return messages.value.length ? `${messages.value.length} 条 · 验证码 ${smsCodeCount.value}` : '收发与验证码';
+  if (id === 'clients') return `${stations.value.length + cableStations.value.length} 台在线`;
+  return connected.value ? '连接正常' : '连接与设备控制';
 }
 
 function beginFeatureEdit() {
@@ -1277,13 +1299,25 @@ async function saveBands(group) {
 async function loadSms() {
   try {
     const result = await routerApi.listSms();
-    messages.value = result.messages || [];
+    messages.value = (result.messages || []).map(message => ({
+      ...message,
+      verificationCode: extractVerificationCode(message.content)
+    }));
     const capacity = result.capacity || {};
     const used = (numeric(capacity.sms_nv_rev_total) || 0) + (numeric(capacity.sms_nv_send_total) || 0) + (numeric(capacity.sms_nv_draftbox_total) || 0);
     smsCapacity.value = capacity.sms_nv_total ? `${used}/${capacity.sms_nv_total}` : `状态 ${result.ready?.sms_cmd_status_result || '—'}`;
   } catch (error) {
     errorMessage.value = error.message;
   }
+}
+
+function copyVerificationCode(code) {
+  if (!code) return;
+  uni.setClipboardData({
+    data: String(code),
+    success: () => uni.showToast({ title: `已复制验证码 ${code}`, icon: 'none' }),
+    fail: () => uni.showToast({ title: '复制失败，请长按验证码复制', icon: 'none', duration: 2600 })
+  });
 }
 
 async function sendSms() {
@@ -1394,10 +1428,16 @@ onMounted(() => {
 });
 
 onLoad(options => {
-  if (tabs.some(tab => tab.id === options?.tab)) {
-    activeTab.value = options.tab;
-    if (options.tab === 'sms') setTimeout(loadSms, 0);
+  const requestedTab = options?.tab;
+  const requestedSection = options?.section;
+  if (managementTabs.some(tab => tab.id === requestedTab)) {
+    activeTab.value = 'manage';
+    managementTab.value = requestedTab;
+  } else if (tabs.some(tab => tab.id === requestedTab)) {
+    activeTab.value = requestedTab;
+    if (requestedTab === 'manage' && managementTabs.some(tab => tab.id === requestedSection)) managementTab.value = requestedSection;
   }
+  if (activeTab.value === 'manage' && managementTab.value === 'sms') setTimeout(loadSms, 0);
 });
 
 onBeforeUnmount(() => {

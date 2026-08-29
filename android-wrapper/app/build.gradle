@@ -8,8 +8,8 @@ android {
         applicationId 'cn.mu5120.console'
         minSdkVersion 23
         targetSdkVersion 30
-        versionCode 32
-        versionName '1.3.18'
+        versionCode 35
+        versionName '1.3.21'
     }
 
     signingConfigs {

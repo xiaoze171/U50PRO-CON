@@ -249,9 +249,7 @@
   display: none;
 }
 
-.mobile-bottom-nav,
-.more-sheet,
-.more-sheet-mask {
+.mobile-bottom-nav {
   display: none;
 }
 
@@ -711,6 +709,85 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+.management-tabs {
+  display: grid;
+  margin-bottom: 12px;
+  padding: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  background: #f4f6f9;
+}
+
+.management-tab {
+  display: flex;
+  min-width: 0;
+  min-height: 62px;
+  margin: 0;
+  padding: 9px 12px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  text-align: left;
+}
+
+.management-tab-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 6px;
+  background: #e8edf4;
+  color: #53627a;
+}
+
+.management-tab-copy {
+  min-width: 0;
+}
+
+.management-tab-copy b,
+.management-tab-copy text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-tab-copy b {
+  color: #24324a;
+  font-size: 12px;
+}
+
+.management-tab-copy text {
+  margin-top: 4px;
+  color: #8490a1;
+  font-size: 10px;
+}
+
+.management-tab.active {
+  border-color: #c7d5fa;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+
+.management-tab.active .management-tab-icon {
+  background: #2563eb;
+  color: #fff;
+}
+
+.management-tab.active .management-tab-copy b {
+  color: #1d4ed8;
+}
+
+.management-primary-panel {
+  border-top-color: #cbd7f6;
 }
 
 .neighbor-tools {
@@ -1208,6 +1285,75 @@ textarea {
   white-space: pre-wrap;
 }
 
+.sms-code-row {
+  display: flex;
+  min-height: 38px;
+  margin-top: 10px;
+  padding-top: 9px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #edf0f4;
+}
+
+.sms-code-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sms-code-value text {
+  color: #7b8493;
+  font-size: 10px;
+}
+
+.sms-code-value b {
+  overflow-wrap: anywhere;
+  color: #1d4ed8;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.sms-code-row.empty .sms-code-value b {
+  color: #929baa;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sms-copy-button {
+  display: inline-flex;
+  width: auto;
+  min-width: 72px;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 11px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #cbd7f6;
+  border-radius: 6px;
+  background: #f7f9ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  line-height: 32px;
+}
+
+.sms-copy-button:active {
+  background: #e9efff;
+}
+
+.sms-copy-button[disabled] {
+  border-color: #e1e5eb;
+  background: #f7f8fa;
+  color: #a1a9b5;
+}
+
+.sms-copy-button::after {
+  border: 0;
+}
+
 .client-card {
   display: flex;
   min-height: 60px;
@@ -1515,102 +1661,6 @@ textarea {
     transform: scale(0.9);
   }
 
-  .more-sheet-mask {
-    position: fixed;
-    z-index: 70;
-    display: block;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.34);
-    backdrop-filter: blur(2px);
-  }
-
-  .more-sheet {
-    position: fixed;
-    z-index: 80;
-    right: 8px;
-    bottom: calc(70px + env(safe-area-inset-bottom));
-    left: 8px;
-    display: block;
-    padding: 8px 12px 16px;
-    border: 1px solid rgba(203, 213, 225, 0.92);
-    border-radius: 12px;
-    background: #fff;
-    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
-  }
-
-  .more-sheet-handle {
-    width: 34px;
-    height: 4px;
-    margin: 0 auto 8px;
-    border-radius: 2px;
-    background: #d7dee8;
-  }
-
-  .more-sheet-title {
-    display: flex;
-    height: 36px;
-    align-items: center;
-    justify-content: space-between;
-    color: #1e293b;
-    font-size: 14px;
-    font-weight: 750;
-  }
-
-  .more-sheet-close {
-    display: grid;
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-    margin: 0;
-    padding: 0;
-    place-items: center;
-    border: 0;
-    border-radius: 50%;
-    background: #f1f5f9;
-    color: #64748b;
-    font-size: 22px;
-    line-height: 1;
-  }
-
-  .more-grid {
-    display: grid;
-    margin-top: 7px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .more-item {
-    display: flex;
-    min-width: 0;
-    min-height: 78px;
-    margin: 0;
-    padding: 10px 5px;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 8px;
-    border: 1px solid #e5eaf1;
-    border-radius: 8px;
-    background: #f8fafc;
-    color: #334155;
-    font-size: 11px;
-    font-weight: 650;
-  }
-
-  .more-item-icon {
-    display: grid;
-    width: 36px;
-    height: 36px;
-    place-items: center;
-    border-radius: 8px;
-    background: #e8f0ff;
-    color: #2563eb;
-  }
-
-  .more-item:active {
-    border-color: #bfdbfe;
-    background: #eff6ff;
-  }
 }
 
 @media (max-width: 680px) {
@@ -1675,6 +1725,41 @@ textarea {
     margin-bottom: 10px;
     padding: 13px;
     border-radius: 7px;
+  }
+
+  .management-tabs {
+    width: calc(100vw - 20px);
+    margin-bottom: 10px;
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .management-tab {
+    min-height: 72px;
+    padding: 7px 3px;
+    justify-content: center;
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+  }
+
+  .management-tab-icon {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .management-tab-copy {
+    width: 100%;
+  }
+
+  .management-tab-copy b {
+    font-size: 11px;
+  }
+
+  .management-tab-copy text {
+    margin-top: 2px;
+    font-size: 9px;
   }
 
   .panel-header {
