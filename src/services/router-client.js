@@ -20,7 +20,7 @@ const signalFields = [
 ];
 
 const statusFields = [
-  'loginfo', 'modem_main_state', 'simcard_roam', 'sim_iccid', 'imei', 'imsi', 'sim_imsi', 'msisdn', 'opms_wan_mode', 'opms_wan_auto_mode',
+  'loginfo', 'modem_main_state', 'simcard_roam', 'sim_iccid', 'imei', 'imsi', 'sim_imsi', 'msisdn', 'sim_msisdn', 'phone_number', 'opms_wan_mode', 'opms_wan_auto_mode',
   'ppp_status', 'wan_connect_status', 'wan_ipaddr', 'ipv6_wan_ipaddr', 'lan_ipaddr', 'wifi_mac_address', 'wa_inner_version', 'wa_version', 'hardware_version', 'web_version',
   'realtime_tx_bytes', 'realtime_rx_bytes', 'realtime_tx_thrpt', 'realtime_rx_thrpt', 'realtime_time', 'monthly_rx_bytes', 'monthly_tx_bytes', 'monthly_time', 'date_month',
   'wifi_onoff_state', 'wifi_lbd_enable', 'wifi_chip1_ssid1_ssid', 'wifi_chip2_ssid1_ssid', 'wifi_chip1_ssid1_access_sta_num', 'wifi_chip2_ssid1_access_sta_num', 'wifi_access_sta_num',
@@ -564,6 +564,25 @@ async function sendSms(number, message) {
   return { result: 'pending' };
 }
 
+async function deleteSms(ids) {
+  await ensureLogin();
+  const messageIds = [...new Set((Array.isArray(ids) ? ids : [ids])
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean))];
+  if (!messageIds.length) throw new Error('请先选择要删除的短信');
+  if (messageIds.some(id => id.includes(';'))) throw new Error('短信 ID 格式不正确');
+
+  const result = await setGoform('DELETE_SMS', { msg_id: `${messageIds.join(';')};` });
+  assertSuccess(result, '删除短信');
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await delay(500);
+    const state = await getCommand('sms_cmd_status_info', { sms_cmd: 6 });
+    if (state.sms_cmd_status_result === '3') return { result: 'success', state };
+    if (state.sms_cmd_status_result === '2') throw new Error('路由器删除短信失败，请稍后重试');
+  }
+  throw new Error('短信删除状态确认超时，请刷新列表确认');
+}
+
 async function scanNeighbors() {
   await ensureLogin();
   return setGoform('SCAN_NR5G_NEIGHBOR_CELL');
@@ -797,6 +816,7 @@ export const routerApi = {
   calibrateTraffic,
   listSms,
   sendSms,
+  deleteSms,
   scanNeighbors,
   linkedCellLock,
   setNrCellLock,

@@ -400,7 +400,12 @@
 .speed-column {
   position: relative;
   z-index: 2;
+  display: flex;
   padding: 0 18px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
 }
 
 .speed-column + .speed-column {
@@ -653,8 +658,9 @@
   min-height: 242px;
 }
 
-.radio-overview-grid .secondary-info-panel {
+.radio-overview-grid .panel.secondary-info-panel {
   grid-column: 1 / -1;
+  min-height: 0;
 }
 
 .radio-overview-grid :deep(.data-row) {
@@ -698,8 +704,8 @@
 
 .radio-data-list :deep(.empty-row) {
   grid-column: 1 / -1;
-  min-height: 62px;
-  padding: 14px 4px;
+  min-height: 44px;
+  padding: 9px 4px;
 }
 
 .candidate-list,
@@ -1066,7 +1072,8 @@ textarea {
 }
 
 .primary-button[disabled],
-.secondary-button[disabled] {
+.secondary-button[disabled],
+.danger-button[disabled] {
   opacity: 0.55;
 }
 
@@ -1255,13 +1262,100 @@ textarea {
   background: #fff;
 }
 
+.sms-card.selected {
+  border-color: #93b0f5;
+  background: #f7f9ff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
 .sms-card.unread {
   border-left: 3px solid #2563eb;
   background: #f6f8ff;
 }
 
+.sms-list-header {
+  align-items: center;
+}
+
+.sms-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.sms-select-all,
+.sms-select-checkbox {
+  display: inline-flex;
+  width: auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #46546a;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.sms-select-all::after,
+.sms-select-checkbox::after {
+  border: 0;
+}
+
+.sms-select-checkbox {
+  min-width: 28px;
+  flex: 0 0 28px;
+}
+
+.sms-select-checkbox[disabled] {
+  opacity: 0.4;
+}
+
+.sms-checkbox-mark {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b9c3d1;
+  border-radius: 4px;
+  background: #fff;
+  color: #fff;
+}
+
+.sms-checkbox-mark.checked {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.sms-selection-count {
+  color: #667085;
+  font-size: 11px;
+}
+
+.sms-delete-button {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 11px;
+  font-size: 11px;
+  line-height: 32px;
+}
+
+.sms-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sms-meta {
   display: flex;
+  min-width: 0;
+  flex: 1;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1847,6 +1941,16 @@ textarea {
 
   .sms-compose textarea {
     grid-row: auto;
+  }
+
+  .sms-list-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sms-bulk-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .history-row {

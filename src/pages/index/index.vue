@@ -315,10 +315,25 @@
               </view>
             </section>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">短信列表</text><text class="panel-subtitle">{{ smsCapacity }} · 验证码 {{ smsCodeCount }}</text></view></view>
+              <view class="panel-header sms-list-header">
+                <view><text class="panel-title">短信列表</text><text class="panel-subtitle">{{ smsCapacity }} · 验证码 {{ smsCodeCount }}</text></view>
+                <view v-if="messages.length" class="sms-bulk-actions">
+                  <button class="sms-select-all" role="checkbox" :aria-checked="allSmsSelected" :disabled="!selectableSmsIds.length || actionBusy" @click="toggleAllSms">
+                    <view class="sms-checkbox-mark" :class="{ checked: allSmsSelected }"><Check v-if="allSmsSelected" :size="13" /></view>
+                    <text>{{ allSmsSelected ? '取消全选' : '全选' }}</text>
+                  </button>
+                  <text class="sms-selection-count">已选 {{ selectedSmsCount }} 条</text>
+                  <button class="danger-button sms-delete-button" :disabled="!selectedSmsCount || actionBusy" @click="deleteSelectedSms"><Trash :size="16" />删除</button>
+                </view>
+              </view>
               <view class="sms-list">
-                <view v-for="message in messages" :key="message.id || `${message.number}-${message.date}`" class="sms-card" :class="{ unread: String(message.tag) === '1' }">
-                  <view class="sms-meta"><b>{{ message.number || '未知号码' }}</b><text>{{ formatSmsDate(message.date) }}</text></view>
+                <view v-for="message in messages" :key="message.id || `${message.number}-${message.date}`" class="sms-card" :class="{ unread: String(message.tag) === '1', selected: isSmsSelected(message) }">
+                  <view class="sms-card-head">
+                    <button class="sms-select-checkbox" role="checkbox" :aria-checked="isSmsSelected(message)" :disabled="!smsMessageId(message) || actionBusy" :title="smsMessageId(message) ? '选择短信' : '此短信缺少 ID，无法删除'" @click.stop="toggleSmsSelection(message)">
+                      <view class="sms-checkbox-mark" :class="{ checked: isSmsSelected(message) }"><Check v-if="isSmsSelected(message)" :size="13" /></view>
+                    </button>
+                    <view class="sms-meta"><b>{{ message.number || '未知号码' }}</b><text>{{ formatSmsDate(message.date) }}</text></view>
+                  </view>
                   <text class="sms-body">{{ message.content || '—' }}</text>
                   <view class="sms-code-row" :class="{ empty: !message.verificationCode }">
                     <view class="sms-code-value"><text>验证码</text><b>{{ message.verificationCode || '未识别' }}</b></view>
@@ -415,7 +430,7 @@ import {
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
-  IconSettings as Settings, IconTemperature as Thermometer, IconWifi as Wifi,
+  IconSettings as Settings, IconTemperature as Thermometer, IconTrash as Trash, IconWifi as Wifi,
   IconWifiOff as WifiOff
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
@@ -435,6 +450,7 @@ const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 60 * 1000;
 const CHART_HISTORY_MAX_POINTS = Math.ceil(METRIC_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
 const CELL_DISPLAY_REFRESH_MS = 3000;
+const SMS_REFRESH_MS = 5000;
 
 const tabs = [
   { id: 'overview', label: '总览', icon: LayoutDashboard },
@@ -479,8 +495,13 @@ const selectedSaBands = ref([]);
 const selectedNsaBands = ref([]);
 const bandSelectionsInitialized = reactive({ lte: false, sa: false, nsa: false });
 const messages = ref([]);
+const smsRefreshing = ref(false);
 const smsCapacity = ref('尚未读取');
 const smsCodeCount = computed(() => messages.value.filter(message => message.verificationCode).length);
+const selectedSmsIds = ref([]);
+const selectableSmsIds = computed(() => messages.value.map(smsMessageId).filter(Boolean));
+const selectedSmsCount = computed(() => selectedSmsIds.value.length);
+const allSmsSelected = computed(() => selectableSmsIds.value.length > 0 && selectableSmsIds.value.every(id => selectedSmsIds.value.includes(id)));
 const smsNumber = ref('');
 const smsMessage = ref('');
 const settingsResult = ref('');
@@ -489,6 +510,7 @@ const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
 const overlayState = reactive(routerApi.getOverlayState());
 let pollTimer = null;
+let smsPollTimer = null;
 let clockTimer = null;
 let lastChartHistorySave = 0;
 let lastCellDisplayUpdate = 0;
@@ -544,6 +566,7 @@ const temperatureNames = { battery_temp: '电池温度', wifi_chip_temp: 'Wi-Fi 
 const temperatureMetrics = computed(() => Object.entries(temperature.value).filter(([key, value]) => /temp|sensor|temperature/i.test(key) && !/level|oom_temp_pro/i.test(key) && value !== '' && value != null).map(([key, value]) => ({ label: temperatureNames[key] || key, value: withUnit(value, '°C') })));
 const deviceIdentityDetails = computed(() => toItems({
   'IMEI': firstValue(status.value.imei),
+  '当前手机号': firstValue(status.value.msisdn, status.value.sim_msisdn, status.value.phone_number),
   '固件版本': firstValue(status.value.wa_inner_version, login.value.firmware),
   'LAN IP': firstValue(status.value.lan_ipaddr)
 }));
@@ -1153,13 +1176,13 @@ function switchTab(id) {
     activeTab.value = id;
   }
   menuOpen.value = false;
-  if (activeTab.value === 'manage' && managementTab.value === 'sms' && !messages.value.length) loadSms();
+  if (activeTab.value === 'manage' && managementTab.value === 'sms') loadSms();
 }
 
 function switchManagementTab(id) {
   if (!managementTabs.some(tab => tab.id === id)) return;
   managementTab.value = id;
-  if (id === 'sms' && !messages.value.length) loadSms();
+  if (id === 'sms') loadSms();
 }
 
 function managementTabSummary(id) {
@@ -1297,17 +1320,63 @@ async function saveBands(group) {
 }
 
 async function loadSms() {
+  if (smsRefreshing.value) return;
+  smsRefreshing.value = true;
   try {
     const result = await routerApi.listSms();
     messages.value = (result.messages || []).map(message => ({
       ...message,
       verificationCode: extractVerificationCode(message.content)
     }));
+    const currentIds = new Set(messages.value.map(smsMessageId).filter(Boolean));
+    selectedSmsIds.value = selectedSmsIds.value.filter(id => currentIds.has(id));
     const capacity = result.capacity || {};
     const used = (numeric(capacity.sms_nv_rev_total) || 0) + (numeric(capacity.sms_nv_send_total) || 0) + (numeric(capacity.sms_nv_draftbox_total) || 0);
     smsCapacity.value = capacity.sms_nv_total ? `${used}/${capacity.sms_nv_total}` : `状态 ${result.ready?.sms_cmd_status_result || '—'}`;
   } catch (error) {
     errorMessage.value = error.message;
+  } finally {
+    smsRefreshing.value = false;
+  }
+}
+
+function smsMessageId(message) {
+  const id = message?.id;
+  return id === undefined || id === null || id === '' ? '' : String(id);
+}
+
+function isSmsSelected(message) {
+  const id = smsMessageId(message);
+  return Boolean(id && selectedSmsIds.value.includes(id));
+}
+
+function toggleSmsSelection(message) {
+  const id = smsMessageId(message);
+  if (!id) return;
+  selectedSmsIds.value = selectedSmsIds.value.includes(id)
+    ? selectedSmsIds.value.filter(item => item !== id)
+    : [...selectedSmsIds.value, id];
+}
+
+function toggleAllSms() {
+  selectedSmsIds.value = allSmsSelected.value ? [] : [...selectableSmsIds.value];
+}
+
+async function deleteSelectedSms() {
+  const ids = [...selectedSmsIds.value];
+  if (!ids.length) return;
+  const confirmed = await confirmAction('批量删除短信', `确定删除选中的 ${ids.length} 条短信吗？删除后无法恢复。`, '删除');
+  if (!confirmed) return;
+  actionBusy.value = true;
+  try {
+    await routerApi.deleteSms(ids);
+    selectedSmsIds.value = [];
+    await loadSms();
+    uni.showToast({ title: `已删除 ${ids.length} 条短信`, icon: 'success' });
+  } catch (error) {
+    uni.showToast({ title: error.message, icon: 'none', duration: 3000 });
+  } finally {
+    actionBusy.value = false;
   }
 }
 
@@ -1374,9 +1443,9 @@ function handlePageShow() {
   setTimeout(syncOverlayState, 250);
 }
 
-function confirmAction(title, content) {
+function confirmAction(title, content, confirmText = '继续') {
   return new Promise(resolve => {
-    uni.showModal({ title, content, confirmText: '继续', cancelText: '取消', success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) });
+    uni.showModal({ title, content, confirmText, cancelText: '取消', success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) });
   });
 }
 
@@ -1422,6 +1491,9 @@ onMounted(() => {
   syncOverlayState();
   if (typeof window !== 'undefined') window.addEventListener('pageshow', handlePageShow);
   pollTimer = setInterval(refresh, 1000);
+  smsPollTimer = setInterval(() => {
+    if (activeTab.value === 'manage' && managementTab.value === 'sms' && !actionBusy.value) loadSms();
+  }, SMS_REFRESH_MS);
   const updateClock = () => { clock.value = new Date().toLocaleString('zh-CN', { hour12: false }); };
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
@@ -1443,6 +1515,7 @@ onLoad(options => {
 onBeforeUnmount(() => {
   persistChartHistory(true);
   clearInterval(pollTimer);
+  clearInterval(smsPollTimer);
   clearInterval(clockTimer);
   if (typeof window !== 'undefined') window.removeEventListener('pageshow', handlePageShow);
 });
