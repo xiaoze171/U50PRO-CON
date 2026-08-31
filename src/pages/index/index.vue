@@ -103,7 +103,7 @@
                 <Thermometer :size="20" />
               </view>
               <view class="temperature-overview-grid">
-                <MetricGrid :items="temperatureMetrics" />
+                <MetricGrid :items="temperatureMetrics" centered />
                 <AppChart :option="temperatureChartOption" height="230px" />
               </view>
             </section>
@@ -250,7 +250,7 @@
           </template>
 
           <template v-else-if="activeTab === 'usage'">
-            <MetricGrid :items="usageSummaryMetrics" />
+            <MetricGrid :items="usageSummaryMetrics" centered />
             <section class="panel traffic-plan-panel">
               <view class="panel-header"><view><text class="panel-title">流量管理</text><text class="panel-subtitle">默认使用 GB，显示套餐、已用和剩余流量</text></view><Gauge :size="20" /></view>
               <MetricGrid :items="trafficPlanMetrics" />

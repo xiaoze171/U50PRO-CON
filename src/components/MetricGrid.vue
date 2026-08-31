@@ -1,5 +1,5 @@
 <template>
-  <view class="metric-grid">
+  <view class="metric-grid" :class="{ centered }">
     <view v-for="item in items" :key="item.label" class="metric-item" :class="item.className">
       <text class="metric-label">{{ item.label }}</text>
       <text class="metric-value">{{ item.value }}</text>
@@ -13,6 +13,10 @@ defineProps({
   items: {
     type: Array,
     default: () => []
+  },
+  centered: {
+    type: Boolean,
+    default: false
   }
 });
 </script>
@@ -33,6 +37,14 @@ defineProps({
   min-height: 78px;
   padding: 14px 16px;
   background: #fff;
+}
+
+.metric-grid.centered .metric-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
 }
 
 .metric-label,
