@@ -646,13 +646,36 @@ async function setLteBands(bands) {
 
 async function setNrBands(type, bands) {
   const values = parseBands(bands, nrBandSet, true);
-  return saveBandsWithRetry(
-    'WAN_PERFORM_NR5G_SANSA_BAND_LOCK',
-    // The firmware rejects an empty form value. "0" is its unlock/no-mask value.
-    { nr5g_band_mask: values.length ? values.join(',') : '0', type: type === 'nsa' ? '1' : '0' },
-    `5G ${type.toUpperCase()} 锁频段`,
-    () => verifyNrBandList(type, values)
-  );
+  const mask = values.length ? values.join(',') : '0';
+  const label = `5G ${type.toUpperCase()} 锁频段`;
+  let lastError = null;
+
+  // Some firmware builds only implement the legacy NR band endpoint.
+  const endpoints = [
+    {
+      id: 'WAN_PERFORM_NR5G_SANSA_BAND_LOCK',
+      payload: { nr5g_band_mask: mask, type: type === 'nsa' ? '1' : '0' }
+    },
+    {
+      id: 'WAN_PERFORM_NR5G_BAND_LOCK',
+      payload: { nr5g_band_mask: mask }
+    }
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      return await saveBandsWithRetry(
+        endpoint.id,
+        endpoint.payload,
+        label,
+        () => verifyNrBandList(type, values)
+      );
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error(`${label}保存失败`);
 }
 
 async function saveBandsWithRetry(goformId, payload, label, verify) {
@@ -695,15 +718,24 @@ async function verifyNrBandList(type, expectedValues) {
   const expected = [...expectedValues].sort((left, right) => left - right);
   let actual = '';
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const state = await getFields([field]);
-    actual = String(state[field] ?? '').trim();
-    const actualValues = actual === '' || actual === '0'
-      ? []
-      : actual.split(',').map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+    const state = await getFields([field, 'nr5g_band_lock']);
+    const raw = state[field] !== undefined ? state[field] : state.nr5g_band_lock;
+    actual = String(raw ?? '').trim();
+    const actualValues = parseNrBandList(raw);
     if (actualValues.length === expected.length && actualValues.every((value, index) => value === expected[index])) return;
-    await delay(350);
+    await delay(500);
   }
   throw new Error(`路由器未确认 5G ${type.toUpperCase()} 频段已保存（返回：${actual || '空'}）`);
+}
+
+function parseNrBandList(value) {
+  const text = String(value ?? '').trim();
+  if (!text || text === '0') return [];
+  return [...new Set(text.split(/[;,]/)
+    .map(item => String(item).trim().replace(/^n/i, ''))
+    .map(Number)
+    .filter(Number.isFinite))]
+    .sort((left, right) => left - right);
 }
 
 function parseBands(input, allowed, allowEmpty = false) {
