@@ -76,18 +76,18 @@
                 <view class="hero-metrics">
                   <view><text>RSRP</text><b>{{ withUnit(currentRsrp, ' dBm') }}</b></view>
                   <view><text>SINR</text><b>{{ withUnit(currentSinr, ' dB') }}</b></view>
-                  <view><text>CA</text><b>{{ caState }}</b></view>
+                  <view><text>CA</text><b class="ca-state" :class="{ on: caState !== 'OFF' }">{{ caState }}</b></view>
                 </view>
               </section>
 
               <section class="hero-panel speed-hero">
                 <view class="speed-column download">
-                  <ArrowDown :size="18" />
+                  <ArrowDown :size="15" />
                   <text>实时下载</text>
                   <b>{{ bytesPerSecond(status.realtime_rx_thrpt) }}</b>
                 </view>
                 <view class="speed-column upload">
-                  <ArrowUp :size="18" />
+                  <ArrowUp :size="15" />
                   <text>实时上传</text>
                   <b>{{ bytesPerSecond(status.realtime_tx_thrpt) }}</b>
                 </view>
@@ -123,18 +123,38 @@
           <template v-else-if="activeTab === 'radio'">
             <view class="radio-overview-grid">
               <section class="panel compact-panel radio-info-panel">
-                <view class="panel-header compact"><text class="panel-title">当前网络信息</text><RadioTower :size="19" /></view>
+                <view class="panel-header compact"><text class="panel-title">当前网络信息</text><RadioTower :size="17" /></view>
                 <DataList class="radio-data-list" :items="networkDetails" />
               </section>
               <section class="panel compact-panel radio-info-panel">
-                <view class="panel-header compact"><text class="panel-title">服务小区</text><MapPin :size="19" /></view>
-                <DataList class="radio-data-list" :items="servingCellDetails" />
-              </section>
-              <section class="panel compact-panel radio-info-panel secondary-info-panel">
-                <view class="panel-header compact"><text class="panel-title">辅载波与 NR CA</text><Layers3 :size="19" /></view>
-                <DataList class="radio-data-list" :items="secondaryCellDetails" empty-text="当前未检测到辅载波或 CA" />
+                <view class="panel-header compact"><text class="panel-title">服务小区</text><MapPin :size="17" /></view>
+                <view class="signal-quality-list">
+                  <view v-for="metric in signalQualityMetrics" :key="metric.label" class="quality-row">
+                    <text class="quality-name">{{ metric.label }}</text>
+                    <view class="quality-track">
+                      <view class="quality-fill" :style="qualityFillStyle(metric)">
+                        <text class="quality-inline-value">{{ metric.value }}</text>
+                      </view>
+                    </view>
+                    <text class="quality-mobile-value">{{ metric.value }}</text>
+                  </view>
+                  <view v-if="!signalQualityMetrics.length" class="empty-state">暂无信号数据</view>
+                </view>
               </section>
             </view>
+
+            <section class="cell-params-strip">
+              <view v-for="item in cellParamsDetails" :key="item.label" class="cell-param-item">
+                <text class="cell-param-label">{{ item.label }}</text>
+                <text class="cell-param-value">{{ item.value || '—' }}</text>
+              </view>
+              <view v-if="!cellParamsDetails.length" class="cell-param-empty">暂无小区参数</view>
+            </section>
+
+            <section class="panel compact-panel radio-info-panel">
+              <view class="panel-header compact"><text class="panel-title">辅载波与 NR CA</text><Layers3 :size="17" /></view>
+              <DataList class="radio-data-list" :items="secondaryCellDetails" empty-text="当前未检测到辅载波或 CA" />
+            </section>
 
             <section class="panel signal-trend-panel">
               <view class="panel-header">
@@ -179,6 +199,14 @@
               </view>
             </section>
 
+            <section class="panel compact-panel locked-status-panel">
+              <view class="panel-header compact"><text class="panel-title">当前锁定状态</text><LockKeyhole :size="17" /></view>
+              <view class="locked-status-values">
+                <text v-for="tag in lockedStatusTags" :key="tag" class="locked-tag">{{ tag }}</text>
+                <text v-if="!lockedStatusTags.length" class="locked-tag none">无锁定，路由器未限制频段与小区</text>
+              </view>
+            </section>
+
             <section class="panel">
               <view class="panel-header">
                 <view>
@@ -196,7 +224,7 @@
               </view>
               <view class="action-row">
                 <button class="primary-button" :disabled="!selectedCandidate || actionBusy" @click="lockSelectedCell"><LockKeyhole :size="17" />锁定所选小区</button>
-                <button class="secondary-button" :disabled="!selectedCandidate || actionBusy" @click="unlockSelectedCell"><LockOpen :size="17" />解除对应锁定</button>
+                <button class="secondary-button" :disabled="actionBusy" @click="unlockAllCells"><LockOpen :size="17" />解除小区锁定</button>
                 <text class="action-result">{{ radioActionResult }}</text>
               </view>
             </section>
@@ -218,8 +246,14 @@
                     <button v-for="band in lteBands" :key="band" class="band-chip" :class="{ checked: selectedLteBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('lte', band)">
                       <Check v-if="selectedLteBands.includes(band)" :size="14" :stroke-width="2.5" /><text>B{{ band }}</text>
                     </button>
+                    <button v-for="band in extraLteBands" :key="`x-${band}`" class="band-chip custom checked" :disabled="actionBusy" @click="toggleBand('lte', band)">
+                      <Check :size="14" :stroke-width="2.5" /><text>B{{ band }}</text>
+                    </button>
                   </view>
-                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('lte')"><Save :size="16" />保存 LTE 频段</button>
+                  <view class="band-action-row">
+                    <button class="band-save-button" :disabled="actionBusy" @click="saveBands('lte')"><Save :size="16" />保存 LTE 频段</button>
+                    <button class="band-save-button band-clear-button" :disabled="actionBusy" @click="clearBands('lte')"><LockOpen :size="16" />解除限制</button>
+                  </view>
                 </view>
                 <view class="band-group">
                   <view class="band-group-header">
@@ -230,8 +264,14 @@
                     <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedSaBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('sa', band)">
                       <Check v-if="selectedSaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
                     </button>
+                    <button v-for="band in extraSaBands" :key="`xs-${band}`" class="band-chip custom checked" :disabled="actionBusy" @click="toggleBand('sa', band)">
+                      <Check :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
+                    </button>
                   </view>
-                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('sa')"><Save :size="16" />保存 SA 频段</button>
+                  <view class="band-action-row">
+                    <button class="band-save-button" :disabled="actionBusy" @click="saveBands('sa')"><Save :size="16" />保存 SA 频段</button>
+                    <button class="band-save-button band-clear-button" :disabled="actionBusy" @click="clearBands('sa')"><LockOpen :size="16" />解除限制</button>
+                  </view>
                 </view>
                 <view class="band-group">
                   <view class="band-group-header">
@@ -242,8 +282,14 @@
                     <button v-for="band in nrBands" :key="band" class="band-chip" :class="{ checked: selectedNsaBands.includes(band) }" :disabled="actionBusy" @click="toggleBand('nsa', band)">
                       <Check v-if="selectedNsaBands.includes(band)" :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
                     </button>
+                    <button v-for="band in extraNsaBands" :key="`xn-${band}`" class="band-chip custom checked" :disabled="actionBusy" @click="toggleBand('nsa', band)">
+                      <Check :size="14" :stroke-width="2.5" /><text>n{{ band }}</text>
+                    </button>
                   </view>
-                  <button class="band-save-button" :disabled="actionBusy" @click="saveBands('nsa')"><Save :size="16" />保存 NSA 频段</button>
+                  <view class="band-action-row">
+                    <button class="band-save-button" :disabled="actionBusy" @click="saveBands('nsa')"><Save :size="16" />保存 NSA 频段</button>
+                    <button class="band-save-button band-clear-button" :disabled="actionBusy" @click="clearBands('nsa')"><LockOpen :size="16" />解除限制</button>
+                  </view>
                 </view>
               </view>
             </section>
@@ -374,6 +420,32 @@
               </view>
             </section>
             <section class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">局域网互通</text><text class="panel-subtitle">同一 Wi-Fi 下多设备共享历史，避免各自抢占路由器登录导致数据断层</text></view><Wifi :size="20" /></view>
+              <view class="overlay-setting-row">
+                <view class="overlay-setting-copy">
+                  <b>启用局域网互通</b>
+                  <text>{{ syncStateText }}</text>
+                </view>
+                <switch :checked="syncState.enabled" :disabled="!syncState.supported" color="#2563eb" @change="toggleSync" />
+              </view>
+              <template v-if="syncState.supported && syncState.enabled">
+                <view class="sync-role-line">
+                  <text class="sync-role-badge" :class="syncRoleClass">{{ syncRoleText }}</text>
+                  <text class="sync-role-hint">{{ syncRoleHint }}</text>
+                </view>
+                <view v-if="syncState.peers.length" class="sync-peer-list">
+                  <view v-for="peer in syncState.peers" :key="peer.id" class="sync-peer-row">
+                    <view class="sync-peer-copy">
+                      <b>{{ peer.name || peer.id }}</b>
+                      <text>{{ peerPlatformText(peer.platform) }}<template v-if="peer.collecting"> · 采集中</template></text>
+                    </view>
+                    <button class="secondary-button sync-pin-button" :class="{ 'sync-pinned': syncState.preferredCollector === peer.id }" @click="pinCollector(peer.id)">{{ syncState.preferredCollector === peer.id ? '已钉住' : '设为采集器' }}</button>
+                  </view>
+                </view>
+                <view v-else class="sync-empty">局域网内暂无其他节点，正在直连路由器</view>
+              </template>
+            </section>
+            <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">悬浮监测</text><text class="panel-subtitle">在其他应用上层显示实时速率、电量与电池温度</text></view><Layers3 :size="20" /></view>
               <view class="overlay-setting-row">
                 <view class="overlay-setting-copy">
@@ -437,13 +509,15 @@ import AppChart from '../../components/AppChart.vue';
 import DataList from '../../components/DataList.vue';
 import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
+import { syncClient } from '../../services/sync.js';
 import { buildCellCandidates } from '../../utils/cells.js';
+import { normalizePoints } from '../../utils/history.js';
 import {
   bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.21';
+const APP_VERSION = '1.3.22';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -490,6 +564,31 @@ const lockForm = reactive({ pci: '', arfcn: '', band: '', scs: 30 });
 const radioActionResult = ref('');
 const lteBands = [1, 3, 5, 7, 8, 20, 28, 34, 38, 39, 40, 41];
 const nrBands = [1, 3, 5, 8, 28, 41, 77, 78];
+// 芯片列表之外的已锁频段（如固件返回的 229）：单独渲染成"自定义"chip，可见、可取消，
+// 不再静默丢弃——否则界面上看不出当前锁定状态。
+// 固件真实锁定状态（独立于 chip 选中意图）：直接渲染 locks 字段，
+// 无论频段是否在 chip 列表里都能看到"当前锁了什么"。
+const lockedStatusTags = computed(() => {
+  const locks = data.value.locks || {};
+  const tags = [];
+  const sa = parseBandText(locks.nr5g_sa_band_lock || locks.nr5g_band_lock);
+  if (sa.length) tags.push(`SA: ${sa.map(band => `n${band}`).join(' ')}`);
+  const nsa = parseBandText(locks.nr5g_nsa_band_lock);
+  if (nsa.length) tags.push(`NSA: ${nsa.map(band => `n${band}`).join(' ')}`);
+  const lteMaskBands = lteBands.filter(band => isBandInMask(locks.lte_band_lock, band));
+  const lteExtra = parseBandText(locks.lte_freq_lock).filter(band => !lteMaskBands.includes(band));
+  const lte = [...lteMaskBands, ...lteExtra];
+  if (lte.length) tags.push(`LTE: ${lte.map(band => `B${band}`).join(' ')}`);
+  if (String(locks.nr5g_cell_lock || '').trim() && String(locks.nr5g_cell_lock).trim() !== '1,1,1,1') {
+    const [pci, arfcn] = String(locks.nr5g_cell_lock).split(',');
+    if (pci && pci !== '1') tags.push(`5G 小区: PCI ${pci} / ARFCN ${arfcn || '—'}`);
+  }
+  if (String(locks.lte_pci_lock || '').trim()) tags.push(`LTE 小区: PCI ${locks.lte_pci_lock} / ARFCN ${locks.lte_earfcn_lock || '—'}`);
+  return tags;
+});
+const extraLteBands = computed(() => selectedLteBands.value.filter(band => !lteBands.includes(band)));
+const extraSaBands = computed(() => selectedSaBands.value.filter(band => !nrBands.includes(band)));
+const extraNsaBands = computed(() => selectedNsaBands.value.filter(band => !nrBands.includes(band)));
 const selectedLteBands = ref([]);
 const selectedSaBands = ref([]);
 const selectedNsaBands = ref([]);
@@ -509,6 +608,7 @@ const deviceActionResult = ref('');
 const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
 const overlayState = reactive(routerApi.getOverlayState());
+const syncState = reactive(syncClient.getState());
 let pollTimer = null;
 let smsPollTimer = null;
 let clockTimer = null;
@@ -539,6 +639,18 @@ const overlayStateText = computed(() => {
   if (!overlayState.available) return '仅 Android App 支持悬浮窗';
   if (!overlayState.enabled) return '已关闭';
   return overlayState.permitted ? '已开启，可拖动调整位置' : '已开启，等待系统悬浮窗权限';
+});
+const syncStateText = computed(() => {
+  if (!syncState.supported) return '当前环境不支持（仅 EXE 桌面端与 Android App 可作服务节点，浏览器预览始终直连）';
+  if (!syncState.enabled) return '已关闭，各设备各自直连路由器';
+  return '已开启，局域网内自动共享历史';
+});
+const syncRoleText = computed(() => ({ collector: '本机：采集器', viewer: '本机：查看端', direct: '本机：直连' }[syncState.role] || '本机：直连'));
+const syncRoleClass = computed(() => `sync-role-${syncState.role}`);
+const syncRoleHint = computed(() => {
+  if (syncState.role === 'collector') return '本机独占登录路由器，并向其他设备共享实时与历史数据';
+  if (syncState.role === 'viewer') return `正在读取采集器「${syncState.hub?.name || '未知'}」的数据，本机不占用路由器会话`;
+  return '局域网内暂无其他采集器，本机直接连接路由器';
 });
 const connectionMessage = computed(() => data.value.stale ? '服务器缓存数据' : (login.value.message || '连接失败'));
 const networkType = computed(() => firstValue(signal.value.network_type, status.value.network_type));
@@ -581,11 +693,39 @@ const networkDetails = computed(() => toItems({
   'WAN IPv6': firstValue(status.value.ipv6_wan_ipaddr)
 }));
 
-const servingCellDetails = computed(() => toItems({
-  RSRP: withUnit(firstValue(cellSignal.value.Z5g_rsrp, cellSignal.value.lte_rsrp), ' dBm'),
-  RSRQ: withUnit(firstValue(cellSignal.value.Z5g_rsrq, cellSignal.value.lte_rsrq), ' dB'),
-  SINR: withUnit(firstValue(cellSignal.value.Z5g_SINR, cellSignal.value.Z5g_snr, cellSignal.value.lte_snr), ' dB'),
-  RSSI: withUnit(firstValue(cellSignal.value.Z5g_rssi, cellSignal.value.lte_rssi, cellSignal.value.rssi), ' dBm'),
+// 信号质量五档色阶：绿=优秀、黄=良好、橙=一般、浅红=较差、深红=极差。
+// 阈值与进度条范围按 LTE/NR 工程分级约定，仅用于展示，不影响业务逻辑。
+// bars: [优秀下限, 良好下限, 一般下限, 较差下限]（低于最后一档即极差）。
+const SIGNAL_QUALITY_SLOTS = [
+  { label: 'RSRP', key: 'rsrp', unit: ' dBm', min: -120, max: -70, bars: [-80, -90, -100, -110] },
+  { label: 'RSRQ', key: 'rsrq', unit: ' dB', min: -24, max: -5, bars: [-10, -14, -18, -22] },
+  { label: 'SINR', key: 'sinr', unit: ' dB', min: -10, max: 25, bars: [20, 13, 0, -5] },
+  { label: 'RSSI', key: 'rssi', unit: ' dBm', min: -100, max: -60, bars: [-65, -75, -85, -95] }
+];
+const signalValues = computed(() => ({
+  rsrp: numeric(firstValue(cellSignal.value.Z5g_rsrp, cellSignal.value.lte_rsrp)),
+  rsrq: numeric(firstValue(cellSignal.value.Z5g_rsrq, cellSignal.value.lte_rsrq)),
+  sinr: numeric(firstValue(cellSignal.value.Z5g_SINR, cellSignal.value.Z5g_snr, cellSignal.value.lte_snr)),
+  rssi: numeric(firstValue(cellSignal.value.Z5g_rssi, cellSignal.value.lte_rssi, cellSignal.value.rssi))
+}));
+const signalQualityMetrics = computed(() => SIGNAL_QUALITY_SLOTS
+  .filter(slot => signalValues.value[slot.key] != null)
+  .map(slot => {
+    const value = signalValues.value[slot.key];
+    const percent = Math.round(Math.min(100, Math.max(0, ((value - slot.min) / (slot.max - slot.min)) * 100)));
+    const level = ['excellent', 'good', 'fair', 'weak', 'bad'].find(
+      (name, index) => value >= slot.bars[index]
+    ) || 'bad';
+    return { label: slot.label, value: `${value}${slot.unit}`, percent, level };
+  }));
+// 颜色条样式全部内联（宽度 + 语义色）：安卓 WebView 对模板动态 class +
+// 百分比宽度的组合兼容性差，内联样式不依赖 CSS class 即可稳定渲染。
+const SIGNAL_QUALITY_COLORS = { excellent: '#36c648', good: '#ffd033', fair: '#ff9f29', weak: '#ff5c42', bad: '#d82f2f' };
+function qualityFillStyle(metric) {
+  if (!metric) return '';
+  return `width: ${metric.percent}%; background: ${SIGNAL_QUALITY_COLORS[metric.level] || '#ff9f29'};`;
+}
+const cellParamsDetails = computed(() => toItems({
   PCI: displayPci(cellSignal.value.nr5g_pci, cellSignal.value.lte_pci),
   '频段': firstValue(cellSignal.value.nr5g_action_band, cellSignal.value.lte_ca_pcell_band, cellSignal.value.wan_active_band),
   '信道/ARFCN': firstValue(cellSignal.value.nr5g_action_channel, cellSignal.value.Z5g_dlEarfcn, cellSignal.value.lte_ca_pcell_arfcn, cellSignal.value.wan_active_channel),
@@ -667,16 +807,16 @@ const runtimeDetails = computed(() => toItems({
 }));
 
 const signalChartOption = computed(() => lineOption([
-  { name: 'RSRP', data: histories.rsrp, color: '#5b8def' },
-  { name: 'SINR', data: histories.sinr, color: '#f5a524' },
-  { name: 'RSRQ', data: histories.rsrq, color: '#2dd4bf' }
+  { name: 'RSRP', data: histories.rsrp, color: '#ffb020' },
+  { name: 'SINR', data: histories.sinr, color: '#36c963' },
+  { name: 'RSRQ', data: histories.rsrq, color: '#6d5bd0' }
 ], false, { min: -140, max: 50 }, {
   animation: false,
   axisWindowStepMs: CHART_HISTORY_SAMPLE_MS
 }));
 
 const temperatureChartOption = computed(() => {
-  const colors = ['#fb923c', '#34d399', '#5b8def', '#a78bfa', '#f472b6', '#2dd4bf'];
+  const colors = ['#ffb020', '#36c963', '#6d5bd0', '#d94848', '#f472b6', '#2dd4bf'];
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
     .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(values, 3), color: colors[index % colors.length] }));
@@ -695,18 +835,8 @@ function toItems(object) {
 }
 
 function normalizePointList(value, cutoff) {
-  if (!Array.isArray(value)) return [];
-  const buckets = new Map();
-  value.forEach(item => {
-    const timestamp = Number(item?.[0]);
-    const pointValue = numeric(item?.[1]);
-    if (!Number.isFinite(timestamp) || timestamp < cutoff || pointValue == null) return;
-    const bucketTime = Math.floor(timestamp / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
-    buckets.set(bucketTime, [bucketTime, pointValue]);
-  });
-  return [...buckets.values()]
-    .sort((left, right) => left[0] - right[0])
-    .slice(-CHART_HISTORY_MAX_POINTS);
+  // 委托给共享工具，保持原有分钟桶归一行为（sync.js / desktop 主进程复用同一逻辑）。
+  return normalizePoints(value, { cutoff, sampleMs: CHART_HISTORY_SAMPLE_MS, maxPoints: CHART_HISTORY_MAX_POINTS });
 }
 
 function loadChartHistory() {
@@ -750,6 +880,55 @@ function persistChartHistory(force = false) {
         .filter(([, values]) => values.length))
     });
   } catch {}
+}
+
+// —— 局域网互通：图表历史的快照 / 合并写回 —— //
+
+// 把 histories 反应式对象拍平成普通结构，交给 syncClient 发布或作为合并输入。
+function chartSnapshot() {
+  return {
+    rsrp: histories.rsrp.slice(),
+    sinr: histories.sinr.slice(),
+    rsrq: histories.rsrq.slice(),
+    down: histories.down.slice(),
+    up: histories.up.slice(),
+    temperatures: Object.fromEntries(Object.entries(histories.temperatures || {}).map(([key, values]) => [key, values.slice()]))
+  };
+}
+
+// syncClient 合并外部图表历史时的回调：updater(当前快照)->合并结果，写回反应式并持久化。
+function applyChartUpdater(updater) {
+  if (typeof updater !== 'function') return;
+  const merged = updater(chartSnapshot());
+  if (!merged || typeof merged !== 'object') return;
+  ['rsrp', 'sinr', 'rsrq', 'down', 'up'].forEach(key => {
+    if (Array.isArray(merged[key])) histories[key] = merged[key];
+  });
+  if (merged.temperatures && typeof merged.temperatures === 'object') histories.temperatures = merged.temperatures;
+  persistChartHistory(true);
+}
+
+// 从 syncClient 拉取最新角色/对端状态刷新到设置页展示。
+function refreshSyncState() {
+  Object.assign(syncState, syncClient.getState());
+}
+
+function peerPlatformText(platform) {
+  return { desktop: '电脑端', android: '安卓端', h5: '浏览器' }[platform] || '其他';
+}
+
+// 设置页开关：启用/关闭局域网互通。
+function toggleSync(event) {
+  const enabled = event?.detail?.value ?? !syncState.enabled;
+  syncClient.setEnabled(enabled);
+  refreshSyncState();
+}
+
+// 设置页：钉住某台设备为首选采集器（再次点击当前项则取消钉住恢复自动）。
+function pinCollector(id) {
+  const next = syncState.preferredCollector === id ? '' : id;
+  syncClient.setPreferredCollector(next);
+  refreshSyncState();
 }
 
 function pushHistory(list, timestamp, value) {
@@ -926,11 +1105,11 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         backgroundColor: '#f1f5f9',
         fillerColor: 'rgba(91,141,239,.16)',
         dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
-        selectedDataBackground: { lineStyle: { color: '#5b8def' }, areaStyle: { color: '#93c5fd', opacity: .22 } },
+        selectedDataBackground: { lineStyle: { color: '#6d5bd0' }, areaStyle: { color: '#c8bef2', opacity: .22 } },
         handleSize: 12,
-        handleStyle: { color: '#ffffff', borderColor: '#5b8def', borderWidth: 1 },
+        handleStyle: { color: '#ffffff', borderColor: '#6d5bd0', borderWidth: 1 },
         moveHandleSize: 4,
-        moveHandleStyle: { color: '#5b8def', opacity: .55 },
+        moveHandleStyle: { color: '#6d5bd0', opacity: .55 },
         showDetail: false,
         brushSelect: false
       }
@@ -1027,17 +1206,22 @@ function applyInitialBands() {
   const locks = data.value.locks || {};
   const saRaw = locks.nr5g_sa_band_lock || locks.nr5g_band_lock;
   if (!bandSelectionsInitialized.sa && saRaw !== undefined && saRaw !== null && saRaw !== '') {
-    selectedSaBands.value = parseBandText(saRaw).filter(band => nrBands.includes(band));
+    // 保留全部回显频段：锁定的频段可能不在 chip 列表里（如 229），
+    // 丢弃会让界面上看不出"已锁定"状态（固件 Web UI 却能看到）。
+    selectedSaBands.value = parseBandText(saRaw);
     bandSelectionsInitialized.sa = true;
   }
   const nsaRaw = locks.nr5g_nsa_band_lock;
   if (!bandSelectionsInitialized.nsa && nsaRaw !== undefined && nsaRaw !== null && nsaRaw !== '') {
-    selectedNsaBands.value = parseBandText(nsaRaw).filter(band => nrBands.includes(band));
+    selectedNsaBands.value = parseBandText(nsaRaw);
     bandSelectionsInitialized.nsa = true;
   }
   const lteRaw = locks.lte_band_lock;
   if (!bandSelectionsInitialized.lte && lteRaw !== undefined && lteRaw !== null && lteRaw !== '') {
-    selectedLteBands.value = lteBands.filter(band => isBandInMask(lteRaw, band));
+    const maskBands = lteBands.filter(band => isBandInMask(lteRaw, band));
+    // mask 位图无法表达列表外频段，LTE 特殊频段从 lte_freq_lock 文本兜底解析。
+    const extraBands = parseBandText(locks.lte_freq_lock).filter(band => !maskBands.includes(band));
+    selectedLteBands.value = [...maskBands, ...extraBands];
     bandSelectionsInitialized.lte = true;
   }
 }
@@ -1082,7 +1266,8 @@ async function refresh(manual = false) {
   }
   refreshing.value = true;
   try {
-    const payload = await routerApi.dashboard();
+    // 数据来源被 syncClient 透明代理：查看端读采集器 /sync/live，其余（采集器/直连）走真正的路由器轮询。
+    const payload = await syncClient.dashboard();
     const merged = mergeDashboard(data.value, payload);
     applyDashboardData(data.value, merged);
     updateCellDisplay(merged, manual);
@@ -1092,6 +1277,15 @@ async function refresh(manual = false) {
     syncCandidate();
     errorMessage.value = merged.stale ? `当前显示缓存数据：${merged.serverMessage || '路由器暂时离线'}` : '';
     lastUpdate.value = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    // 本地历史更新完毕后按角色发布/回补/拉取；图表合并经 applyChartUpdater 写回本地并持久化。
+    try {
+      await syncClient.afterTick({
+        live: merged,
+        localStore: { chart: chartSnapshot(), battery: merged.battery?.samples || [] },
+        onMergeChart: applyChartUpdater
+      });
+    } catch {}
+    refreshSyncState();
   } catch (error) {
     errorMessage.value = error.message;
     if (manual) uni.showToast({ title: error.message, icon: 'none', duration: 2600 });
@@ -1270,15 +1464,14 @@ async function lockSelectedCell() {
   }
 }
 
-async function unlockSelectedCell() {
-  const selected = selectedCandidate.value;
-  if (!selected) return;
+// 解除小区锁定：独立操作，不依赖当前候选列表（锁频后可能搜不到任何小区）。
+// NR 发固件解锁标志 "1,1,1,1"、LTE 清空锁定字段，两制式一起发。
+async function unlockAllCells() {
   actionBusy.value = true;
-  radioActionResult.value = '正在解除锁定…';
+  radioActionResult.value = '正在解除小区锁定…';
   try {
-    if (selected.rat === 'NR') await routerApi.setNrCellLock({ unlock: true });
-    else await routerApi.setLteCellLock({ unlock: true });
-    radioActionResult.value = '已解除小区锁定';
+    await routerApi.unlockAllCellLocks();
+    radioActionResult.value = '已解除小区锁定（5G 与 LTE）';
     await refresh();
   } catch (error) {
     radioActionResult.value = error.message;
@@ -1296,6 +1489,16 @@ function toggleBand(group, band) {
     target.value = [...target.value, band].sort((a, b) => a - b);
   }
   radioActionResult.value = '';
+}
+
+// 一键解除频段限制：清空该组选择并保存（固件空 mask/0 = 不限制频段），
+// 不需要手动逐个取消 chip。
+async function clearBands(group) {
+  if (group === 'lte') selectedLteBands.value = [];
+  else if (group === 'sa') selectedSaBands.value = [];
+  else selectedNsaBands.value = [];
+  bandSelectionsInitialized[group] = true;
+  await saveBands(group);
 }
 
 async function saveBands(group) {
@@ -1487,6 +1690,14 @@ async function initialize() {
 }
 
 onMounted(() => {
+  // 用页面自身的图表/电池窗口参数初始化同步编排，确保跨设备合并与本地保留窗口一致。
+  syncClient.init({
+    chartWindowMs: METRIC_HISTORY_WINDOW_MS,
+    chartSampleMs: CHART_HISTORY_SAMPLE_MS,
+    chartMaxPoints: CHART_HISTORY_MAX_POINTS,
+    batteryWindowMs: BATTERY_HISTORY_WINDOW_MS
+  });
+  refreshSyncState();
   initialize();
   syncOverlayState();
   if (typeof window !== 'undefined') window.addEventListener('pageshow', handlePageShow);

@@ -8,7 +8,7 @@
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #f5f7fb;
+  background: #ffffff;
 }
 
 .sidebar {
@@ -40,7 +40,7 @@
   place-items: center;
   border: 1px solid rgba(125, 211, 252, 0.32);
   border-radius: 8px;
-  background: #2563eb;
+  background: #6d5bd0;
   color: #fff;
 }
 
@@ -139,7 +139,7 @@
 }
 
 .nav-button.active {
-  background: #2563eb;
+  background: #6d5bd0;
   color: #fff;
   font-weight: 700;
 }
@@ -201,7 +201,7 @@
 }
 
 .eyebrow {
-  color: #2563eb;
+  color: #6d5bd0;
   font-size: 9px;
   font-weight: 800;
 }
@@ -234,15 +234,15 @@
   margin: 0;
   padding: 0;
   place-items: center;
-  border: 1px solid #dce3ec;
-  border-radius: 6px;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
   background: #fff;
   color: #42526a;
   line-height: 1;
 }
 
 .icon-button svg {
-  color: #2563eb;
+  color: #6d5bd0;
 }
 
 .mobile-menu {
@@ -305,8 +305,8 @@
   padding: 22px 24px;
   flex-direction: column;
   justify-content: space-between;
-  background: #17233a;
-  color: #fff;
+  background: #f8f9fa;
+  color: #172033;
 }
 
 .hero-top {
@@ -319,13 +319,14 @@
 .hero-kicker,
 .operator-name {
   display: block;
-  color: #b9c6d8;
+  color: #8a94a6;
   font-size: 11px;
 }
 
 .network-name {
   display: block;
   margin-top: 5px;
+  color: #101828;
   font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
@@ -345,26 +346,25 @@
 .signal-bars view {
   width: 5px;
   border-radius: 2px 2px 0 0;
-  background: rgba(255, 255, 255, 0.22);
+  background: #e3e6ea;
 }
 
 .signal-bars view.on {
-  background: #38bdf8;
+  background: #36c963;
 }
 
 .hero-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
+  gap: 8px;
 }
 
 .hero-metrics view {
   min-width: 0;
   padding: 10px 12px;
-  background: rgba(20, 27, 33, 0.36);
+  border: 1px solid #eceef2;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .hero-metrics text,
@@ -373,35 +373,57 @@
 }
 
 .hero-metrics text {
-  color: #b8c5d7;
+  color: #8a94a6;
   font-size: 10px;
 }
 
 .hero-metrics b {
   margin-top: 4px;
   overflow-wrap: anywhere;
+  color: #101828;
   font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* CA 状态：开启时紫色 pill，关闭时灰色 pill（参考运维工具的状态标签样式）。 */
+.hero-metrics .ca-state {
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #5b6472;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hero-metrics .ca-state.on {
+  background: #e9e5f9;
+  color: #6d5bd0;
+}
+
 .speed-hero {
   position: relative;
   display: grid;
-  min-height: 104px;
+  min-height: 84px;
   grid-template-columns: 1fr 1fr;
   align-content: center;
   align-self: center;
-  border: 1px solid #e1e7ef;
-  background: #fff;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  background: #f8f9fa;
 }
 
 .speed-column {
   position: relative;
   z-index: 2;
   display: flex;
-  padding: 0 18px;
+  padding: 0 14px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -409,7 +431,7 @@
 }
 
 .speed-column + .speed-column {
-  border-left: 1px solid #edf0f4;
+  border-left: 1px solid #e7eaee;
 }
 
 .speed-column svg,
@@ -418,18 +440,19 @@
   display: block;
 }
 
-.speed-column.download svg { color: #2563eb; }
-.speed-column.upload svg { color: #06b6d4; }
+.speed-column.download svg { color: #6d5bd0; }
+.speed-column.upload svg { color: #36c963; }
 
 .speed-column text {
   margin-top: 5px;
-  color: #7a8799;
+  color: #8a94a6;
   font-size: 10px;
 }
 
 .speed-column b {
   margin-top: 5px;
-  font-size: 17px;
+  color: #101828;
+  font-size: 15px;
   line-height: 1.2;
 }
 
@@ -439,10 +462,10 @@
   min-width: 0;
   margin-bottom: 14px;
   padding: 18px;
-  border: 1px solid #e1e7ef;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 4px 18px rgba(30, 55, 90, 0.045);
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  background: #f8f9fa;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
   overflow: hidden;
 }
 
@@ -466,14 +489,13 @@
 }
 
 .panel-header > svg {
-  width: 34px;
-  height: 34px;
-  padding: 7px;
-  flex: 0 0 34px;
-  border-radius: 9px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex: 0 0 22px;
   border-radius: 7px;
-  background: #eef4ff;
-  color: #2563eb;
+  background: #e9e5f9;
+  color: #6d5bd0;
 }
 
 .primary-button svg,
@@ -507,20 +529,93 @@
   flex: 0 1 50%;
   flex-shrink: 1;
   max-width: 50%;
-  padding: 4px 7px;
+  padding: 4px 10px;
   overflow: hidden;
-  border-radius: 4px;
-  background: #eef2f6;
-  color: #566173;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #5b6472;
   font-size: 10px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .panel-tag.accent {
-  background: #eaf7f8;
-  color: #087c8d;
+  background: #e9e5f9;
+  color: #6d5bd0;
 }
+
+/* —— 信号质量进度条（参考工业运维工具：一行一参数，左名称 / 中滑块 / 右数值）—— */
+.signal-quality-list {
+  display: flex;
+  margin-bottom: 12px;
+  flex-direction: column;
+}
+
+.quality-row {
+  display: grid;
+  min-height: 44px;
+  padding: 8px 4px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #eceef2;
+}
+
+.quality-row:last-child {
+  border-bottom: 0;
+}
+
+.quality-name {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quality-track {
+  width: 100%;
+  height: 20px;
+  border-radius: 999px;
+  background: #e8eaee;
+}
+
+.quality-fill {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* 数值直接嵌在色条内部：白字居中；黄色档背景亮，换深字保证对比度。 */
+.quality-inline-value {
+  overflow: hidden;
+  padding: 0 4px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quality-fill.level-good .quality-inline-value {
+  color: #4a3b00;
+}
+
+/* 手机端专用数值列：桌面隐藏（数值嵌在条内），手机显示（条内放不下）。 */
+.quality-mobile-value {
+  display: none;
+}
+
+.quality-fill.level-excellent { background: #36c648; }
+.quality-fill.level-good { background: #ffd033; }
+.quality-fill.level-fair { background: #ff9f29; }
+.quality-fill.level-weak { background: #ff5c42; }
+.quality-fill.level-bad { background: #d82f2f; }
 
 .two-column {
   display: grid;
@@ -553,12 +648,22 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* 总览温度格：值多行排布密集，数值字号单独收小。 */
+.temperature-overview-grid :deep(.metric-value) {
+  font-size: 15px;
+}
+
+.temperature-overview-grid :deep(.metric-item) {
+  min-height: 64px;
+  padding: 11px 12px;
+}
+
 .radio-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .radio-summary-panel {
@@ -568,9 +673,9 @@
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
   align-items: center;
   gap: 18px;
-  border-color: #17243b;
-  background: #17243b;
-  color: #fff;
+  border-color: #eceef2;
+  background: #f8f9fa;
+  color: #172033;
 }
 
 .radio-summary-main {
@@ -587,19 +692,20 @@
 }
 
 .radio-summary-label {
-  color: #9fb0c8;
+  color: #8a94a6;
   font-size: 10px;
 }
 
 .radio-summary-main b {
   margin-top: 3px;
+  color: #101828;
   font-size: 22px;
   line-height: 1.1;
 }
 
 .radio-summary-main > view:first-child text:last-child {
   margin-top: 5px;
-  color: #c3cfdf;
+  color: #667085;
   font-size: 11px;
 }
 
@@ -613,17 +719,17 @@
 .radio-summary-signal view {
   width: 5px;
   border-radius: 3px 3px 1px 1px;
-  background: #53627a;
+  background: #e3e6ea;
 }
 
 .radio-summary-signal view.on {
-  background: #38bdf8;
+  background: #36c963;
 }
 
 .radio-summary-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 1px solid #e7eaee;
 }
 
 .radio-summary-metrics view {
@@ -632,7 +738,7 @@
 }
 
 .radio-summary-metrics view + view {
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 1px solid #e7eaee;
 }
 
 .radio-summary-metrics text,
@@ -641,26 +747,77 @@
 }
 
 .radio-summary-metrics text {
-  color: #9fb0c8;
+  color: #8a94a6;
   font-size: 10px;
 }
 
 .radio-summary-metrics b {
   margin-top: 5px;
   overflow: hidden;
-  color: #fff;
+  color: #101828;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .radio-overview-grid .panel {
-  min-height: 242px;
+  min-height: 0;
 }
 
 .radio-overview-grid .panel.secondary-info-panel {
   grid-column: 1 / -1;
   min-height: 0;
+}
+
+/* —— 小区参数横条：独立于 DataList 的自绘布局，四项一行铺满宽度 ——
+   flex 均分自适应：宽屏四项舒展、手机屏自动收窄；值超长省略而非换行挤压。 */
+.cell-params-strip {
+  display: flex;
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 11px 16px;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
+  background: #f8f9fa;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.cell-param-item {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.cell-param-item + .cell-param-item {
+  border-left: 1px solid #e7eaee;
+}
+
+.cell-param-label {
+  color: #8a94a6;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.cell-param-value {
+  overflow: hidden;
+  color: #101828;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-param-empty {
+  color: #8a94a6;
+  font-size: 12px;
+  text-align: center;
 }
 
 .radio-overview-grid :deep(.data-row) {
@@ -778,22 +935,22 @@
 }
 
 .management-tab.active {
-  border-color: #c7d5fa;
+  border-color: #d5cdef;
   background: #fff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 2px 8px rgba(109, 91, 208, 0.08);
 }
 
 .management-tab.active .management-tab-icon {
-  background: #2563eb;
+  background: #6d5bd0;
   color: #fff;
 }
 
 .management-tab.active .management-tab-copy b {
-  color: #1d4ed8;
+  color: #6d5bd0;
 }
 
 .management-primary-panel {
-  border-top-color: #cbd7f6;
+  border-top-color: #ded6f5;
 }
 
 .neighbor-tools {
@@ -833,8 +990,8 @@
   grid-template-columns: 34px minmax(0, 1fr) minmax(110px, auto);
   align-items: center;
   gap: 12px;
-  border: 1px solid #e1e6ed;
-  border-radius: 6px;
+  border: 1px solid #eceef2;
+  border-radius: 8px;
   background: #fff;
   color: #172033;
   line-height: 1.2;
@@ -842,9 +999,9 @@
 }
 
 .candidate-card.selected {
-  border-color: #93b4f8;
-  background: #f4f7ff;
-  box-shadow: inset 3px 0 0 #2563eb;
+  border-color: #b7a8e8;
+  background: #f3eefd;
+  box-shadow: inset 3px 0 0 #6d5bd0;
 }
 
 .candidate-rank {
@@ -853,14 +1010,14 @@
   height: 27px;
   place-items: center;
   border-radius: 50%;
-  background: #eef2f6;
+  background: #eef1f4;
   color: #526072;
   font-size: 11px;
   font-weight: 800;
 }
 
 .candidate-card.selected .candidate-rank {
-  background: #2563eb;
+  background: #6d5bd0;
   color: #fff;
 }
 
@@ -893,7 +1050,7 @@
 }
 
 .candidate-signal b {
-  color: #2563eb;
+  color: #6d5bd0;
   font-size: 13px;
 }
 
@@ -950,6 +1107,93 @@
   color: #657083;
   font-size: 11px;
   line-height: 1.45;
+}
+
+/* —— 局域网互通 —— */
+.sync-role-line {
+  display: flex;
+  margin-top: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sync-role-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #94a3b8;
+}
+
+.sync-role-collector { background: #6d5bd0; }
+.sync-role-viewer { background: #0d9488; }
+.sync-role-direct { background: #94a3b8; }
+
+.sync-role-hint {
+  flex: 1;
+  min-width: 160px;
+  color: #657083;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.sync-peer-list {
+  display: flex;
+  margin-top: 10px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-peer-row {
+  display: flex;
+  padding: 9px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.sync-peer-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sync-peer-copy b {
+  color: #172033;
+  font-size: 13px;
+}
+
+.sync-peer-copy text {
+  color: #657083;
+  font-size: 11px;
+}
+
+.sync-pin-button {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.sync-pin-button.sync-pinned {
+  color: #ffffff;
+  background: #6d5bd0;
+  border-color: #6d5bd0;
+}
+
+.sync-empty {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 7px;
+  color: #657083;
+  font-size: 11px;
+  text-align: center;
 }
 
 .lock-form-grid label,
@@ -1021,13 +1265,13 @@ textarea {
 }
 
 .primary-button {
-  border: 1px solid #1d4ed8;
-  background: #2563eb;
+  border: 1px solid #6d5bd0;
+  background: #6d5bd0;
   color: #fff;
 }
 
 .secondary-button {
-  border: 1px solid #d8dfe8;
+  border: 1px solid #e3e6ea;
   background: #fff;
   color: #344154;
 }
@@ -1042,9 +1286,9 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #a43b3b;
+  border: 1px solid #d94848;
   border-radius: 6px;
-  background: #b84444;
+  background: #d94848;
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -1052,8 +1296,8 @@ textarea {
 }
 
 .danger-outline {
-  border-color: #e2b5b5;
-  color: #a33a3a;
+  border-color: #f3d2d2;
+  color: #d94848;
 }
 
 .device-control-grid {
@@ -1082,6 +1326,35 @@ textarea {
   min-width: 180px;
   color: #667085;
   font-size: 11px;
+}
+
+/* 当前锁定状态面板：直接显示路由器里真实锁定的频段/小区（紫色 pill 标签）。 */
+.locked-status-panel {
+  padding: 12px 16px;
+}
+
+.locked-status-values {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.locked-tag {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #e9e5f9;
+  color: #6d5bd0;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.locked-tag.none {
+  background: #eef1f4;
+  color: #8a94a6;
+  font-weight: 500;
 }
 
 .band-groups {
@@ -1128,24 +1401,24 @@ textarea {
   display: grid;
   min-width: 38px;
   height: 25px;
-  padding: 0 8px;
+  padding: 0 10px;
   place-items: center;
-  border-radius: 5px;
-  background: #eaf7f8;
-  color: #087c8d;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #5b6472;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.3px;
 }
 
 .band-network-tag.sa {
-  background: #eef4ff;
-  color: #315fba;
+  background: #e9e5f9;
+  color: #6d5bd0;
 }
 
 .band-network-tag.nsa {
-  background: #fff6e8;
-  color: #a56308;
+  background: #e6f7ef;
+  color: #189a55;
 }
 
 .band-options {
@@ -1170,9 +1443,9 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border: 1px solid #dce3e8;
+  border: 1px solid #e3e6ea;
   border-radius: 6px;
-  background: #f7f8f8;
+  background: #fff;
   color: #536071;
   font-size: 12px;
   font-weight: 700;
@@ -1186,9 +1459,17 @@ textarea {
 }
 
 .band-chip.checked {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #6d5bd0;
+  background: #6d5bd0;
   color: #fff;
+}
+
+/* 自定义频段 chip：锁定在标准列表之外（如 229），虚线描边提示非标准。 */
+.band-chip.custom.checked {
+  border-style: dashed;
+  border-color: #6d5bd0;
+  background: #e9e5f9;
+  color: #6d5bd0;
 }
 
 .band-chip:active {
@@ -1205,10 +1486,10 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #cfdcf5;
+  border: 1px solid #ded6f5;
   border-radius: 6px;
   background: #fff;
-  color: #2563eb;
+  color: #6d5bd0;
   font-size: 12px;
   font-weight: 800;
   line-height: 39px;
@@ -1216,6 +1497,26 @@ textarea {
 
 .band-save-button:active {
   background: #f0f2f2;
+}
+
+.band-action-row {
+  display: flex;
+  margin: auto 0 0;
+  gap: 8px;
+}
+
+.band-action-row .band-save-button {
+  flex: 1;
+  margin: 0;
+}
+
+.band-clear-button {
+  border-color: #f3d2d2;
+  color: #d94848;
+}
+
+.band-clear-button:active {
+  background: #fdeeee;
 }
 
 .section-gap {
@@ -1234,7 +1535,7 @@ textarea {
 }
 
 .history-row b {
-  color: #2563eb;
+  color: #6d5bd0;
 }
 
 .sms-compose {
@@ -1269,7 +1570,7 @@ textarea {
 }
 
 .sms-card.unread {
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #6d5bd0;
   background: #f6f8ff;
 }
 
@@ -1329,8 +1630,8 @@ textarea {
 }
 
 .sms-checkbox-mark.checked {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #6d5bd0;
+  background: #6d5bd0;
 }
 
 .sms-selection-count {
@@ -1404,7 +1705,7 @@ textarea {
 
 .sms-code-value b {
   overflow-wrap: anywhere;
-  color: #1d4ed8;
+  color: #6d5bd0;
   font-size: 16px;
   letter-spacing: 0;
 }
@@ -1429,7 +1730,7 @@ textarea {
   border: 1px solid #cbd7f6;
   border-radius: 6px;
   background: #f7f9ff;
-  color: #1d4ed8;
+  color: #6d5bd0;
   font-size: 11px;
   line-height: 32px;
 }
@@ -1587,10 +1888,6 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .radio-overview-grid .panel:last-child {
-    grid-column: span 2;
-  }
-
   .band-groups {
     grid-template-columns: 1fr;
   }
@@ -1629,17 +1926,14 @@ textarea {
   .radio-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-  }
-
-  .radio-overview-grid .panel:last-child {
-    grid-column: 1 / -1;
+    align-items: stretch;
   }
 
   .radio-overview-grid .panel {
     width: auto;
     max-width: none;
     min-width: 0;
-    min-height: 216px;
+    min-height: 0;
     padding: 10px;
   }
 
@@ -1652,10 +1946,10 @@ textarea {
   }
 
   .radio-overview-grid .panel-header > svg {
-    width: 28px;
-    height: 28px;
-    padding: 5px;
-    flex-basis: 28px;
+    width: 20px;
+    height: 20px;
+    padding: 4px;
+    flex-basis: 20px;
   }
 
   .radio-summary-panel {
@@ -1688,6 +1982,43 @@ textarea {
 
   .radio-data-list :deep(.data-row) {
     min-height: 38px;
+  }
+
+  /* 手机端：数值回到右侧列（条内放不下会省略），条收细为 8px，行高压到 32px。 */
+  .quality-row {
+    grid-template-columns: 42px minmax(0, 1fr) 60px;
+    min-height: 32px;
+    padding: 5px 0;
+    gap: 8px;
+  }
+
+  .quality-track {
+    height: 8px;
+    align-self: center;
+  }
+
+  .quality-fill {
+    min-width: 4px;
+  }
+
+  .quality-inline-value {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .quality-mobile-value {
+    display: block;
+    align-self: center;
+    overflow: hidden;
+    color: #101828;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .lock-form-grid {
@@ -1743,12 +2074,12 @@ textarea {
   }
 
   .mobile-nav-button.active {
-    color: #2563eb;
+    color: #6d5bd0;
     font-weight: 700;
   }
 
   .mobile-nav-button.active::before {
-    background: #2563eb;
+    background: #6d5bd0;
   }
 
   .mobile-nav-button:active svg {
@@ -1791,7 +2122,22 @@ textarea {
   }
 
   .speed-hero {
-    min-height: 104px;
+    min-height: 84px;
+  }
+
+  .cell-params-strip {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    padding: 9px 6px;
+    gap: 4px;
+  }
+
+  .cell-param-label {
+    font-size: 9px;
+  }
+
+  .cell-param-value {
+    font-size: 11px;
   }
 
   .panel {

@@ -32,8 +32,8 @@ export default {
 <style>
 page {
   min-height: 100%;
-  background: #f5f7fb;
-  color: #172033;
+  background: #ffffff;
+  color: #101828;
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -59,5 +59,12 @@ label {
 
 button::after {
   border: 0;
+}
+
+/* 隐藏滚动条（Electron/WebView 里的竖向滚动条影响观感），滚动功能保留。 */
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 </style>

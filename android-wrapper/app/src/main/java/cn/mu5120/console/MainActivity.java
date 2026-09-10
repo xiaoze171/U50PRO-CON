@@ -25,6 +25,7 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String APP_ASSET_HOST = "appassets.androidplatform.net";
     private WebView webView;
+    private RouterBridge routerBridge;
     private final Handler foregroundHandler = new Handler(Looper.getMainLooper());
     private final Runnable foregroundHeartbeat = new Runnable() {
         @Override
@@ -54,7 +55,8 @@ public final class MainActivity extends Activity {
         webView.getSettings().setBuiltInZoomControls(false);
         webView.getSettings().setDisplayZoomControls(false);
         webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        webView.addJavascriptInterface(new RouterBridge(webView), "AndroidRouter");
+        routerBridge = new RouterBridge(webView);
+        webView.addJavascriptInterface(routerBridge, "AndroidRouter");
         BackgroundMonitorService.start(this);
         BackgroundMonitorService.setAppForeground(this, true);
         BackgroundMonitorService.refreshOverlay(this);
@@ -195,6 +197,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         foregroundHandler.removeCallbacks(foregroundHeartbeat);
+        if (routerBridge != null) {
+            routerBridge.shutdownSync();
+            routerBridge = null;
+        }
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidRouter");
             webView.destroy();

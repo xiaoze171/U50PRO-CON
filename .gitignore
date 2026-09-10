@@ -14,3 +14,5 @@ android-wrapper/*.jks
 server/node_modules/
 server/runtime-config.json
 server/*.log
+desktop/node_modules/
+desktop/release/

@@ -25,17 +25,15 @@ defineProps({
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid #e5eaf1;
-  border-radius: 8px;
-  background: #e5eaf1;
+  gap: 8px;
 }
 
 .metric-item {
   min-width: 0;
   min-height: 78px;
   padding: 14px 16px;
+  border: 1px solid #eceef2;
+  border-radius: 10px;
   background: #fff;
 }
 
@@ -50,7 +48,7 @@ defineProps({
 .metric-label,
 .metric-note {
   display: block;
-  color: #718096;
+  color: #8a94a6;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -59,9 +57,10 @@ defineProps({
   display: block;
   margin-top: 6px;
   overflow-wrap: anywhere;
-  color: #172033;
-  font-size: 18px;
-  font-weight: 700;
+  color: #101828;
+  font-size: 19px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 

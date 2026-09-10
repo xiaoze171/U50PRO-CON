@@ -1,0 +1,57 @@
+{
+  "name": "u50pro-console-desktop",
+  "productName": "U50 Pro 控制台",
+  "version": "1.3.22",
+  "private": true,
+  "description": "U50 Pro / MU5120 路由器控制台 桌面端（Electron 外壳，加载 H5 构建）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "selftest": "node election-selftest.mjs && node history-selftest.mjs",
+    "selftest:transport": "node sync-selftest.js",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "cn.mu5120.console",
+    "productName": "U50 Pro 控制台",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "**/*",
+      "!release/**/*",
+      "!README.md",
+      "!*-selftest.js",
+      "!*-selftest.mjs"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/build/h5",
+        "to": "h5"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis" },
+        { "target": "portable" }
+      ],
+      "artifactName": "U50PRO-Console-Setup-v${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "U50 Pro 控制台"
+    },
+    "portable": {
+      "artifactName": "U50PRO-Console-Portable-v${version}.${ext}"
+    }
+  }
+}

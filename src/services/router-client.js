@@ -1,4 +1,5 @@
 import CryptoJS from 'crypto-js';
+import { mergeBatterySamples as mergeBatterySamplesShared } from '../utils/history.js';
 
 const DEFAULT_CONFIG = {
   routerUrl: 'http://192.168.0.1',
@@ -63,9 +64,12 @@ isH5 = true;
 // #endif
 
 function nativeBridge() {
-  return typeof window !== 'undefined' && window.AndroidRouter && typeof window.AndroidRouter.request === 'function'
-    ? window.AndroidRouter
+  // 兼容安卓 WebView(window.AndroidRouter) 与桌面 Electron(window.DesktopRouter)：
+  // 两者方法面一致，谁在就走谁的原生桥（注入 Origin/Referer/Cookie、走局域网 HTTP）。
+  const candidate = typeof window !== 'undefined'
+    ? (window.AndroidRouter || window.DesktopRouter)
     : null;
+  return candidate && typeof candidate.request === 'function' ? candidate : null;
 }
 
 function nativeBridgeRequest(bridge, path, options, headers) {
@@ -150,19 +154,8 @@ function readNativeBatteryHistory() {
 }
 
 function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS) {
-  const buckets = new Map();
-  [...local, ...native].forEach(item => {
-    const timestamp = Number(item?.timestamp);
-    const percent = numeric(item?.percent);
-    if (!Number.isFinite(timestamp) || timestamp < cutoff || percent == null) return;
-    const charging = Boolean(item?.charging);
-    const key = `${Math.floor(timestamp / 60000)}:${charging ? 1 : 0}`;
-    const previous = buckets.get(key) || {};
-    buckets.set(key, { ...previous, ...item, timestamp, percent, charging });
-  });
-  return [...buckets.values()]
-    .sort((left, right) => left.timestamp - right.timestamp)
-    .slice(-BATTERY_HISTORY_MAX_POINTS);
+  // 委托给共享工具（services/sync.js、desktop 主进程复用同一份分钟桶合并逻辑）。
+  return mergeBatterySamplesShared([local, native], { cutoff, maxPoints: BATTERY_HISTORY_MAX_POINTS });
 }
 
 function mergeNativeBatteryHistory(force = false) {
@@ -533,6 +526,16 @@ function saveBatteryHistory() {
   } catch {}
 }
 
+// 合并外部（局域网对端）电池样本进本地历史并持久化。
+// 供 services/sync.js 在查看端拉取采集器历史、或采集器回补离线片段时调用；
+// 分钟桶并集天然幂等，重复合并安全。
+function mergeExternalBattery(samples) {
+  if (!Array.isArray(samples) || !samples.length) return batteryHistory;
+  batteryHistory = mergeBatterySamples(batteryHistory, samples);
+  try { uni.setStorageSync('mu5120-battery-history', batteryHistory); } catch {}
+  return batteryHistory;
+}
+
 async function listSms() {
   await ensureLogin();
   const ready = await getCommand('sms_cmd_status_info', { sms_cmd: 1 });
@@ -624,6 +627,22 @@ async function setLteCellLock(values) {
   });
   assertSuccess(result, values.unlock ? 'LTE 解除锁定' : 'LTE 锁小区');
   return result;
+}
+
+// 一键解除全部小区锁：NR 发固件约定的解锁标志串 "1,1,1,1"、LTE 清空锁定字段，
+// 两个制式同时发（搜不到小区时无从得知锁的是哪个制式）。镜像固件 Web UI
+// network_debug 页 unlockCell5g 的实现，不依赖任何小区候选数据。
+async function unlockAllCellLocks() {
+  await ensureDeveloperAccess();
+  const errors = [];
+  for (const task of [
+    () => setGoform('NR5G_LOCK_CELL_SET', { nr5g_cell_lock: '1,1,1,1' }),
+    () => setGoform('LTE_LOCK_CELL_SET', { lte_pci_lock: '', lte_earfcn_lock: '' })
+  ]) {
+    try { await task(); } catch (error) { errors.push(error.message); }
+  }
+  if (errors.length === 2) throw new Error(errors[0]);
+  return { result: 'success', partial: errors.length ? errors : undefined };
 }
 
 async function setLteBands(bands) {
@@ -745,7 +764,11 @@ function parseBands(input, allowed, allowEmpty = false) {
     .filter(Boolean)
     .map(Number)
     .filter(Number.isFinite))];
-  if ((!allowEmpty && !values.length) || values.some(value => !allowed.has(value))) throw new Error('频段列表包含不支持的值');
+  if (!allowEmpty && !values.length) throw new Error('频段列表包含不支持的值');
+  // allowed 集合之外的 NR 频段（如 229）：固件按 1~261 范围接受，UI 的 chip 列表只是常用子集。
+  const loose = allowed === nrBandSet;
+  const invalid = values.filter(value => !allowed.has(value) && !(loose && Number.isInteger(value) && value >= 1 && value <= 261));
+  if (invalid.length) throw new Error(`频段不支持：${invalid.join(', ')}`);
   return values;
 }
 
@@ -844,6 +867,7 @@ export const routerApi = {
   login,
   developerLogin,
   dashboard,
+  mergeExternalBattery,
   setTrafficPlan,
   calibrateTraffic,
   listSms,
@@ -853,6 +877,7 @@ export const routerApi = {
   linkedCellLock,
   setNrCellLock,
   setLteCellLock,
+  unlockAllCellLocks,
   setLteBands,
   setNrBands
 };
