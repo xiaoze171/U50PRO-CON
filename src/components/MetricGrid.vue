@@ -30,11 +30,12 @@ defineProps({
 
 .metric-item {
   min-width: 0;
-  min-height: 78px;
-  padding: 14px 16px;
-  border: 1px solid #eceef2;
-  border-radius: 10px;
-  background: #fff;
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .metric-grid.centered .metric-item {

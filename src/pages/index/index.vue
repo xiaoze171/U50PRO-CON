@@ -98,7 +98,7 @@
               <view class="panel-header compact">
                 <view>
                   <text class="panel-title">设备温度</text>
-                  <text class="panel-subtitle">最近 24 小时温度记录，本地自动保存</text>
+                  <text class="panel-subtitle">最近 2 小时温度记录，本地自动保存</text>
                 </view>
                 <Thermometer :size="20" />
               </view>
@@ -160,7 +160,7 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">无线质量趋势</text>
-                  <text class="panel-subtitle">最近 24 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
+                  <text class="panel-subtitle">最近 2 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="260px" />
@@ -406,6 +406,34 @@
             </view>
             </template>
 
+            <template v-else-if="managementTab === 'stock'">
+            <section class="panel stock-panel">
+              <view class="panel-header">
+                <view><text class="panel-title">原厂后台</text><text class="panel-subtitle">{{ stockConsole.message }}</text></view>
+                <view class="stock-header-actions">
+                  <button class="secondary-button" :disabled="stockConsole.busy" @click="openStockConsole(true)"><RefreshCw :size="17" />{{ stockConsole.busy ? '登录中…' : '重新自动登录' }}</button>
+                  <button v-if="stockOpenMode === 'external'" class="secondary-button" @click="openStockConsoleExternal"><ExternalLink :size="17" />新窗口打开</button>
+                </view>
+              </view>
+              <view v-if="stockOpenMode === 'embed'" class="stock-zoom-row">
+                <button class="secondary-button" :disabled="stockScale <= STOCK_SCALE_MIN" @click="adjustStockScale(-STOCK_SCALE_STEP)">−</button>
+                <text class="stock-zoom-value">{{ Math.round(stockScale * 100) }}%</text>
+                <button class="secondary-button" :disabled="stockScale >= STOCK_SCALE_MAX" @click="adjustStockScale(STOCK_SCALE_STEP)">＋</button>
+                <button class="secondary-button" :disabled="stockScale === 1" @click="resetStockScale">重置</button>
+              </view>
+              <view v-if="stockOpenMode === 'embed'" class="stock-frame-wrap" :style="{ '--stock-scale': stockScale }">
+                <iframe v-if="stockConsole.url" :key="stockConsole.url" :src="stockConsole.url" class="stock-frame" title="路由器原厂后台"></iframe>
+                <view v-else class="stock-placeholder">{{ stockConsole.busy ? '正在自动登录并加载原厂后台…' : '正在准备原厂后台…' }}</view>
+              </view>
+              <template v-else>
+                <view class="stock-native-hint">{{ stockOpenMode === 'navigate' ? '原厂后台将以全屏方式打开：已用保存的密码自动登录管理员与开发者权限，按系统返回键回到本应用。' : '原厂后台将在系统浏览器中打开，暂不支持免密自动登录，需手动输入一次密码。' }}</view>
+                <button class="primary-button stock-native-open" :disabled="stockConsole.busy" @click="openStockConsoleNative">
+                  <RouterIcon :size="17" />{{ stockConsole.busy ? '正在确认登录状态…' : '进入原厂后台' }}
+                </button>
+              </template>
+            </section>
+            </template>
+
             <template v-else>
             <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">路由器连接</text><text class="panel-subtitle">手机连接 U50 Pro Wi-Fi 后直接访问 192.168.0.1</text></view><Settings :size="20" /></view>
@@ -466,7 +494,7 @@
               <text class="action-result control-result">{{ deviceActionResult }}</text>
             </section>
             <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">运行方式</text><text class="panel-subtitle">同一套功能用于浏览器预览和 Android App</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">运行方式</text><text class="panel-subtitle">同一套功能用于浏览器预览、Android App 与 Windows 桌面端</text></view></view>
               <DataList :items="runtimeDetails" />
             </section>
             </template>
@@ -491,19 +519,19 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
   IconChartLine as ChartNoAxesCombined, IconCheck as Check, IconCode as Code2, IconCopy as Copy,
-  IconDeviceFloppy as Save, IconDevices as Smartphone, IconGauge as Gauge,
+  IconDeviceFloppy as Save, IconDevices as Smartphone, IconExternalLink as ExternalLink, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
   IconSettings as Settings, IconTemperature as Thermometer, IconTrash as Trash, IconWifi as Wifi,
-  IconWifiOff as WifiOff
+  IconWifiOff as WifiOff, IconWorld as World
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
 import DataList from '../../components/DataList.vue';
@@ -517,10 +545,12 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.22';
+const APP_VERSION = '1.3.43';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+// 温度/信号折线图只展示最近 2 小时（历史仍按 24 小时采集存储），固定窗口、不带缩放滑块。
+const CHART_RECENT_WINDOW_MS = 2 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 60 * 1000;
 const CHART_HISTORY_MAX_POINTS = Math.ceil(METRIC_HISTORY_WINDOW_MS / CHART_HISTORY_SAMPLE_MS) + 5;
 const CELL_DISPLAY_REFRESH_MS = 3000;
@@ -544,11 +574,53 @@ const mobileTabs = [
 const managementTabs = [
   { id: 'sms', label: '短信', icon: MessageSquareText },
   { id: 'clients', label: '连接设备', icon: Smartphone },
+  { id: 'stock', label: '原厂后台', icon: World },
   { id: 'settings', label: '设置与控制', icon: Settings }
 ];
 
 const activeTab = ref('overview');
 const managementTab = ref('sms');
+// 原厂后台内嵌状态：与 App 共享同一会话 Cookie，打开时自动登录管理员 + 开发者会话。
+const stockConsole = reactive({ url: '', busy: false, loggedIn: false, message: '未打开' });
+// 打开方式：浏览器/安卓壳内嵌 iframe（安卓经 127.0.0.1 本地反代，POST 完整），
+// 安卓反代未启动时退回全屏直连；桌面壳暂以系统浏览器兜底。
+const stockOpenMode = routerApi.stockUiOpenMode();
+const stockUiCanFullscreen = typeof window !== 'undefined' && !!window.AndroidRouter;
+// 浏览器内嵌是同源 iframe（可读 hash 做精准自愈）；安卓本地反代是跨源
+// （127.0.0.1 vs appassets），只能改为轮询会话的自愈方式。
+const stockUiSameOrigin = stockOpenMode === 'embed' && !stockUiCanFullscreen;
+
+// 原厂后台独立缩放：应用的双指缩放被刻意禁用，且跨源 iframe 内的手势父页面
+// 接不到，所以用按钮对 iframe 做 transform 缩放（放大时内部视口变窄、文字
+// 变大可读；缩小时得到桌面版全景），档位持久化，范围 25%~150%。
+const STOCK_SCALE_MIN = 0.25;
+const STOCK_SCALE_MAX = 1.5;
+const STOCK_SCALE_STEP = 0.25;
+
+function loadStockScale() {
+  let stored = null;
+  try { stored = uni.getStorageSync('mu5120-stock-scale'); } catch {}
+  const value = Number(stored);
+  // uni.getStorageSync 对缺失键返回空串（Number('') === 0），视为未设置。
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.min(STOCK_SCALE_MAX, Math.max(STOCK_SCALE_MIN, Math.round(value / STOCK_SCALE_STEP) * STOCK_SCALE_STEP));
+}
+
+const stockScale = ref(loadStockScale());
+
+function saveStockScale(value) {
+  stockScale.value = value;
+  try { uni.setStorageSync('mu5120-stock-scale', value); } catch {}
+}
+
+function adjustStockScale(delta) {
+  const raw = Number((stockScale.value + delta).toFixed(2));
+  saveStockScale(Math.min(STOCK_SCALE_MAX, Math.max(STOCK_SCALE_MIN, Math.round(raw / STOCK_SCALE_STEP) * STOCK_SCALE_STEP)));
+}
+
+function resetStockScale() {
+  saveStockScale(1);
+}
 const menuOpen = ref(false);
 const refreshing = ref(false);
 const actionBusy = ref(false);
@@ -796,11 +868,15 @@ const batteryMetrics = computed(() => [
   { label: '记录样本', value: `${batterySamples.value.length} 条` }
 ]);
 const runtimeDetails = computed(() => toItems({
-  '当前数据通道': '局域网直连',
-  'H5 开发预览': '通过本机代理访问路由器',
-  'Android App': '原生 HTTP 直连路由器',
+  '当前数据通道': syncState.role === 'viewer'
+    ? `局域网互通 · 读取采集器「${syncState.hub?.name || '未知'}」`
+    : (syncState.role === 'collector' ? '局域网互通 · 本机采集并共享' : '局域网直连'),
+  'H5 浏览器': '开发预览通过本机代理访问路由器',
+  'Android App': '原生 HTTP 直连路由器，原厂后台走本机反向代理',
+  'Windows 桌面端': '主进程代理会话直连路由器',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
-  '历史记录': '电池 12 小时，其他指标 24 小时，仅保存在本机',
+  '图表窗口': '温度/信号最近 2 小时，电池最近 24 小时',
+  '历史保存': '本机 24 小时（电池 12 小时），启用互通后随局域网共享',
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
@@ -812,7 +888,10 @@ const signalChartOption = computed(() => lineOption([
   { name: 'RSRQ', data: histories.rsrq, color: '#6d5bd0' }
 ], false, { min: -140, max: 50 }, {
   animation: false,
-  axisWindowStepMs: CHART_HISTORY_SAMPLE_MS
+  axisWindowStepMs: CHART_HISTORY_SAMPLE_MS,
+  windowMs: CHART_RECENT_WINDOW_MS,
+  zoom: false,
+  xAxisLabels: false
 }));
 
 const temperatureChartOption = computed(() => {
@@ -820,14 +899,14 @@ const temperatureChartOption = computed(() => {
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
     .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(values, 3), color: colors[index % colors.length] }));
-  return lineOption(series);
+  return lineOption(series, false, {}, { windowMs: CHART_RECENT_WINDOW_MS, zoom: false, xAxisLabels: false });
 });
 const batteryChartOption = computed(() => {
   const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
   const points = batterySamples.value
     .filter(item => Number(item.timestamp) >= cutoff)
     .map(item => [Number(item.timestamp), numeric(item.percent)]);
-  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS });
+  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS, xAxisLabels: false });
 });
 
 function toItems(object) {
@@ -1013,6 +1092,8 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
   const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
   const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
   const animate = behavior.animation !== false;
+  // 隐藏 x 轴时刻标签（如电池图：底部只保留拖动条，界面更干净）。
+  const hideAxisLabels = behavior.xAxisLabels === false;
   const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
   const hasData = series.some(item => Array.isArray(item.data) && item.data.length);
   const timestamps = series.flatMap(item => (Array.isArray(item.data) ? item.data : []))
@@ -1033,7 +1114,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
     animationDurationUpdate: animate ? 480 : 0,
     animationEasingUpdate: 'cubicOut',
     color: series.map(item => item.color),
-    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? 46 : 22, containLabel: true },
+    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? (hideAxisLabels ? 28 : 46) : (hideAxisLabels ? 14 : 22), containLabel: true },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(15,23,42,.92)',
@@ -1059,6 +1140,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       boundaryGap: false,
       splitNumber: 4,
       axisLabel: {
+        show: !hideAxisLabels,
         color: '#94a3b8',
         fontSize: 9,
         hideOverlap: true,
@@ -1072,7 +1154,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         }
       },
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#eef2f7' } },
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.7)' } },
       splitLine: { show: false }
     },
     dataZoom: zoomEnabled ? [
@@ -1102,7 +1184,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         height: 14,
         bottom: 4,
         borderColor: 'transparent',
-        backgroundColor: '#f1f5f9',
+        backgroundColor: 'rgba(255, 255, 255, 0.55)',
         fillerColor: 'rgba(91,141,239,.16)',
         dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
         selectedDataBackground: { lineStyle: { color: '#6d5bd0' }, areaStyle: { color: '#c8bef2', opacity: .22 } },
@@ -1115,9 +1197,9 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       }
     ] : [],
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } },
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } },
       { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: '#f1f5f9', width: 1 } } }],
+    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } }],
     series: series.map(item => buildLineSeries(item, windowMs, chartNow))
   };
 }
@@ -1371,17 +1453,221 @@ function switchTab(id) {
   }
   menuOpen.value = false;
   if (activeTab.value === 'manage' && managementTab.value === 'sms') loadSms();
+  if (activeTab.value === 'manage' && managementTab.value === 'stock') openStockConsole();
 }
 
 function switchManagementTab(id) {
   if (!managementTabs.some(tab => tab.id === id)) return;
   managementTab.value = id;
   if (id === 'sms') loadSms();
+  if (id === 'stock') openStockConsole();
+}
+
+async function openStockConsole(force = false) {
+  if (stockConsole.busy) return;
+  if (!force && stockConsole.url) return;
+  stockConsole.busy = true;
+  stockConsole.message = '正在用保存的密码自动登录…';
+  try {
+    let landed = false;
+    let loginFailedMessage = '';
+    // 原厂后台只在加载瞬间判断一次登录态：若恰好撞上会话被其他设备抢占的
+    // 窗口，它会停在原厂登录页且不会自行恢复，因此检测后重登重载，最多 3 次。
+    for (let attempt = 0; attempt < 3 && !landed; attempt++) {
+      const main = await routerApi.login(true);
+      stockConsole.loggedIn = Boolean(main.loggedIn);
+      if (!main.loggedIn) {
+        loginFailedMessage = `自动登录失败：${main.message}`;
+        stockConsole.message = `${loginFailedMessage}。可进入原厂后台中手动登录。`;
+        stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
+        break;
+      }
+      let developerState = '开发者权限未建立';
+      try {
+        const developer = await routerApi.developerLogin();
+        if (developer?.ok) developerState = '开发者权限已就绪';
+      } catch (error) {
+        developerState = `开发者权限：${error.message}`;
+      }
+      stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
+      stockConsole.message = `管理员会话已就绪 · ${developerState}`;
+      // 跨源 iframe（安卓本地反代）读不到 hash，全屏直连模式没有 iframe：
+      // 两种情况都不存在"停在登录页"的检测，直接视为就绪（否则空转 3×3 秒，
+      // 按钮长时间禁用，看起来像打不开）。
+      landed = stockUiSameOrigin ? await waitForStockConsoleHome() : true;
+      if (!landed) stockConsole.message = '原厂后台加载时撞上会话被抢占，正在重试…';
+    }
+    if (stockConsole.loggedIn && !landed) {
+      stockConsole.message += ' · 仍停在原厂登录页：路由器登录正被其他设备抢占，稍后可点"重新自动登录"重试';
+    }
+  } finally {
+    stockConsole.busy = false;
+    // 看守接管后续会话抢占的自愈（也覆盖 3 次重试后仍停在登录页的情况）；
+    // 仅内嵌模式有意义——全屏直连模式下原厂页面是另一个文档，读不到 hash。
+    if (stockConsole.url && stockOpenMode === 'embed' && activeTab.value === 'manage' && managementTab.value === 'stock') {
+      startStockConsoleWatcher();
+    }
+  }
+}
+
+// 轮询 iframe 的 hash：原厂后台离开 #login 即视为已进入主界面（同源 iframe 可读）。
+function waitForStockConsoleHome(timeoutChecks = 12, intervalMs = 250) {
+  return new Promise(resolve => {
+    let checks = 0;
+    const timer = setInterval(() => {
+      checks += 1;
+      const frame = document.querySelector('.stock-frame');
+      const hash = frame && frame.contentWindow ? frame.contentWindow.location.hash : '';
+      if (hash && hash !== '#login') {
+        clearInterval(timer);
+        resolve(true);
+      } else if (checks >= timeoutChecks) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, intervalMs);
+  });
+}
+
+// —— 原厂后台自愈看守 ——
+// 会话被其他设备抢占后：主会话丢失 → 原厂界面退回 #login 且不会自恢复；
+// 开发者标志丢失 → 进"开发者选项"被原厂 router.js 跳到 #developer_login 要求二次输密码。
+// 看守检测到这两种状态时用已保存的密码自动恢复会话，并把界面跳回原处。
+let stockConsoleWatcherTimer = null;
+let stockConsoleFixBusy = false;
+
+function stockConsoleHash() {
+  try {
+    const frame = document.querySelector('.stock-frame');
+    return frame && frame.contentWindow ? frame.contentWindow.location.hash : '';
+  } catch {
+    // 跨域 iframe（安卓/桌面壳直连模式）读 hash 会抛异常，看守自然退化为不动作。
+    return '';
+  }
+}
+
+function stockConsoleNavigate(hash) {
+  try {
+    const frame = document.querySelector('.stock-frame');
+    if (frame && frame.contentWindow) frame.contentWindow.location.hash = hash;
+  } catch {}
+}
+
+async function checkStockConsoleState() {
+  if (stockConsoleFixBusy || stockConsole.busy || !stockConsole.url) return;
+  // 跨源 iframe（安卓本地反代）：读不到原厂页面状态，改为轮询会话；会话被
+  // 抢占丢失时重登（主 + 开发者）并重载 iframe，让原厂界面回到已登录视图。
+  if (!stockUiSameOrigin) {
+    stockConsoleFixBusy = true;
+    try {
+      const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false, developer: false }));
+      if (session.loggedIn && session.developer) return;
+      const main = await routerApi.login(true);
+      if (!main.loggedIn) return;
+      try { await routerApi.developerLogin(); } catch {}
+      stockConsole.message = '会话曾被其他设备抢占，已自动恢复';
+      stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
+    } catch {} finally {
+      stockConsoleFixBusy = false;
+    }
+    return;
+  }
+  const hash = stockConsoleHash();
+  if (hash === '#login') {
+    stockConsoleFixBusy = true;
+    try {
+      const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false }));
+      if (!session.loggedIn) await routerApi.login(true);
+      const after = await routerApi.stockUiSession().catch(() => ({ loggedIn: false }));
+      if (after.loggedIn) {
+        stockConsoleNavigate('#home');
+        stockConsole.message = '会话曾被其他设备抢占，已自动恢复';
+      }
+    } catch {} finally {
+      stockConsoleFixBusy = false;
+    }
+    return;
+  }
+  if (hash === '#developer_login') {
+    stockConsoleFixBusy = true;
+    try {
+      await routerApi.developerLogin();
+      stockConsoleNavigate('#developer_options');
+      stockConsole.message = '开发者会话已自动恢复，无需输入密码';
+    } catch (error) {
+      stockConsole.message = `开发者会话自动恢复失败：${error.message}。可在原厂页面手动输入。`;
+    } finally {
+      stockConsoleFixBusy = false;
+    }
+  }
+}
+
+function startStockConsoleWatcher() {
+  if (stockConsoleWatcherTimer) return;
+  // 同源模式查 DOM hash（800ms）；跨源模式发网络请求轮询会话（2s，避免叠加请求量）。
+  stockConsoleWatcherTimer = setInterval(checkStockConsoleState, stockUiSameOrigin ? 800 : 2000);
+}
+
+function stopStockConsoleWatcher() {
+  if (stockConsoleWatcherTimer) {
+    clearInterval(stockConsoleWatcherTimer);
+    stockConsoleWatcherTimer = null;
+  }
+}
+
+watch([activeTab, managementTab], () => {
+  if (activeTab.value === 'manage' && managementTab.value === 'stock' && stockConsole.url && stockOpenMode === 'embed') {
+    startStockConsoleWatcher();
+  } else {
+    stopStockConsoleWatcher();
+  }
+});
+
+onBeforeUnmount(stopStockConsoleWatcher);
+
+function openStockConsoleExternal() {
+  const config = routerApi.getConfig();
+  window.open(`${config.routerUrl.replace(/\/$/, '')}/index.html`, '_blank');
+}
+
+// 安卓"全屏打开"（内嵌视图的备选入口，或反代未启动时的主入口）：先确认会话
+// 仍有效（可能又被其他设备抢占），再经原生 loadUrl 全屏直连路由器——与内嵌
+// iframe 同一出口 IP，天然共享会话；按系统返回键回到本应用。
+async function openStockConsoleNative() {
+  if (stockOpenMode === 'external') { openStockConsoleExternal(); return; }
+  if (stockConsole.busy) return;
+  stockConsole.busy = true;
+  stockConsole.message = '正在确认自动登录状态…';
+  try {
+    const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false, developer: false }));
+    let ready = session.loggedIn && session.developer;
+    if (!ready) {
+      const main = await routerApi.login(true);
+      if (main.loggedIn) {
+        try { await routerApi.developerLogin(); } catch {}
+        ready = true;
+      }
+      stockConsole.loggedIn = Boolean(main.loggedIn);
+    } else {
+      stockConsole.loggedIn = true;
+    }
+    stockConsole.message = ready
+      ? '管理员会话已就绪 · 开发者权限已就绪，正在打开…'
+      : '自动登录失败：可在原厂后台中手动输入密码';
+  } finally {
+    stockConsole.busy = false;
+  }
+  const config = routerApi.getConfig();
+  const directUrl = `${config.routerUrl.replace(/\/$/, '')}/index.html`;
+  const bridge = typeof window !== 'undefined' ? window.AndroidRouter : null;
+  if (bridge && typeof bridge.openStockUi === 'function') bridge.openStockUi(directUrl);
+  else window.location.href = directUrl;
 }
 
 function managementTabSummary(id) {
   if (id === 'sms') return messages.value.length ? `${messages.value.length} 条 · 验证码 ${smsCodeCount.value}` : '收发与验证码';
   if (id === 'clients') return `${stations.value.length + cableStations.value.length} 台在线`;
+  if (id === 'stock') return stockConsole.loggedIn ? '已自动登录' : '内嵌原厂 Web 界面';
   return connected.value ? '连接正常' : '连接与设备控制';
 }
 

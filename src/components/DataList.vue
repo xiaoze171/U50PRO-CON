@@ -31,7 +31,7 @@ defineProps({
   grid-template-columns: minmax(96px, 0.8fr) minmax(0, 1.4fr);
   gap: 14px;
   align-items: center;
-  min-height: 43px;
+  min-height: 37px;
   border-bottom: 1px solid #eceef2;
 }
 

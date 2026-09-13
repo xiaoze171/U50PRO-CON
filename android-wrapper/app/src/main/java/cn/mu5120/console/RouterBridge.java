@@ -1,5 +1,6 @@
 package cn.mu5120.console;
 
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.content.Context;
@@ -32,7 +33,11 @@ public final class RouterBridge {
 
     private final WebView webView;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    private final StockProxyServer stockProxy = new StockProxyServer();
     private String lastSharedSession = "";
+    // 最近一次 H5 configureBackground 传来的路由器地址，供 StockProxyServer
+    // （原厂后台本地反代）转发使用。
+    private static volatile String routerBaseUrl = "http://192.168.0.1";
 
     // —— 局域网同步状态（主进程内，与 RouterBridge 同生命周期；镜像 Electron 主进程模型）——
     private SyncServer syncServer;
@@ -48,6 +53,17 @@ public final class RouterBridge {
 
     RouterBridge(WebView webView) {
         this.webView = webView;
+        stockProxy.start();
+    }
+
+    // 原厂后台本地反代端口（127.0.0.1），0 表示未启动（H5 会退回全屏直连）。
+    @JavascriptInterface
+    public int getStockProxyPort() {
+        return stockProxy.getPort();
+    }
+
+    void shutdownStockProxy() {
+        stockProxy.stop();
     }
 
     @JavascriptInterface
@@ -60,11 +76,43 @@ public final class RouterBridge {
     @JavascriptInterface
     public void configureBackground(String routerUrl, String password) {
         BackgroundMonitorService.configure(webView.getContext(), routerUrl, password);
+        if (routerUrl != null && !routerUrl.trim().isEmpty()) routerBaseUrl = routerUrl.trim();
         // 路由器密码是唯一的密钥来源：在此派生同步令牌 sha256(密码)，供服务端鉴权与信标 tokenFP。
         synchronized (this) {
             syncPassword = password == null ? "" : password;
             applySyncState();
         }
+    }
+
+    static String getRouterBaseUrl() {
+        return routerBaseUrl;
+    }
+
+    // 原厂后台全屏直连：H5 页面点"进入原厂后台"时调用。走 loadUrl 而非页面
+    // location.href，避开 WebViewClient 导航拦截的不确定性；仅放行局域网
+    // 路由器地址（与 request() 同一份白名单）。
+    @JavascriptInterface
+    public void openStockUi(final String url) {
+        final String target = url == null ? "" : url.trim();
+        try {
+            URL parsed = new URL(target);
+            if (!"http".equals(parsed.getProtocol()) && !"https".equals(parsed.getProtocol())) return;
+            if (!isLocalRouterHost(parsed.getHost())) return;
+            // 会话由 HttpOnly Cookie 识别：把原生层持有的会话 Cookie 注入
+            // WebView 的 CookieManager，全屏直连才能共享 App 的登录态。
+            String sessionCookie = RouterSession.header();
+            if (!sessionCookie.isEmpty()) {
+                try {
+                    CookieManager cookieManager = CookieManager.getInstance();
+                    for (String raw : sessionCookie.split(";")) {
+                        String value = raw.trim();
+                        if (!value.isEmpty()) cookieManager.setCookie(target, value);
+                    }
+                    cookieManager.flush();
+                } catch (Exception ignored) {}
+            }
+            webView.post(() -> webView.loadUrl(target));
+        } catch (java.net.MalformedURLException ignored) {}
     }
 
     @JavascriptInterface
@@ -381,7 +429,8 @@ public final class RouterBridge {
         return new String(bytes.toByteArray(), charset).trim();
     }
 
-    private static boolean isLocalRouterHost(String host) {
+    // 包内可见：MainActivity 放行原厂后台全屏直连时复用同一份局域网白名单。
+    static boolean isLocalRouterHost(String host) {
         if (host == null) return false;
         if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)) return true;
         if (host.matches("^10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$")) return true;

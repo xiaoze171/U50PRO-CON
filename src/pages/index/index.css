@@ -3,12 +3,48 @@
   overflow: hidden;
 }
 
+/* —— 液态玻璃主题变量：所有玻璃表面统一引用这里 ——
+ * 注意：本文件是组件作用域样式，:root 必须包 :global 才会生效。
+ * 材质取向：薄透（低白度）+ 高饱和（放大背景色彩）+ 顶部高光棱边，
+ * 逼近 iOS Liquid Glass 的观感而非普通磨砂。 */
+:global(:root) {
+  --glass-bg: rgba(255, 255, 255, 0.46);
+  --glass-bg-strong: rgba(255, 255, 255, 0.62);
+  --glass-bg-soft: rgba(255, 255, 255, 0.32);
+  --glass-border: rgba(30, 41, 59, 0.12);
+  --glass-line: rgba(23, 32, 51, 0.05);
+  --glass-blur: 16px;
+  --glass-shadow:
+    0 18px 44px rgba(38, 48, 86, 0.14),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2);
+  --glass-radius: 22px;
+}
+
 .app-shell {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: #eef1f7;
+}
+
+/* 背景"壁纸"层：高饱和度色场（苹果玻璃是压在鲜艳壁纸上的，底色弱了玻璃就发灰）。
+ * 固定定位不随内容滚动，避免每秒刷新触发重绘。 */
+.app-shell::before {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  inset: 0;
+  background:
+    radial-gradient(52% 44% at 18% 16%, rgba(154, 128, 255, 0.42), transparent 62%),
+    radial-gradient(46% 40% at 86% 22%, rgba(96, 190, 255, 0.38), transparent 62%),
+    radial-gradient(56% 48% at 78% 88%, rgba(255, 138, 190, 0.34), transparent 64%),
+    radial-gradient(48% 42% at 8% 86%, rgba(84, 226, 199, 0.32), transparent 62%),
+    linear-gradient(168deg, #f6f3ff 0%, #eef4ff 46%, #fdf0f7 100%);
 }
 
 .sidebar {
@@ -21,9 +57,11 @@
   min-width: 244px;
   height: 100%;
   padding: 20px 14px 16px;
-  border-right: 1px solid #1e293b;
-  background: #111c2f;
-  color: #fff;
+  border-right: 1px solid var(--glass-line);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  color: #172033;
 }
 
 .brand-block {
@@ -39,7 +77,7 @@
   height: 38px;
   place-items: center;
   border: 1px solid rgba(125, 211, 252, 0.32);
-  border-radius: 8px;
+  border-radius: 12px;
   background: #6d5bd0;
   color: #fff;
 }
@@ -57,16 +95,17 @@
 
 .brand-subtitle {
   margin-top: 3px;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 11px;
 }
 
 .connection-card {
   margin: 0 4px 18px;
   padding: 11px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .connection-line {
@@ -92,7 +131,7 @@
   display: block;
   margin-top: 7px;
   overflow: hidden;
-  color: #8292aa;
+  color: #64748b;
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -115,9 +154,9 @@
   align-items: center;
   gap: 11px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 13px;
   background: transparent;
-  color: #bdc8d8;
+  color: #47536b;
   font-size: 13px;
   line-height: 42px;
   text-align: left;
@@ -128,13 +167,13 @@
   height: 29px;
   padding: 5px;
   flex: 0 0 29px;
-  border-radius: 6px;
+  border-radius: 9px;
   background: transparent;
-  color: #aab8cc;
+  color: #6b7a94;
 }
 
 .nav-button.active > svg {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
 }
 
@@ -142,17 +181,18 @@
   background: #6d5bd0;
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 8px 18px rgba(109, 91, 208, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 
 .nav-button:not(.active):hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.55);
+  color: #1e293b;
 }
 
 .nav-badge {
   min-width: 20px;
   margin-left: auto;
-  color: #fff;
+  color: inherit;
   font-size: 10px;
   text-align: right;
 }
@@ -162,8 +202,8 @@
   flex-direction: column;
   gap: 4px;
   padding: 12px 9px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: #8292aa;
+  border-top: 1px solid var(--glass-line);
+  color: #64748b;
   font-size: 10px;
 }
 
@@ -172,6 +212,8 @@
 }
 
 .main-area {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -190,8 +232,10 @@
   padding: 0 26px;
   align-items: center;
   gap: 14px;
-  border-bottom: 1px solid #e3e8ef;
-  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--glass-line);
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
 }
 
 .page-heading {
@@ -234,9 +278,9 @@
   margin: 0;
   padding: 0;
   place-items: center;
-  border: 1px solid #e3e6ea;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.55);
   color: #42526a;
   line-height: 1;
 }
@@ -277,7 +321,7 @@
   align-items: center;
   gap: 9px;
   border: 1px solid #ecc9ca;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff3f3;
   color: #a83237;
   font-size: 12px;
@@ -297,7 +341,9 @@
   min-width: 0;
   min-height: 176px;
   overflow: hidden;
-  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--glass-shadow);
 }
 
 .network-hero {
@@ -305,7 +351,9 @@
   padding: 22px 24px;
   flex-direction: column;
   justify-content: space-between;
-  background: #f8f9fa;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
   color: #172033;
 }
 
@@ -363,7 +411,7 @@
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid #eceef2;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -414,9 +462,11 @@
   grid-template-columns: 1fr 1fr;
   align-content: center;
   align-self: center;
-  border: 1px solid #eceef2;
-  border-radius: 10px;
-  background: #f8f9fa;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
 }
 
 .speed-column {
@@ -462,10 +512,12 @@
   min-width: 0;
   margin-bottom: 14px;
   padding: 18px;
-  border: 1px solid #eceef2;
-  border-radius: 10px;
-  background: #f8f9fa;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
@@ -493,7 +545,7 @@
   height: 22px;
   padding: 0;
   flex: 0 0 22px;
-  border-radius: 7px;
+  border-radius: 12px;
   background: #e9e5f9;
   color: #6d5bd0;
 }
@@ -881,7 +933,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   border: 1px solid #dfe5ed;
-  border-radius: 7px;
+  border-radius: 12px;
   background: #f4f6f9;
 }
 
@@ -894,7 +946,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 12px;
   background: transparent;
   color: #64748b;
   text-align: left;
@@ -906,7 +958,7 @@
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #e8edf4;
   color: #53627a;
 }
@@ -967,7 +1019,7 @@
   align-items: center;
   gap: 7px;
   border: 1px solid #d8dfe8;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
   color: #748094;
 }
@@ -991,7 +1043,7 @@
   align-items: center;
   gap: 12px;
   border: 1px solid #eceef2;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
   color: #172033;
   line-height: 1.2;
@@ -1000,7 +1052,7 @@
 
 .candidate-card.selected {
   border-color: #b7a8e8;
-  background: #f3eefd;
+  background: rgba(109, 91, 208, 0.13);
   box-shadow: inset 3px 0 0 #6d5bd0;
 }
 
@@ -1087,7 +1139,7 @@
   justify-content: space-between;
   gap: 16px;
   border: 1px solid #d9e0e8;
-  border-radius: 7px;
+  border-radius: 12px;
   background: #f8fafc;
 }
 
@@ -1153,7 +1205,7 @@
   justify-content: space-between;
   gap: 12px;
   border: 1px solid #e2e8f0;
-  border-radius: 7px;
+  border-radius: 12px;
   background: #f8fafc;
 }
 
@@ -1190,7 +1242,7 @@
   margin-top: 10px;
   padding: 10px 12px;
   border: 1px dashed #cbd5e1;
-  border-radius: 7px;
+  border-radius: 12px;
   color: #657083;
   font-size: 11px;
   text-align: center;
@@ -1215,7 +1267,7 @@ input,
 textarea {
   width: 100%;
   border: 1px solid #d9e0e8;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
   color: #172033;
   font-size: 13px;
@@ -1258,7 +1310,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border-radius: 6px;
+  border-radius: 11px;
   font-size: 12px;
   font-weight: 700;
   line-height: 36px;
@@ -1271,9 +1323,10 @@ textarea {
 }
 
 .secondary-button {
-  border: 1px solid #e3e6ea;
-  background: #fff;
+  border: 1px solid rgba(30, 41, 59, 0.13);
+  background: rgba(255, 255, 255, 0.6);
   color: #344154;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .danger-button {
@@ -1287,7 +1340,7 @@ textarea {
   justify-content: center;
   gap: 7px;
   border: 1px solid #d94848;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #d94848;
   color: #fff;
   font-size: 12px;
@@ -1371,7 +1424,7 @@ textarea {
   padding: 17px;
   flex-direction: column;
   border: 1px solid #e1e7ef;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -1444,7 +1497,7 @@ textarea {
   justify-content: center;
   gap: 5px;
   border: 1px solid #e3e6ea;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
   color: #536071;
   font-size: 12px;
@@ -1487,7 +1540,7 @@ textarea {
   justify-content: center;
   gap: 7px;
   border: 1px solid #ded6f5;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
   color: #6d5bd0;
   font-size: 12px;
@@ -1559,7 +1612,7 @@ textarea {
 .sms-card {
   padding: 12px 14px;
   border: 1px solid #e2e6ec;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -1728,7 +1781,7 @@ textarea {
   justify-content: center;
   gap: 6px;
   border: 1px solid #cbd7f6;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #f7f9ff;
   color: #6d5bd0;
   font-size: 11px;
@@ -1757,7 +1810,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   border: 1px solid #e2e6ec;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -1818,6 +1871,77 @@ textarea {
   gap: 10px;
 }
 
+/* 原厂后台内嵌：标题与操作按钮在窄屏下允许换行 */
+.stock-panel .panel-header {
+  flex-wrap: wrap;
+}
+
+.stock-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stock-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+  flex-wrap: wrap;
+}
+
+.stock-zoom-value {
+  min-width: 46px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #344154;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-frame-wrap {
+  border: 1px solid #eceef2;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+/* 独立缩放：宽高按比例补偿（视觉尺寸始终铺满容器），transform 等比缩放；
+ * 放大时 iframe 内部视口变窄（文字变大、按更窄布局重排），缩小时得到桌面版全景。 */
+.stock-frame {
+  display: block;
+  width: calc(100% / var(--stock-scale, 1));
+  height: calc(clamp(420px, 68vh, 900px) / var(--stock-scale, 1));
+  transform: scale(var(--stock-scale, 1));
+  transform-origin: 0 0;
+  border: 0;
+}
+
+.stock-placeholder {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 10px;
+  color: #7b8493;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 原厂后台：安卓全屏直连 / 桌面系统浏览器模式的提示与入口按钮 */
+.stock-native-hint {
+  margin: 2px 0 12px;
+  color: #7b8493;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.stock-native-open {
+  width: 100%;
+}
+
 .feature-form {
   margin-top: 16px;
 }
@@ -1839,7 +1963,7 @@ textarea {
   padding: 10px 11px;
   justify-content: space-between;
   border: 1px solid #e1e7ef;
-  border-radius: 7px;
+  border-radius: 12px;
   background: #f8fafc;
 }
 
@@ -1877,7 +2001,7 @@ textarea {
   min-height: 38px;
   padding: 9px 11px;
   border: 1px solid #dce3ec;
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
   color: #25324a;
   font-size: 12px;
@@ -2028,17 +2152,20 @@ textarea {
   .mobile-bottom-nav {
     position: fixed;
     z-index: 60;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left: 12px;
     display: grid;
-    height: calc(62px + env(safe-area-inset-bottom));
-    padding: 5px 6px env(safe-area-inset-bottom);
+    height: 62px;
+    padding: 5px 6px;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    border-top: 1px solid rgba(203, 213, 225, 0.82);
-    background: rgba(255, 255, 255, 0.97);
-    box-shadow: 0 -7px 24px rgba(15, 23, 42, 0.08);
-  }
+  border: 1px solid var(--glass-border);
+  border-radius: 26px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px) saturate(1.9);
+  -webkit-backdrop-filter: blur(20px) saturate(1.9);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16), inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+}
 
   .mobile-nav-button {
     position: relative;
@@ -2112,7 +2239,7 @@ textarea {
   .content-wrap {
     width: 100vw;
     max-width: 100vw;
-    padding: 12px 10px calc(82px + env(safe-area-inset-bottom));
+    padding: 12px 10px calc(96px + env(safe-area-inset-bottom));
   }
 
   .hero-panel {
@@ -2164,7 +2291,7 @@ textarea {
   .panel {
     margin-bottom: 10px;
     padding: 13px;
-    border-radius: 7px;
+    border-radius: 12px;
   }
 
   .management-tabs {
@@ -2306,5 +2433,568 @@ textarea {
 
   .history-row text:last-child {
     display: none;
+  }
+}
+
+/* 不支持 backdrop-filter 的环境（老安卓 WebView 等）：退回实体背景，保证可读性 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-shell { background: #f3f5fa; }
+
+  .app-shell::before { opacity: 0.55; }
+
+  .sidebar { background: rgba(255, 255, 255, 0.96); }
+
+  .topbar { background: rgba(255, 255, 255, 0.97); }
+
+  .panel,
+  .network-hero,
+  .speed-hero { background: rgba(255, 255, 255, 0.94); }
+
+  .mobile-bottom-nav { background: rgba(255, 255, 255, 0.97); }
+
+  .secondary-button { background: #fff; }
+}
+
+/* —— 液态玻璃第二阶段：内层元素 / 输入 / 弹窗 / 动效统一 ——
+ * 内层表面叠在玻璃面板上，用纯半透明（不嵌套 backdrop-filter，省 GPU），
+ * 统一大圆角 + 顶部高光，形成 iOS 式的多层玻璃纵深。 */
+
+input,
+textarea {
+  border: 1px solid rgba(30, 41, 59, 0.13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #172033;
+}
+
+input[disabled] {
+  background: rgba(242, 244, 247, 0.8);
+  color: #788293;
+}
+
+.search-box {
+  border: 1px solid rgba(30, 41, 59, 0.13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.sms-card,
+.client-card {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.sms-card.selected {
+  border-color: #93b0f5;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.quality-track {
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.history-row {
+  border-bottom: 1px solid rgba(30, 41, 59, 0.08);
+}
+
+.cell-param-item + .cell-param-item {
+  border-left: 1px solid rgba(30, 41, 59, 0.08);
+}
+
+.management-tab {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.management-tab.active {
+  border-color: #d5cdef;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 18px rgba(109, 91, 208, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.management-tab-icon {
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+/* 按压回弹：iOS 式过冲曲线（back-out），按下缩小、松手弹回 */
+.primary-button,
+.secondary-button,
+.danger-button,
+.icon-button,
+.nav-button,
+.management-tab,
+.mobile-nav-button,
+.stock-native-open {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.primary-button:active,
+.secondary-button:active,
+.danger-button:active,
+.icon-button:active,
+.nav-button:active,
+.management-tab:active,
+.stock-native-open:active {
+  transform: scale(0.96);
+}
+
+.mobile-nav-button:active {
+  transform: scale(0.92);
+}
+
+/* uni 弹窗（showModal）与提示（showToast）：挂载在组件树外，需 :global 覆写 */
+:global(.uni-modal) {
+  overflow: hidden;
+  border-radius: 22px !important;
+  background: rgba(255, 255, 255, 0.84) !important;
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22), inset 0 1.5px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+:global(.uni-modal__ft) {
+  border-top: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+:global(.uni-modal__btn_default) {
+  color: #47536b;
+}
+
+:global(.uni-modal__btn_primary) {
+  color: #6d5bd0;
+  font-weight: 700;
+}
+
+:global(.uni-toast) {
+  border-radius: 18px !important;
+  background: rgba(17, 24, 39, 0.78) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.3) !important;
+}
+
+/* —— 液态玻璃第三阶段：内层表面去底色 + 聚焦反馈 ——
+ * 内层卡片/输入/按钮不再铺白色，只留发丝描边，玻璃面板的底色直接透过，
+ * 减少白叠白的浑浊感（用户要求"背景色改透明"）。 */
+.metric-item,
+.sms-card,
+.client-card,
+.management-tab,
+.connection-card,
+.icon-button,
+.secondary-button,
+input,
+textarea,
+.search-box {
+  background: transparent;
+  box-shadow: none;
+}
+
+.sms-card.selected {
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.management-tab.active {
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.management-tab-icon {
+  background: transparent;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #6d5bd0;
+  outline: none;
+}
+
+/* —— 输入框修正：uni-input 的内层 input 不带页面作用域属性，
+ * 页面里的 input/textarea 选择器从未命中它（一直用的是浏览器默认外观）。
+ * 用 :global 按内部类接管。 —— */
+:global(.uni-input-input),
+:global(.uni-textarea-textarea) {
+  width: 100%;
+  border: 1px solid rgba(30, 41, 59, 0.13);
+  border-radius: 12px;
+  background: transparent;
+  color: #172033;
+  font-size: 13px;
+}
+
+:global(.uni-textarea-textarea) {
+  padding: 10px;
+  line-height: 1.55;
+}
+
+:global(.uni-input-input) {
+  height: 39px;
+  padding: 0 10px;
+}
+
+:global(.uni-input-placeholder),
+:global(.uni-textarea-placeholder) {
+  color: #94a3b8;
+}
+
+:global(.uni-input-input:focus),
+:global(.uni-textarea-textarea:focus) {
+  border-color: #6d5bd0;
+  outline: none;
+}
+
+/* 搜索框已有自身描边，内层输入去边避免双框 */
+:global(.search-box .uni-input-input) {
+  border: 0;
+  padding: 0;
+}
+
+/* —— 液态玻璃第四阶段：清理全部残留实底（流量管理表单、悬浮监测行、互通节点行、
+ * 频段组、邻小区候选卡、基站参数条、英雄区指标块、面板头图标块与浅紫小标签），
+ * 内层彻底统一为"透明 + 白色发丝描边"，浅紫标签改半透明紫。 —— */
+.radio-summary-panel,
+.candidate-card,
+.band-group,
+.overlay-setting-row,
+.sync-peer-row,
+.cell-params-strip,
+.traffic-plan-panel .feature-form label {
+  border-color: rgba(30, 41, 59, 0.12);
+  background: transparent;
+}
+
+.hero-metrics view {
+  background: transparent;
+}
+
+.band-chip {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  background: transparent;
+}
+
+.band-save-button {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  background: transparent;
+}
+
+.traffic-plan-panel .feature-form,
+.traffic-plan-panel .action-row {
+  border-top: 1px solid rgba(30, 41, 59, 0.08);
+}
+
+.panel-header > svg,
+.panel-tag.accent,
+.locked-tag,
+.band-network-tag.sa,
+.hero-metrics .ca-state.on {
+  background: rgba(109, 91, 208, 0.13);
+}
+
+/* 第四阶段补遗：标签容器/未读短信/复制按钮/小标签/信号条底/Picker 等残留实底 */
+.management-tabs,
+.picker-value,
+.sms-copy-button,
+.sms-copy-button[disabled] {
+  background: transparent;
+}
+
+.sms-copy-button,
+.picker-value {
+  border-color: rgba(30, 41, 59, 0.12);
+}
+
+.sms-card.unread {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.hero-metrics .ca-state,
+.panel-tag,
+.candidate-rank,
+.locked-tag.none,
+.band-network-tag {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.band-network-tag.nsa {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.signal-bars view,
+.radio-summary-signal view {
+  background: rgba(15, 23, 42, 0.1);
+}
+
+.sms-copy-button:active,
+.band-save-button:active {
+  background: rgba(109, 91, 208, 0.1);
+}
+
+.band-clear-button:active {
+  background: rgba(217, 72, 72, 0.08);
+}
+
+/* —— 修正：直接铺在背景上的表面（不在玻璃面板内）必须自带玻璃底 ——
+ * 此前把它们也透明化了，导致文字直接压在背景色斑上，看起来像"重叠/错乱"。
+ * 规则：面板内的内层用透明+发丝；直接暴露在背景上的卡片用完整玻璃。 */
+.cell-params-strip {
+  border-color: var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 流量/电池页顶部直接暴露的指标卡组 —— 组件内部元素必须用 :deep 才能命中
+ *（页面作用域属性只落在组件根节点上，此前裸写的 .metric-item 规则从未生效）。 */
+.content-wrap > .metric-grid :deep(.metric-item) {
+  border-color: var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 面板内的指标卡：透明 + 发丝描边（与表单标签等内层语言一致） */
+.panel :deep(.metric-item) {
+  border-color: rgba(30, 41, 59, 0.12);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 管理子页标签（iOS 分段控件质感） */
+.management-tab {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(12px) saturate(1.6);
+  -webkit-backdrop-filter: blur(12px) saturate(1.6);
+}
+
+.management-tab.active {
+  border-color: #d5cdef;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+/* —— 频段锁定：LTE / 5G SA / 5G NSA 三个频段组各自独立的玻璃卡片，
+ * 清晰分块不合并；组内 chip/标签保持"透明 + 发丝描边"的内层语言。 —— */
+.band-group {
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
+  box-shadow: var(--glass-shadow);
+}
+
+.band-chip {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 10px;
+  background: transparent;
+}
+
+.band-network-tag {
+  background: rgba(15, 23, 42, 0.05);
+  color: #5b6472;
+}
+
+.band-network-tag.sa {
+  background: rgba(109, 91, 208, 0.13);
+}
+
+.band-network-tag.nsa {
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.locked-tag {
+  background: rgba(109, 91, 208, 0.13);
+}
+
+.locked-tag.none {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.band-save-button {
+  border: 1px solid rgba(30, 41, 59, 0.12);
+  border-radius: 11px;
+  background: transparent;
+}
+
+.band-save-button:active {
+  background: rgba(109, 91, 208, 0.1);
+}
+
+.band-clear-button:active {
+  background: rgba(217, 72, 72, 0.08);
+}
+
+/* —— 紧凑化收紧：整体减少留白与卡片体量（用户反馈空白多、不紧凑、总览突兀） —— */
+.content-wrap {
+  padding: 16px 20px 30px;
+}
+
+.panel {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+}
+
+.panel-header {
+  min-height: 32px;
+  margin-bottom: 10px;
+}
+
+.hero-grid,
+.two-column,
+.radio-overview-grid {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hero-panel {
+  min-height: 138px;
+}
+
+.network-hero {
+  padding: 15px 18px;
+}
+
+.speed-hero {
+  min-height: 70px;
+}
+
+.hero-metrics view {
+  padding: 8px 10px;
+}
+
+/* 流量/电池页顶部指标卡：加下边距，避免与下方面板贴死（"压到"问题） */
+.content-wrap > .metric-grid {
+  margin-bottom: 12px;
+}
+
+.metric-item {
+  min-height: 62px;
+  padding: 10px 12px;
+}
+
+.temperature-overview-grid :deep(.metric-item) {
+  min-height: 54px;
+  padding: 9px 11px;
+}
+
+.management-tab {
+  min-height: 54px;
+  padding: 7px 10px;
+}
+
+.management-tabs {
+  margin-bottom: 10px;
+}
+
+.cell-params-strip {
+  margin-bottom: 12px;
+  padding: 9px 14px;
+}
+
+.traffic-plan-panel > .metric-grid {
+  margin-bottom: 12px;
+}
+
+.traffic-plan-panel .feature-form {
+  padding-top: 12px;
+}
+
+.traffic-plan-panel .action-row {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+/* —— 修正：紧凑化规则写在文件末尾，把移动端媒体查询的专属值压掉了
+ * （右侧贴屏、悬浮底栏下方留白丢失、参数条/管理标签内边距异常）。
+ * 桌面紧凑值限定 >900px；≤900px 恢复移动端专属值。 —— */
+@media (min-width: 901px) {
+  .content-wrap {
+    padding: 16px 20px 30px;
+  }
+}
+
+@media (max-width: 900px) {
+  .content-wrap {
+    width: 100vw;
+    max-width: 100vw;
+    padding: 12px 10px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  .hero-panel {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    min-height: 150px;
+  }
+
+  .network-hero {
+    padding: 15px 16px;
+  }
+
+  .cell-params-strip {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    padding: 9px 6px;
+    gap: 4px;
+  }
+
+  .management-tabs {
+    width: calc(100vw - 20px);
+    margin-bottom: 10px;
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .management-tab {
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+}
+
+/* —— 频段锁定卡片修正：此前的"玻璃叠玻璃"（自带模糊底叠在玻璃面板上）
+ * 两层半透明合成近白色，与面板内其他内层表面不一致。改为轻透卡片：
+ * 保留分块轮廓，去掉叠加模糊，底色只留一层淡淡的白。 —— */
+.band-group {
+  border: 1px solid rgba(30, 41, 59, 0.10);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+/* —— 总览英雄区修正 ——
+ * 手机端：.hero-panel{min-height:150px} 把速率卡也撑到 150px（内容只要 ~70px），
+ * 改为按内容自适应；高度下限只保留给网络信息卡。
+ * 桌面端：速率卡 70px 悬浮在 162px 行中间上下漏空，改为与网络卡等高对齐。 */
+@media (max-width: 900px) {
+  .speed-hero {
+    min-height: 0;
+  }
+
+  .network-hero {
+    min-height: 0;
+    padding: 13px 15px;
+  }
+}
+
+@media (min-width: 901px) {
+  .speed-hero {
+    align-self: stretch;
+    min-height: 0;
   }
 }

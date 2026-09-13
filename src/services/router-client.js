@@ -217,6 +217,36 @@ function baseUrl() {
   return config.routerUrl.replace(/\/$/, '');
 }
 
+// 安卓壳的原厂后台本地反代端口（StockProxyServer，127.0.0.1），0 = 未启动。
+function stockProxyPort() {
+  if (typeof window === 'undefined' || !window.AndroidRouter) return 0;
+  if (typeof window.AndroidRouter.getStockProxyPort !== 'function') return 0;
+  const port = Number(window.AndroidRouter.getStockProxyPort());
+  return Number.isInteger(port) && port > 0 ? port : 0;
+}
+
+// 原厂后台入口地址：
+// - 浏览器 H5：vite 代理路径 /router-api/index.html（与 App 同源）。
+// - 安卓壳：本地反代 http://127.0.0.1:<port>/index.html（POST 完整转发，
+//   响应剥离 X-Frame-Options/CSP，iframe 可内嵌，体验与浏览器一致）。
+// - 桌面壳：直连路由器地址（配合 external 打开方式）。
+function stockUiUrl() {
+  const port = stockProxyPort();
+  if (port > 0) return `http://127.0.0.1:${port}/index.html`;
+  if (isH5 && !nativeBridge()) return '/router-api/index.html';
+  return `${config.routerUrl.replace(/\/$/, '')}/index.html`;
+}
+
+// 原厂后台打开方式：浏览器 H5 与安卓壳（本地反代可用时）均为 embed 内嵌；
+// 安卓反代未启动时退回 navigate 全屏直连；桌面壳 = external 系统浏览器兜底。
+function stockUiOpenMode() {
+  if (typeof window !== 'undefined' && window.DesktopRouter) return 'external';
+  if (typeof window !== 'undefined' && window.AndroidRouter) {
+    return stockProxyPort() > 0 ? 'embed' : 'navigate';
+  }
+  return 'embed';
+}
+
 function queryString(values) {
   return Object.entries(values)
     .filter(([, value]) => value !== undefined)
@@ -379,6 +409,16 @@ async function developerLogin() {
 async function ensureDeveloperAccess() {
   const state = await getFields(['developer_option_loginfo']).catch(() => ({}));
   if (state.developer_option_loginfo !== 'ok') await developerLogin();
+}
+
+// 原厂后台会话状态（主登录 + 开发者标志）。内嵌原厂界面被抢占后会分别退回
+// 它自己的登录页/开发者登录页，页面层用它判断需要恢复哪种会话。
+async function stockUiSession() {
+  const state = await getFields(['loginfo', 'developer_option_loginfo']).catch(() => ({}));
+  return {
+    loggedIn: state.loginfo === 'ok',
+    developer: state.developer_option_loginfo === 'ok'
+  };
 }
 
 async function dashboard() {
@@ -860,12 +900,15 @@ async function controlDevice(action) {
 export const routerApi = {
   getConfig,
   updateConfig,
+  stockUiUrl,
+  stockUiOpenMode,
   getOverlayState,
   setOverlayEnabled,
   requestOverlayPermission,
   controlDevice,
   login,
   developerLogin,
+  stockUiSession,
   dashboard,
   mergeExternalBattery,
   setTrafficPlan,

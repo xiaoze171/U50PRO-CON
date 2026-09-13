@@ -32,7 +32,7 @@ export default {
 <style>
 page {
   min-height: 100%;
-  background: #ffffff;
+  background: #eef1f7;
   color: #101828;
   font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }

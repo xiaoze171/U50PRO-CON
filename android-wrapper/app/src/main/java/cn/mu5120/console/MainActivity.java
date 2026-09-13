@@ -71,13 +71,13 @@ public final class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return !isAppAssetUrl(request.getUrl());
+                return !isAppAssetUrl(request.getUrl()) && !isRouterUrl(request.getUrl());
             }
 
             @Override
             @SuppressWarnings("deprecation")
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return !isAppAssetUrl(Uri.parse(url));
+                return !isAppAssetUrl(Uri.parse(url)) && !isRouterUrl(Uri.parse(url));
             }
 
             @Override
@@ -100,6 +100,14 @@ public final class MainActivity extends Activity {
         return uri != null
             && "https".equalsIgnoreCase(uri.getScheme())
             && APP_ASSET_HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    // 原厂后台全屏直连：仅放行局域网路由器地址（与 RouterBridge 的请求白名单
+    // 同一份规则），其余外部跳转仍拦截，避免应用窗口跳去别的网站。
+    private boolean isRouterUrl(Uri uri) {
+        return uri != null
+            && ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+            && RouterBridge.isLocalRouterHost(uri.getHost());
     }
 
     private WebResourceResponse loadAppAsset(Uri uri) {
@@ -199,6 +207,7 @@ public final class MainActivity extends Activity {
         foregroundHandler.removeCallbacks(foregroundHeartbeat);
         if (routerBridge != null) {
             routerBridge.shutdownSync();
+            routerBridge.shutdownStockProxy();
             routerBridge = null;
         }
         if (webView != null) {

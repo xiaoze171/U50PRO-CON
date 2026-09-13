@@ -2,7 +2,7 @@
 // 定位：等价于安卓的 MainActivity + RouterBridge —— 加载同一份 H5 构建，
 // 通过 preload 暴露的 window.DesktopRouter 桥接把路由器请求交给主进程完成
 // （主进程注入 Origin/Referer/Cookie、走局域网 HTTP），页面逻辑零改动。
-const { app, BrowserWindow, ipcMain, Menu, shell, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray, nativeImage } = require('electron');
 const path = require('path');
 const routerHttp = require('./router-http');
 const session = require('./session');
@@ -33,14 +33,33 @@ let syncAdvertise = { role: 'auto', collecting: false };
 
 function createWindow() {
   const state = store.loadWindowState();
+  // 拔掉副屏/改分辨率后，保存的坐标可能落在所有屏幕之外，窗口会"打开但看不见"
+  //（实测出现过 x:-1720）。恢复前校验窗口与某块屏幕的工作区至少有 120×60 的
+  // 可见重叠，否则丢弃坐标、按默认居中。
+  let restoreX = Number.isInteger(state.x) ? state.x : undefined;
+  let restoreY = Number.isInteger(state.y) ? state.y : undefined;
+  if (restoreX !== undefined && restoreY !== undefined) {
+    const restoreWidth = state.width || 1280;
+    const restoreHeight = state.height || 860;
+    const visible = screen.getAllDisplays().some(display => {
+      const area = display.workArea;
+      const overlapWidth = Math.min(restoreX + restoreWidth, area.x + area.width) - Math.max(restoreX, area.x);
+      const overlapHeight = Math.min(restoreY + restoreHeight, area.y + area.height) - Math.max(restoreY, area.y);
+      return overlapWidth >= 120 && overlapHeight >= 60;
+    });
+    if (!visible) {
+      restoreX = undefined;
+      restoreY = undefined;
+    }
+  }
   // 桌面默认尺寸取 1280×860：宽度 > 900px 断点，触发 index.css 里已有的桌面布局
   // （常驻侧边栏 + 多列内容），而非手机抽屉式窄屏布局。minWidth 锁在 1000（> 900）
   // 确保用户缩放窗口时也不会跌回手机版式。
   mainWindow = new BrowserWindow({
     width: state.width || 1280,
     height: state.height || 860,
-    x: Number.isInteger(state.x) ? state.x : undefined,
-    y: Number.isInteger(state.y) ? state.y : undefined,
+    x: restoreX,
+    y: restoreY,
     minWidth: 1000,
     minHeight: 660,
     backgroundColor: '#f5f7fb',
