@@ -2628,27 +2628,37 @@ textarea:focus {
   outline: none;
 }
 
-/* —— 输入框修正：uni-input 的内层 input 不带页面作用域属性，
- * 页面里的 input/textarea 选择器从未命中它（一直用的是浏览器默认外观）。
- * 用 :global 按内部类接管。 —— */
+/* —— 输入框统一样式 ——
+ * uni-input 的内层 input 不带页面作用域属性，必须用 :global 命中；
+ * 宿主自带左右 10px 内边距导致内层偏移，清零后由内层自行携带。
+ * 样式取向：干净常规的表单域，不参与玻璃效果（在任何表面上都不会出错）。 */
+:global(uni-input),
+:global(.uni-input),
+:global(uni-textarea),
+:global(.uni-textarea) {
+  padding: 0 !important;
+}
+
 :global(.uni-input-input),
 :global(.uni-textarea-textarea) {
+  box-sizing: border-box;
   width: 100%;
-  border: 1px solid rgba(30, 41, 59, 0.13);
-  border-radius: 12px;
-  background: transparent;
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+  background: #fff;
   color: #172033;
   font-size: 13px;
 }
 
-:global(.uni-textarea-textarea) {
-  padding: 10px;
-  line-height: 1.55;
+:global(.uni-input-input) {
+  height: 38px;
+  padding: 0 10px;
 }
 
-:global(.uni-input-input) {
-  height: 39px;
-  padding: 0 10px;
+:global(.uni-textarea-textarea) {
+  min-height: 120px;
+  padding: 10px;
+  line-height: 1.55;
 }
 
 :global(.uni-input-placeholder),
@@ -2662,368 +2672,10 @@ textarea:focus {
   outline: none;
 }
 
-/* 搜索框已有自身描边，内层输入去边避免双框 */
+/* 搜索框：外层已有描边，内层去边框避免双框 */
 :global(.search-box .uni-input-input) {
   border: 0;
+  border-radius: 0;
   padding: 0;
-}
-
-/* —— 液态玻璃第四阶段：清理全部残留实底（流量管理表单、悬浮监测行、互通节点行、
- * 频段组、邻小区候选卡、基站参数条、英雄区指标块、面板头图标块与浅紫小标签），
- * 内层彻底统一为"透明 + 白色发丝描边"，浅紫标签改半透明紫。 —— */
-.radio-summary-panel,
-.candidate-card,
-.band-group,
-.overlay-setting-row,
-.sync-peer-row,
-.cell-params-strip,
-.traffic-plan-panel .feature-form label {
-  border-color: rgba(30, 41, 59, 0.12);
   background: transparent;
-}
-
-.hero-metrics view {
-  background: transparent;
-}
-
-.band-chip {
-  border: 1px solid rgba(30, 41, 59, 0.12);
-  background: transparent;
-}
-
-.band-save-button {
-  border: 1px solid rgba(30, 41, 59, 0.12);
-  background: transparent;
-}
-
-.traffic-plan-panel .feature-form,
-.traffic-plan-panel .action-row {
-  border-top: 1px solid rgba(30, 41, 59, 0.08);
-}
-
-.panel-header > svg,
-.panel-tag.accent,
-.locked-tag,
-.band-network-tag.sa,
-.hero-metrics .ca-state.on {
-  background: rgba(109, 91, 208, 0.13);
-}
-
-/* 第四阶段补遗：标签容器/未读短信/复制按钮/小标签/信号条底/Picker 等残留实底 */
-.management-tabs,
-.picker-value,
-.sms-copy-button,
-.sms-copy-button[disabled] {
-  background: transparent;
-}
-
-.sms-copy-button,
-.picker-value {
-  border-color: rgba(30, 41, 59, 0.12);
-}
-
-.sms-card.unread {
-  background: rgba(37, 99, 235, 0.06);
-}
-
-.hero-metrics .ca-state,
-.panel-tag,
-.candidate-rank,
-.locked-tag.none,
-.band-network-tag {
-  background: rgba(15, 23, 42, 0.05);
-}
-
-.band-network-tag.nsa {
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.signal-bars view,
-.radio-summary-signal view {
-  background: rgba(15, 23, 42, 0.1);
-}
-
-.sms-copy-button:active,
-.band-save-button:active {
-  background: rgba(109, 91, 208, 0.1);
-}
-
-.band-clear-button:active {
-  background: rgba(217, 72, 72, 0.08);
-}
-
-/* —— 修正：直接铺在背景上的表面（不在玻璃面板内）必须自带玻璃底 ——
- * 此前把它们也透明化了，导致文字直接压在背景色斑上，看起来像"重叠/错乱"。
- * 规则：面板内的内层用透明+发丝；直接暴露在背景上的卡片用完整玻璃。 */
-.cell-params-strip {
-  border-color: var(--glass-border);
-  border-radius: 16px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  box-shadow: var(--glass-shadow);
-}
-
-/* 流量/电池页顶部直接暴露的指标卡组 —— 组件内部元素必须用 :deep 才能命中
- *（页面作用域属性只落在组件根节点上，此前裸写的 .metric-item 规则从未生效）。 */
-.content-wrap > .metric-grid :deep(.metric-item) {
-  border-color: var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  box-shadow: var(--glass-shadow);
-}
-
-/* 面板内的指标卡：透明 + 发丝描边（与表单标签等内层语言一致） */
-.panel :deep(.metric-item) {
-  border-color: rgba(30, 41, 59, 0.12);
-  background: transparent;
-  box-shadow: none;
-}
-
-/* 管理子页标签（iOS 分段控件质感） */
-.management-tab {
-  border-color: var(--glass-border);
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(12px) saturate(1.6);
-  -webkit-backdrop-filter: blur(12px) saturate(1.6);
-}
-
-.management-tab.active {
-  border-color: #d5cdef;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-/* —— 频段锁定：LTE / 5G SA / 5G NSA 三个频段组各自独立的玻璃卡片，
- * 清晰分块不合并；组内 chip/标签保持"透明 + 发丝描边"的内层语言。 —— */
-.band-group {
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.9);
-  box-shadow: var(--glass-shadow);
-}
-
-.band-chip {
-  border: 1px solid rgba(30, 41, 59, 0.12);
-  border-radius: 10px;
-  background: transparent;
-}
-
-.band-network-tag {
-  background: rgba(15, 23, 42, 0.05);
-  color: #5b6472;
-}
-
-.band-network-tag.sa {
-  background: rgba(109, 91, 208, 0.13);
-}
-
-.band-network-tag.nsa {
-  background: rgba(16, 185, 129, 0.12);
-}
-
-.locked-tag {
-  background: rgba(109, 91, 208, 0.13);
-}
-
-.locked-tag.none {
-  background: rgba(15, 23, 42, 0.05);
-}
-
-.band-save-button {
-  border: 1px solid rgba(30, 41, 59, 0.12);
-  border-radius: 11px;
-  background: transparent;
-}
-
-.band-save-button:active {
-  background: rgba(109, 91, 208, 0.1);
-}
-
-.band-clear-button:active {
-  background: rgba(217, 72, 72, 0.08);
-}
-
-/* —— 紧凑化收紧：整体减少留白与卡片体量（用户反馈空白多、不紧凑、总览突兀） —— */
-.content-wrap {
-  padding: 16px 20px 30px;
-}
-
-.panel {
-  margin-bottom: 12px;
-  padding: 14px 16px;
-}
-
-.panel-header {
-  min-height: 32px;
-  margin-bottom: 10px;
-}
-
-.hero-grid,
-.two-column,
-.radio-overview-grid {
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.hero-panel {
-  min-height: 138px;
-}
-
-.network-hero {
-  padding: 15px 18px;
-}
-
-.speed-hero {
-  min-height: 70px;
-}
-
-.hero-metrics view {
-  padding: 8px 10px;
-}
-
-/* 流量/电池页顶部指标卡：加下边距，避免与下方面板贴死（"压到"问题） */
-.content-wrap > .metric-grid {
-  margin-bottom: 12px;
-}
-
-.metric-item {
-  min-height: 62px;
-  padding: 10px 12px;
-}
-
-.temperature-overview-grid :deep(.metric-item) {
-  min-height: 54px;
-  padding: 9px 11px;
-}
-
-.management-tab {
-  min-height: 54px;
-  padding: 7px 10px;
-}
-
-.management-tabs {
-  margin-bottom: 10px;
-}
-
-.cell-params-strip {
-  margin-bottom: 12px;
-  padding: 9px 14px;
-}
-
-.traffic-plan-panel > .metric-grid {
-  margin-bottom: 12px;
-}
-
-.traffic-plan-panel .feature-form {
-  padding-top: 12px;
-}
-
-.traffic-plan-panel .action-row {
-  margin-top: 10px;
-  padding-top: 10px;
-}
-
-/* —— 修正：紧凑化规则写在文件末尾，把移动端媒体查询的专属值压掉了
- * （右侧贴屏、悬浮底栏下方留白丢失、参数条/管理标签内边距异常）。
- * 桌面紧凑值限定 >900px；≤900px 恢复移动端专属值。 —— */
-@media (min-width: 901px) {
-  .content-wrap {
-    padding: 16px 20px 30px;
-  }
-}
-
-@media (max-width: 900px) {
-  .content-wrap {
-    width: 100vw;
-    max-width: 100vw;
-    padding: 12px 10px calc(96px + env(safe-area-inset-bottom));
-  }
-
-  .panel {
-    padding: 10px;
-  }
-
-  .hero-panel {
-    width: calc(100vw - 20px);
-    max-width: calc(100vw - 20px);
-    min-height: 150px;
-  }
-
-  .network-hero {
-    padding: 15px 16px;
-  }
-
-  .cell-params-strip {
-    width: calc(100vw - 20px);
-    max-width: calc(100vw - 20px);
-    padding: 9px 6px;
-    gap: 4px;
-  }
-
-  .management-tabs {
-    width: calc(100vw - 20px);
-    margin-bottom: 10px;
-    padding: 4px;
-    gap: 4px;
-  }
-
-  .management-tab {
-    min-height: 58px;
-    padding: 8px 10px;
-  }
-}
-
-/* —— 频段锁定卡片修正：此前的"玻璃叠玻璃"（自带模糊底叠在玻璃面板上）
- * 两层半透明合成近白色，与面板内其他内层表面不一致。改为轻透卡片：
- * 保留分块轮廓，去掉叠加模糊，底色只留一层淡淡的白。 —— */
-.band-group {
-  border: 1px solid rgba(30, 41, 59, 0.10);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-
-/* —— 总览英雄区修正 ——
- * 手机端：.hero-panel{min-height:150px} 把速率卡也撑到 150px（内容只要 ~70px），
- * 改为按内容自适应；高度下限只保留给网络信息卡。
- * 桌面端：速率卡 70px 悬浮在 162px 行中间上下漏空，改为与网络卡等高对齐。 */
-@media (max-width: 900px) {
-  .speed-hero {
-    min-height: 0;
-  }
-
-  .network-hero {
-    min-height: 0;
-    padding: 13px 15px;
-  }
-}
-
-@media (min-width: 901px) {
-  .speed-hero {
-    align-self: stretch;
-    min-height: 0;
-  }
-}
-
-/* —— 输入框修正：对齐 + 底色 ——
- * 对齐：uni-input/uni-textarea 宿主自带左右 10px 内边距，而内层 input 的
- * width:100% 按宿主全宽解析，导致边框盒左空右溢各 ~11px。宿主内边距清零，
- * 文字内边距由内层自己携带。
- * 底色：纯透明太素，改为柔和白底（iOS 表单域质感）。 */
-:global(uni-input),
-:global(.uni-input),
-:global(uni-textarea),
-:global(.uni-textarea) {
-  padding: 0 !important;
-}
-
-:global(.uni-input-input),
-:global(.uni-textarea-textarea) {
-  box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.6);
 }
