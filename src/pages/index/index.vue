@@ -1,5 +1,5 @@
 <template>
-  <view class="app-shell" :class="{ 'theme-dark': themeDark }">
+  <view class="app-shell">
     <aside class="sidebar" :class="{ open: menuOpen }">
       <view class="brand-block">
         <view class="brand-mark"><RouterIcon :size="22" :stroke-width="1.8" /></view>
@@ -448,14 +448,6 @@
               </view>
             </section>
             <section class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">外观模式</text><text class="panel-subtitle">浅色 / 深色 / 跟随系统设置</text></view><Moon :size="20" /></view>
-              <view class="theme-mode-row" role="radiogroup" aria-label="外观模式">
-                <button class="secondary-button theme-mode-option" :class="{ active: themeMode === 'light' }" @click="setThemeMode('light')"><Sun :size="16" />浅色</button>
-                <button class="secondary-button theme-mode-option" :class="{ active: themeMode === 'dark' }" @click="setThemeMode('dark')"><Moon :size="16" />深色</button>
-                <button class="secondary-button theme-mode-option" :class="{ active: themeMode === 'system' }" @click="setThemeMode('system')"><Monitor :size="16" />随系统</button>
-              </view>
-            </section>
-            <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">局域网互通</text><text class="panel-subtitle">同一 Wi-Fi 下多设备共享历史，避免各自抢占路由器登录导致数据断层</text></view><Wifi :size="20" /></view>
               <view class="overlay-setting-row">
                 <view class="overlay-setting-copy">
@@ -536,10 +528,10 @@ import {
   IconDeviceFloppy as Save, IconDevices as Smartphone, IconExternalLink as ExternalLink, IconGauge as Gauge,
   IconLayersIntersect as Layers3, IconLayoutDashboard as LayoutDashboard, IconLock as LockKeyhole,
   IconLockOpen as LockOpen, IconMapPin as MapPin, IconMessage as MessageSquareText,
-  IconDeviceDesktop as Monitor, IconMoon as Moon,
+
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
-  IconSettings as Settings, IconSun as Sun, IconTemperature as Thermometer, IconTrash as Trash, IconWifi as Wifi,
+  IconSettings as Settings, IconTemperature as Thermometer, IconTrash as Trash, IconWifi as Wifi,
   IconWifiOff as WifiOff, IconWorld as World
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
@@ -553,19 +545,8 @@ import {
   bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
-import { applyThemeMode, loadThemeMode, onThemeResolved, watchSystemTheme } from '../../utils/theme.js';
 
-const APP_VERSION = '1.3.45';
-// 外观模式：浅色 / 深色 / 随系统（设置与控制里切换，启动时从本地恢复）。
-const themeMode = ref(loadThemeMode());
-const themeDark = ref(false);
-onThemeResolved(dark => { themeDark.value = dark; });
-watchSystemTheme();
-
-function setThemeMode(mode) {
-  themeMode.value = mode;
-  applyThemeMode(mode);
-}
+const APP_VERSION = '1.3.48';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1108,10 +1089,6 @@ function smoothSeries(values, windowSize = 3) {
 }
 
 function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
-  // 深色模式下网格线/轴线的白色配方过亮，换暗色微光（options 每秒随数据重建，切主题后自动跟进）。
-  const themeDark = typeof document !== 'undefined' && document.documentElement.classList.contains('theme-dark');
-  const gridLineColor = themeDark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(255, 255, 255, 0.62)';
-  const axisLineColor = themeDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(255, 255, 255, 0.7)';
   const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || CHART_HISTORY_SAMPLE_MS);
   const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
   const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
@@ -1178,7 +1155,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         }
       },
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: axisLineColor } },
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.7)' } },
       splitLine: { show: false }
     },
     dataZoom: zoomEnabled ? [
@@ -1208,7 +1185,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         height: 14,
         bottom: 4,
         borderColor: 'transparent',
-        backgroundColor: themeDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.55)',
+        backgroundColor: 'rgba(255, 255, 255, 0.55)',
         fillerColor: 'rgba(91,141,239,.16)',
         dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
         selectedDataBackground: { lineStyle: { color: '#6d5bd0' }, areaStyle: { color: '#c8bef2', opacity: .22 } },
@@ -1221,9 +1198,9 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       }
     ] : [],
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: gridLineColor, width: 1 } } },
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } },
       { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: gridLineColor, width: 1 } } }],
+    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } }],
     series: series.map(item => buildLineSeries(item, windowMs, chartNow))
   };
 }

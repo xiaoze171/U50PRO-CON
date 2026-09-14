@@ -1,6 +1,4 @@
 <script>
-import { applyThemeMode, loadThemeMode, watchSystemTheme } from './utils/theme.js';
-
 function disablePinchZoom() {
   if (typeof document === 'undefined') return;
   const preventMultiTouch = event => {
@@ -15,8 +13,6 @@ function disablePinchZoom() {
 export default {
   onLaunch() {
     disablePinchZoom();
-    applyThemeMode(loadThemeMode());
-    watchSystemTheme();
     let current = null;
     try { current = uni.getStorageSync('mu5120-config'); } catch {}
     if (!current || typeof current !== 'object' || Array.isArray(current)) {
