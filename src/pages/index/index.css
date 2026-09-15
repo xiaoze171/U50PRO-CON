@@ -341,8 +341,8 @@
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
   max-width: 100%;
 }
 
@@ -423,7 +423,8 @@
   padding: 10px 12px;
   border: 1px solid #eceef2;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .hero-metrics text,
@@ -521,7 +522,7 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   padding: 18px;
   border: 1px solid var(--glass-border);
   border-radius: var(--glass-radius);
@@ -683,17 +684,17 @@
 .two-column {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .two-column > .panel {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .health-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .health-grid:has(.panel:only-child) {
@@ -704,7 +705,7 @@
   display: grid;
   grid-template-columns: minmax(310px, 0.72fr) minmax(0, 1.28fr);
   align-items: stretch;
-  gap: 16px;
+  gap: 12px;
 }
 
 .temperature-overview-grid :deep(.metric-grid) {
@@ -724,8 +725,8 @@
 .radio-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
   align-items: stretch;
 }
 
@@ -837,7 +838,7 @@
 .cell-params-strip {
   display: flex;
   width: 100%;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   padding: 11px 16px;
   align-items: stretch;
   gap: 8px;
@@ -887,7 +888,7 @@
 
 /* 流量页顶部摘要（当前会话/本月合计）与下方玻璃面板的间隔。 */
 .usage-summary-grid {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .radio-overview-grid :deep(.data-row) {
@@ -1006,7 +1007,7 @@
 
 .management-tab.active {
   border-color: #d5cdef;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.66);
   box-shadow: 0 2px 8px rgba(109, 91, 208, 0.08);
 }
 
@@ -1038,7 +1039,7 @@
   gap: 7px;
   border: 1px solid #d8dfe8;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.6);
   color: #748094;
 }
 
@@ -1062,7 +1063,7 @@
   gap: 12px;
   border: 1px solid #eceef2;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.62);
   color: #172033;
   line-height: 1.2;
   text-align: left;
@@ -1286,7 +1287,7 @@ textarea {
   width: 100%;
   border: 1px solid #d9e0e8;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.66);
   color: #172033;
   font-size: 13px;
 }
@@ -1298,7 +1299,7 @@ input {
 }
 
 input[disabled] {
-  background: #f2f4f7;
+  background: rgba(242, 244, 247, 0.7);
   color: #788293;
 }
 
@@ -1468,7 +1469,7 @@ textarea {
 .band-groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .band-group {
@@ -1478,9 +1479,10 @@ textarea {
   min-height: 250px;
   padding: 17px;
   flex-direction: column;
-  border: 1px solid #e1e7ef;
+  border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .band-group-header {
@@ -1553,7 +1555,7 @@ textarea {
   gap: 5px;
   border: 1px solid #e3e6ea;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.55);
   color: #536071;
   font-size: 12px;
   font-weight: 700;
@@ -1596,7 +1598,7 @@ textarea {
   gap: 7px;
   border: 1px solid #ded6f5;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.6);
   color: #6d5bd0;
   font-size: 12px;
   font-weight: 800;
@@ -1628,7 +1630,7 @@ textarea {
 }
 
 .section-gap {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .history-row {
@@ -1668,7 +1670,7 @@ textarea {
   padding: 12px 14px;
   border: 1px solid #e2e6ec;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .sms-card.selected {
@@ -1733,7 +1735,7 @@ textarea {
   justify-content: center;
   border: 1px solid #b9c3d1;
   border-radius: 4px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.75);
   color: #fff;
 }
 
@@ -1866,7 +1868,7 @@ textarea {
   gap: 12px;
   border: 1px solid #e2e6ec;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .client-card b,
@@ -1959,7 +1961,7 @@ textarea {
 .stock-frame-wrap {
   border: 1px solid #eceef2;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.72);
   overflow: hidden;
 }
 
@@ -2038,7 +2040,7 @@ textarea {
 .traffic-plan-panel .feature-form input {
   height: 34px;
   min-height: 34px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.66);
 }
 
 .traffic-plan-panel .action-row {
@@ -2057,7 +2059,7 @@ textarea {
   padding: 9px 11px;
   border: 1px solid #dce3ec;
   border-radius: 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.66);
   color: #25324a;
   font-size: 12px;
 }
@@ -2689,7 +2691,7 @@ textarea:focus {
   width: 100%;
   border: 1px solid #d5dbe3;
   border-radius: 8px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.66);
   color: #172033;
   font-size: 13px;
 }

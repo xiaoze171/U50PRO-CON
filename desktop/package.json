@@ -1,7 +1,7 @@
 {
   "name": "u50pro-console-desktop",
   "productName": "U50 Pro 控制台",
-  "version": "1.3.52",
+  "version": "1.3.53",
   "private": true,
   "description": "U50 Pro / MU5120 路由器控制台 桌面端（Electron 外壳，加载 H5 构建）",
   "main": "main.js",
