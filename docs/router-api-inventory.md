@@ -123,10 +123,11 @@ isTest=false&goformId=命令名&参数=值&AD=动态权限值
 | `realtime_rx_bytes` | 当前会话下载累计字节数 | bytes |
 | `realtime_tx_thrpt` | 当前上传瞬时吞吐 | 固件原始数值，项目按 bytes/s 格式化 |
 | `realtime_rx_thrpt` | 当前下载瞬时吞吐 | 固件原始数值，项目按 bytes/s 格式化 |
-| `realtime_time` | 当前会话时长 | 固件原始时长 |
+| `realtime_time` | 本次开机以来的时长 | 秒；设备开机即拨号，原厂首页"连接时长"同源，断网重连会被固件清零重计，项目作为开机时长展示 |
 | `monthly_rx_bytes` | 本月下载累计 | bytes |
 | `monthly_tx_bytes` | 本月上传累计 | bytes |
-| `monthly_time` | 本月累计联网时长 | 固件原始时长 |
+| `monthly_time` | 本月累计联网时长 | 秒 |
+| `total_time` | 累计使用时长 | 秒；实测随墙钟同步递增，原厂 Web UI 未使用（cpeManager 类管理软件的"使用时间"），项目作为累计使用展示 |
 | `date_month` | 统计月份 | 固件月份值 |
 
 说明：这些字段是流量统计和瞬时吞吐，**不是 SIM 套餐签约上下行速率**。

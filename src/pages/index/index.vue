@@ -112,7 +112,7 @@
               <view class="panel-header compact">
                 <view>
                   <text class="panel-title">设备信息</text>
-                  <text class="panel-subtitle">仅保留设备自身标识</text>
+                  <text class="panel-subtitle">设备标识与开机时间</text>
                 </view>
                 <RouterIcon :size="20" />
               </view>
@@ -546,7 +546,7 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.49';
+const APP_VERSION = '1.3.50';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -753,8 +753,38 @@ const deviceIdentityDetails = computed(() => toItems({
   'IMEI': firstValue(status.value.imei),
   '当前手机号': firstValue(status.value.msisdn, status.value.sim_msisdn, status.value.phone_number),
   '固件版本': firstValue(status.value.wa_inner_version, login.value.firmware),
-  'LAN IP': firstValue(status.value.lan_ipaddr)
+  'LAN IP': firstValue(status.value.lan_ipaddr),
+  '开机时长': formatRunDuration(status.value.realtime_time),
+  '开机时间': bootClockTime(),
+  '累计使用': formatRunDuration(status.value.total_time)
 }));
+
+// 开机时长取固件字段 realtime_time：设备开机即拨号，联网建立时刻即开机时刻，
+// 中途断网重连该值会被固件清零重计。开机时间 = 采样时间戳 - realtime_time。
+function formatRunDuration(raw) {
+  const total = numeric(raw);
+  if (total == null) return '—';
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days) return `${days} 天 ${hours} 小时`;
+  if (hours) return `${hours} 小时 ${minutes} 分`;
+  if (minutes) return `${minutes} 分`;
+  return `${Math.floor(total)} 秒`;
+}
+
+function bootClockTime() {
+  const seconds = numeric(status.value.realtime_time);
+  const sampledAt = Number(data.value.timestamp);
+  if (seconds == null || !Number.isFinite(sampledAt) || !sampledAt) return '—';
+  const boot = new Date(sampledAt - seconds * 1000);
+  const clock = boot.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const dayOf = value => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const today = dayOf(new Date());
+  if (dayOf(boot) === today) return `今天 ${clock}`;
+  if (dayOf(boot) === today - 86400000) return `昨天 ${clock}`;
+  return `${boot.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} ${clock}`;
+}
 
 const networkDetails = computed(() => toItems({
   '网络制式': networkType.value,

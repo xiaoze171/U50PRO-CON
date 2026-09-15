@@ -23,7 +23,7 @@ const signalFields = [
 const statusFields = [
   'loginfo', 'modem_main_state', 'simcard_roam', 'sim_iccid', 'imei', 'imsi', 'sim_imsi', 'msisdn', 'sim_msisdn', 'phone_number', 'opms_wan_mode', 'opms_wan_auto_mode',
   'ppp_status', 'wan_connect_status', 'wan_ipaddr', 'ipv6_wan_ipaddr', 'lan_ipaddr', 'wifi_mac_address', 'wa_inner_version', 'wa_version', 'hardware_version', 'web_version',
-  'realtime_tx_bytes', 'realtime_rx_bytes', 'realtime_tx_thrpt', 'realtime_rx_thrpt', 'realtime_time', 'monthly_rx_bytes', 'monthly_tx_bytes', 'monthly_time', 'date_month',
+  'realtime_tx_bytes', 'realtime_rx_bytes', 'realtime_tx_thrpt', 'realtime_rx_thrpt', 'realtime_time', 'monthly_rx_bytes', 'monthly_tx_bytes', 'monthly_time', 'total_time', 'date_month',
   'wifi_onoff_state', 'wifi_lbd_enable', 'wifi_chip1_ssid1_ssid', 'wifi_chip2_ssid1_ssid', 'wifi_chip1_ssid1_access_sta_num', 'wifi_chip2_ssid1_access_sta_num', 'wifi_access_sta_num',
   'battery_temp', 'battery_value', 'battery_vol_percent', 'battery_charging', 'battery_charg_type', 'external_charging_flag', 'battery_pers', 'battery_customer_mode',
   'battery_time', 'battery_remain_time', 'battery_remaining_time', 'battery_capacity', 'battery_health', 'battery_voltage', 'battery_current', 'sms_unread_num'
