@@ -778,7 +778,8 @@ async function verifyNrBandList(type, expectedValues) {
   let actual = '';
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const state = await getFields([field, 'nr5g_band_lock']);
-    const raw = state[field] !== undefined ? state[field] : state.nr5g_band_lock;
+    // sa/nsa 为空串表示无锁；nr5g_band_lock 是静态能力列表，仅在字段缺失（旧固件）时兜底。
+    const raw = state[field] !== undefined ? state[field] : (state.nr5g_band_lock === '0' ? '' : state.nr5g_band_lock);
     actual = String(raw ?? '').trim();
     const actualValues = parseNrBandList(raw);
     if (actualValues.length === expected.length && actualValues.every((value, index) => value === expected[index])) return;

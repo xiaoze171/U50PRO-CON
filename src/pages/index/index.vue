@@ -296,7 +296,7 @@
           </template>
 
           <template v-else-if="activeTab === 'usage'">
-            <MetricGrid :items="usageSummaryMetrics" centered />
+            <MetricGrid class="usage-summary-grid" :items="usageSummaryMetrics" centered />
             <section class="panel traffic-plan-panel">
               <view class="panel-header"><view><text class="panel-title">流量管理</text><text class="panel-subtitle">默认使用 GB，显示套餐、已用和剩余流量</text></view><Gauge :size="20" /></view>
               <MetricGrid :items="trafficPlanMetrics" />
@@ -546,7 +546,7 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.51';
+const APP_VERSION = '1.3.52';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -644,7 +644,12 @@ const nrBands = [1, 3, 5, 8, 28, 41, 77, 78];
 const lockedStatusTags = computed(() => {
   const locks = data.value.locks || {};
   const tags = [];
-  const sa = parseBandText(locks.nr5g_sa_band_lock || locks.nr5g_band_lock);
+  // 真机实验（2026-09-15）：nr5g_band_lock 是静态频段能力列表（恒 "1,78"），不是锁状态；
+  // 仅当固件不返回 sa 字段（undefined，旧固件）时才回退它，空串表示无锁。
+  const saRaw = locks.nr5g_sa_band_lock !== undefined && locks.nr5g_sa_band_lock !== null
+    ? String(locks.nr5g_sa_band_lock)
+    : String(locks.nr5g_band_lock ?? '');
+  const sa = parseBandText(saRaw);
   if (sa.length) tags.push(`SA: ${sa.map(band => `n${band}`).join(' ')}`);
   const nsa = parseBandText(locks.nr5g_nsa_band_lock);
   if (nsa.length) tags.push(`NSA: ${nsa.map(band => `n${band}`).join(' ')}`);
@@ -831,7 +836,7 @@ function qualityFillStyle(metric) {
 const cellParamsDetails = computed(() => toItems({
   PCI: displayPci(cellSignal.value.nr5g_pci, cellSignal.value.lte_pci),
   '频段': firstValue(cellSignal.value.nr5g_action_band, cellSignal.value.lte_ca_pcell_band, cellSignal.value.wan_active_band),
-  '信道/ARFCN': firstValue(cellSignal.value.nr5g_action_channel, cellSignal.value.Z5g_dlEarfcn, cellSignal.value.lte_ca_pcell_arfcn, cellSignal.value.wan_active_channel),
+  'ARFCN': firstValue(cellSignal.value.nr5g_action_channel, cellSignal.value.Z5g_dlEarfcn, cellSignal.value.lte_ca_pcell_arfcn, cellSignal.value.wan_active_channel),
   '带宽': firstValue(cellSignal.value.nr5g_nsa_bandwidth, cellSignal.value.lte_ca_pcell_bandwidth, cellSignal.value.bandwidth)
 }));
 
@@ -1318,7 +1323,7 @@ function buildLineSeries(item, windowMs, chartNow) {
 
 function applyInitialBands() {
   const locks = data.value.locks || {};
-  const saRaw = locks.nr5g_sa_band_lock || locks.nr5g_band_lock;
+  const saRaw = locks.nr5g_sa_band_lock !== undefined && locks.nr5g_sa_band_lock !== null ? locks.nr5g_sa_band_lock : locks.nr5g_band_lock;
   if (!bandSelectionsInitialized.sa && saRaw !== undefined && saRaw !== null && saRaw !== '') {
     // 保留全部回显频段：锁定的频段可能不在 chip 列表里（如 229），
     // 丢弃会让界面上看不出"已锁定"状态（固件 Web UI 却能看到）。
