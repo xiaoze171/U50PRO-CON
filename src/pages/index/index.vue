@@ -546,7 +546,7 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.50';
+const APP_VERSION = '1.3.51';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1148,13 +1148,14 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
     grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? (hideAxisLabels ? 28 : 46) : (hideAxisLabels ? 14 : 22), containLabel: true },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(15,23,42,.92)',
-      borderColor: 'rgba(255,255,255,.10)',
+      // 玻璃材质 tooltip：半透明白 + backdrop 模糊（ECharts tooltip 是 DOM，Chromium 支持）。
+      backgroundColor: 'rgba(255,255,255,0.72)',
+      borderColor: 'rgba(255,255,255,0.65)',
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: '#e2e8f0', fontSize: 11 },
-      extraCssText: 'border-radius:8px;box-shadow:0 10px 30px rgba(15,23,42,.22);',
-      axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.5)', width: 1, type: 'dashed' } }
+      textStyle: { color: '#1f2937', fontSize: 11 },
+      extraCssText: 'border-radius:12px;backdrop-filter:blur(14px) saturate(1.6);-webkit-backdrop-filter:blur(14px) saturate(1.6);box-shadow:0 12px 32px rgba(24,39,75,0.18),inset 0 1px 0 rgba(255,255,255,0.85);',
+      axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.45)', width: 1, type: 'dashed' } }
     },
     legend: { top: 0, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
     graphic: hasData ? [] : [{
@@ -1185,7 +1186,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         }
       },
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.7)' } },
+      axisLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.14)' } },
       splitLine: { show: false }
     },
     dataZoom: zoomEnabled ? [
@@ -1215,8 +1216,8 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
         height: 14,
         bottom: 4,
         borderColor: 'transparent',
-        backgroundColor: 'rgba(255, 255, 255, 0.55)',
-        fillerColor: 'rgba(91,141,239,.16)',
+        backgroundColor: 'rgba(255, 255, 255, 0.38)',
+        fillerColor: 'rgba(109,91,208,0.16)',
         dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
         selectedDataBackground: { lineStyle: { color: '#6d5bd0' }, areaStyle: { color: '#c8bef2', opacity: .22 } },
         handleSize: 12,
@@ -1228,9 +1229,9 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       }
     ] : [],
     yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } },
+      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.08)', width: 1 } } },
       { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.62)', width: 1 } } }],
+    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.08)', width: 1 } } }],
     series: series.map(item => buildLineSeries(item, windowMs, chartNow))
   };
 }
