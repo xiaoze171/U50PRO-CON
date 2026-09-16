@@ -85,14 +85,9 @@ final class MonitorOverlay {
             android.graphics.PixelFormat.TRANSLUCENT
         );
         layoutParams.gravity = Gravity.TOP | Gravity.START;
-        // 首次显示默认：水平居中、停靠屏幕顶部（状态栏下方）；用户拖动后记住新位置。
-        int defaultX = Math.max(0, (screenWidth() - dp(OVERLAY_WIDTH_DP)) / 2);
-        int defaultY = dp(40);
-        layoutParams.x = Math.max(0, Math.min(
-            preferences.getInt(KEY_X, defaultX),
-            screenWidth() - dp(OVERLAY_WIDTH_DP)
-        ));
-        layoutParams.y = preferences.getInt(KEY_Y, defaultY);
+        // 每次打开都回到默认位置：水平居中、停靠屏幕顶部（状态栏下方）；拖动位置仅在本次显示期间有效。
+        layoutParams.x = Math.max(0, (screenWidth() - dp(OVERLAY_WIDTH_DP)) / 2);
+        layoutParams.y = dp(40);
 
         container.setOnTouchListener(new DragListener());
         try {
