@@ -46,7 +46,7 @@
           <text class="page-title">{{ activeTabInfo.label }}</text>
         </view>
         <view class="top-actions">
-          <text class="last-update">更新于 {{ lastUpdate }}</text>
+          <text class="last-update">{{ collectionSourceLabel(data.source) }} · 更新于 {{ lastUpdate }}</text>
           <button class="icon-button" aria-label="立即刷新" @click="refresh(true)">
             <RefreshCw :size="19" />
           </button>
@@ -105,6 +105,7 @@
               <view class="temperature-overview-grid">
                 <MetricGrid :items="temperatureMetrics" centered />
                 <AppChart :option="temperatureChartOption" height="230px" />
+                <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
               </view>
             </section>
 
@@ -164,6 +165,7 @@
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="260px" />
+              <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
             </section>
 
             <section class="panel">
@@ -319,14 +321,15 @@
           <template v-else-if="activeTab === 'battery'">
             <MetricGrid :items="batteryMetrics" />
             <section class="panel section-gap">
-              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 24 小时电量记录，可拖动查看</text></view></view>
+              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 24 小时电量记录</text></view></view>
               <AppChart :option="batteryChartOption" height="280px" />
+              <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
             </section>
             <section class="panel">
               <view class="panel-header"><view><text class="panel-title">续航记录</text><text class="panel-subtitle">最近 {{ batterySamples.length }} 条</text></view></view>
               <view class="history-list">
                 <view v-for="sample in batterySamples.slice().reverse()" :key="sample.timestamp" class="history-row">
-                  <text>{{ formatDate(sample.timestamp) }}</text><b>{{ sample.percent }}%</b><text>{{ sample.charging ? '充电' : '放电' }}</text><text>{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
+                  <view class="history-time"><text>{{ formatDate(sample.timestamp) }}</text><text class="source-badge">{{ collectionSourceLabel(sample.source) }}</text></view><b>{{ sample.percent }}%</b><text>{{ sample.charging ? '充电' : '放电' }}</text><text>{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
                 </view>
                 <view v-if="!batterySamples.length" class="empty-state">记录样本不足，应用会继续自动积累。</view>
               </view>
@@ -484,6 +487,32 @@
               </view>
             </section>
             <section class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">息屏后台采集</text><text class="panel-subtitle">息屏或切到后台时由原生服务继续采集全部数据并保存 24 小时，回到页面自动补齐曲线</text></view><BatteryCharging :size="20" /></view>
+              <view class="overlay-setting-row">
+                <view class="overlay-setting-copy">
+                  <b>采集状态</b>
+                  <text>{{ backgroundStateText }}</text>
+                  <text v-if="backgroundBackfill">{{ backgroundBackfill }}</text>
+                  <text v-if="backgroundState.source">当前：{{ collectionSourceLabel(backgroundState.source) }}采集</text>
+                </view>
+              </view>
+              <view class="collection-source-summary">
+                <b>最近 24 小时归档来源</b>
+                <view class="collection-source-counts">
+                  <text v-for="(label, source) in collectionSourceLabels" :key="source" class="source-badge">{{ label }} {{ backgroundSourceCounts[source] || 0 }} 条</text>
+                </view>
+                <text class="source-hint">每分钟保留首条有效记录。悬浮窗指亮屏后台且悬浮窗显示；息屏优先。旧记录保留为未标记。</text>
+              </view>
+              <view v-if="backgroundState.available" class="overlay-setting-row">
+                <view class="overlay-setting-copy">
+                  <b>电池优化豁免</b>
+                  <text>{{ batteryOptimizationText }}</text>
+                </view>
+                <button v-if="!backgroundState.ignoring" class="secondary-button" @click="requestBatteryOptimization">去授权</button>
+              </view>
+              <text v-if="backgroundState.available" class="panel-subtitle">vivo 手机还需在「设置 › 应用 › U50 Pro 控制台」中允许自启动、后台高耗电，并在最近任务中锁定应用。</text>
+            </section>
+            <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">设备控制</text><text class="panel-subtitle">Wi-Fi 关闭后当前连接会立即中断，需要手动重新连接设备</text></view><Power :size="20" /></view>
               <view class="device-control-grid">
                 <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('wifi-on')"><Wifi :size="17" />开启 Wi-Fi</button>
@@ -540,13 +569,14 @@ import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
 import { syncClient } from '../../services/sync.js';
 import { buildCellCandidates } from '../../utils/cells.js';
-import { normalizePoints } from '../../utils/history.js';
+import { mergeChartHistory, normalizePoints } from '../../utils/history.js';
+import { collectionSourceLabels, collectionSourceLabel, historyTooltip } from '../../utils/collection-source.js';
 import {
   bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.54';
+const APP_VERSION = '1.3.55';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -686,10 +716,15 @@ const deviceActionResult = ref('');
 const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
 const overlayState = reactive(routerApi.getOverlayState());
+// 安卓后台采集状态与电池优化授权（仅 Android App 可用；息屏期间由原生服务持续采集落盘）。
+const backgroundState = reactive({ ...routerApi.getBackgroundMonitorState(), ...routerApi.getBatteryOptimizationState() });
+const backgroundSourceCounts = reactive({});
+const backgroundBackfill = ref('');
 const syncState = reactive(syncClient.getState());
 let pollTimer = null;
 let smsPollTimer = null;
 let clockTimer = null;
+let backgroundStateTimer = null;
 let lastChartHistorySave = 0;
 let lastCellDisplayUpdate = 0;
 let lastCellDisplaySignature = '';
@@ -717,6 +752,19 @@ const overlayStateText = computed(() => {
   if (!overlayState.available) return '仅 Android App 支持悬浮窗';
   if (!overlayState.enabled) return '已关闭';
   return overlayState.permitted ? '已开启，可拖动调整位置' : '已开启，等待系统悬浮窗权限';
+});
+const backgroundStateText = computed(() => {
+  if (!backgroundState.available) return '仅 Android App 支持息屏采集';
+  const saved = Number(backgroundState.lastSavedAt) || 0;
+  const savedText = saved ? `最近落盘 ${formatDate(saved)}` : '尚未落盘';
+  const error = backgroundState.lastError || backgroundState.collectionError;
+  if (error && !backgroundState.background) return `${savedText}（前台由页面采集）`;
+  if (error) return `${savedText}，后台采集异常：${error}`;
+  return backgroundState.background ? `${savedText}，后台采集中` : `${savedText}，前台由页面采集`;
+});
+const batteryOptimizationText = computed(() => {
+  if (!backgroundState.available) return '';
+  return backgroundState.ignoring ? '已豁免电池优化，息屏后系统不会限制采集' : '未豁免电池优化，息屏后可能被系统暂停';
 });
 const syncStateText = computed(() => {
   if (!syncState.supported) return '当前环境不支持（仅 EXE 桌面端与 Android App 可作服务节点，浏览器预览始终直连）';
@@ -941,8 +989,8 @@ const batteryChartOption = computed(() => {
   const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
   const points = batterySamples.value
     .filter(item => Number(item.timestamp) >= cutoff)
-    .map(item => [Number(item.timestamp), numeric(item.percent)]);
-  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS, xAxisLabels: false });
+    .map(item => [Number(item.timestamp), numeric(item.percent), item.source || 'unknown']);
+  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS, xAxisLabels: false, zoom: false });
 });
 
 function toItems(object) {
@@ -1046,12 +1094,12 @@ function pinCollector(id) {
   refreshSyncState();
 }
 
-function pushHistory(list, timestamp, value) {
+function pushHistory(list, timestamp, value, source) {
   if (value == null) return;
   const bucketTime = Math.floor(timestamp / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS;
   const last = list.at(-1);
-  if (last?.[0] === bucketTime) last[1] = value;
-  else list.push([bucketTime, value]);
+  if (last?.[0] === bucketTime) { last[1] = value; last[2] = source; }
+  else list.push([bucketTime, value, source]);
   pruneHistory(list, timestamp);
 }
 
@@ -1068,39 +1116,21 @@ function captureHistory(payload) {
   const nextSignal = payload.signal || {};
   const nextStatus = payload.status || {};
   const nextTemperature = payload.temperature || {};
-  pushHistory(histories.rsrp, timestamp, numeric(firstValue(nextSignal.Z5g_rsrp, nextSignal.lte_rsrp, nextSignal.rssi)));
-  pushHistory(histories.sinr, timestamp, numeric(firstValue(nextSignal.Z5g_SINR, nextSignal.Z5g_snr, nextSignal.lte_snr)));
-  pushHistory(histories.rsrq, timestamp, numeric(firstValue(nextSignal.Z5g_rsrq, nextSignal.lte_rsrq)));
-  pushHistory(histories.down, timestamp, numeric(nextStatus.realtime_rx_thrpt));
-  pushHistory(histories.up, timestamp, numeric(nextStatus.realtime_tx_thrpt));
+  const source = payload.source || 'unknown';
+  pushHistory(histories.rsrp, timestamp, numeric(firstValue(nextSignal.Z5g_rsrp, nextSignal.lte_rsrp, nextSignal.rssi)), source);
+  pushHistory(histories.sinr, timestamp, numeric(firstValue(nextSignal.Z5g_SINR, nextSignal.Z5g_snr, nextSignal.lte_snr)), source);
+  pushHistory(histories.rsrq, timestamp, numeric(firstValue(nextSignal.Z5g_rsrq, nextSignal.lte_rsrq)), source);
+  pushHistory(histories.down, timestamp, numeric(nextStatus.realtime_rx_thrpt), source);
+  pushHistory(histories.up, timestamp, numeric(nextStatus.realtime_tx_thrpt), source);
   Object.entries(nextTemperature).forEach(([key, value]) => {
     if (!/temp|sensor|temperature/i.test(key) || /level|oom_temp_pro/i.test(key)) return;
     const number = numeric(value);
     if (number == null) return;
     if (!Array.isArray(histories.temperatures[key])) histories.temperatures[key] = [];
-    pushHistory(histories.temperatures[key], timestamp, number);
+    pushHistory(histories.temperatures[key], timestamp, number, source);
   });
   Object.values(histories.temperatures).forEach(values => pruneHistory(values, timestamp));
   persistChartHistory();
-}
-
-function stableTimeBuckets(values, maximum = 720, windowMs = METRIC_HISTORY_WINDOW_MS) {
-  if (!Array.isArray(values) || !values.length) return [];
-  const bucketMs = Math.max(1000, Math.ceil(windowMs / maximum / 1000) * 1000);
-  const buckets = new Map();
-  values.forEach(point => {
-    const timestamp = Number(point?.[0]);
-    const value = numeric(point?.[1]);
-    if (!Number.isFinite(timestamp) || value == null) return;
-    const bucketStart = Math.floor(timestamp / bucketMs) * bucketMs;
-    const bucket = buckets.get(bucketStart) || { sum: 0, count: 0 };
-    bucket.sum += value;
-    bucket.count += 1;
-    buckets.set(bucketStart, bucket);
-  });
-  return [...buckets.entries()]
-    .sort((left, right) => left[0] - right[0])
-    .map(([bucketStart, bucket]) => [bucketStart + bucketMs, Number((bucket.sum / bucket.count).toFixed(3))]);
 }
 
 function smoothSeries(values, windowSize = 3) {
@@ -1113,13 +1143,14 @@ function smoothSeries(values, windowSize = 3) {
     const start = Math.max(0, i - half);
     const end = Math.min(values.length - 1, i + half);
     for (let j = start; j <= end; j++) {
+      if (values[j][2] !== point[2]) continue;
       const v = numeric(values[j][1]);
       if (Number.isFinite(v)) {
         sum += v;
         count++;
       }
     }
-    return count ? [t, Number((sum / count).toFixed(2))] : point;
+    return count ? [t, Number((sum / count).toFixed(2)), point[2] || 'unknown'] : point;
   });
 }
 
@@ -1153,6 +1184,7 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
     grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? (hideAxisLabels ? 28 : 46) : (hideAxisLabels ? 14 : 22), containLabel: true },
     tooltip: {
       trigger: 'axis',
+      formatter: historyTooltip,
       // 玻璃材质 tooltip：半透明白 + backdrop 模糊（ECharts tooltip 是 DOM，Chromium 支持）。
       backgroundColor: 'rgba(255,255,255,0.72)',
       borderColor: 'rgba(255,255,255,0.65)',
@@ -1293,7 +1325,7 @@ function ensureVisibleSeries(data, chartNow, windowMs, emptyValue) {
     const timestamp = Number(point?.[0]);
     const value = numeric(point?.[1]);
     if (Number.isFinite(timestamp) && value != null) {
-      return [[Math.max(chartNow - windowMs, timestamp - CHART_HISTORY_SAMPLE_MS), value], point];
+      return [[Math.max(chartNow - windowMs, timestamp - CHART_HISTORY_SAMPLE_MS), value, point[2] || 'unknown'], point];
     }
   }
   if (emptyValue == null) return [];
@@ -1302,13 +1334,15 @@ function ensureVisibleSeries(data, chartNow, windowMs, emptyValue) {
 
 function buildLineSeries(item, windowMs, chartNow) {
   const color = item.color;
-  const bucketed = item.bucketed ? item.data : stableTimeBuckets(item.data, 720, windowMs);
+  // History is already sampled per minute. Keep each value and its source together.
+  const bucketed = item.data;
   const data = markLivePoint(ensureVisibleSeries(bucketed, chartNow, windowMs, item.emptyValue), color);
   return {
     id: item.name,
     name: item.name,
     type: 'line',
     data,
+    encode: { x: 0, y: 1 },
     yAxisIndex: item.axis || 0,
     showSymbol: false,
     symbol: 'circle',
@@ -1467,6 +1501,7 @@ function mergeDashboard(previous, incoming) {
   return {
     ...previous,
     ...incoming,
+    source: (stale ? previous?.source : incoming?.source) || 'unknown',
     login: record('login'),
     status: record('status'),
     signal: record('signal'),
@@ -1849,21 +1884,25 @@ async function loadSms() {
   if (smsRefreshing.value) return;
   smsRefreshing.value = true;
   try {
-    const result = await routerApi.listSms();
-    messages.value = (result.messages || []).map(message => ({
-      ...message,
-      verificationCode: extractVerificationCode(message.content)
-    }));
-    const currentIds = new Set(messages.value.map(smsMessageId).filter(Boolean));
-    selectedSmsIds.value = selectedSmsIds.value.filter(id => currentIds.has(id));
-    const capacity = result.capacity || {};
-    const used = (numeric(capacity.sms_nv_rev_total) || 0) + (numeric(capacity.sms_nv_send_total) || 0) + (numeric(capacity.sms_nv_draftbox_total) || 0);
-    smsCapacity.value = capacity.sms_nv_total ? `${used}/${capacity.sms_nv_total}` : `状态 ${result.ready?.sms_cmd_status_result || '—'}`;
+    applySmsSnapshot(await routerApi.listSms());
   } catch (error) {
     errorMessage.value = error.message;
   } finally {
     smsRefreshing.value = false;
   }
+}
+
+// 短信列表既来自实时轮询，也可能来自后台落盘的快照（路由器离线时兜底显示）。
+function applySmsSnapshot(result) {
+  messages.value = (result.messages || []).map(message => ({
+    ...message,
+    verificationCode: extractVerificationCode(message.content)
+  }));
+  const currentIds = new Set(messages.value.map(smsMessageId).filter(Boolean));
+  selectedSmsIds.value = selectedSmsIds.value.filter(id => currentIds.has(id));
+  const capacity = result.capacity || {};
+  const used = (numeric(capacity.sms_nv_rev_total) || 0) + (numeric(capacity.sms_nv_send_total) || 0) + (numeric(capacity.sms_nv_draftbox_total) || 0);
+  smsCapacity.value = capacity.sms_nv_total ? `${used}/${capacity.sms_nv_total}` : `状态 ${result.ready?.sms_cmd_status_result || '—'}`;
 }
 
 function smsMessageId(message) {
@@ -1954,6 +1993,41 @@ function syncOverlayState() {
   Object.assign(overlayState, routerApi.getOverlayState());
 }
 
+function syncBackgroundState() {
+  Object.assign(backgroundState, routerApi.getBackgroundMonitorState(), routerApi.getBatteryOptimizationState());
+}
+
+function requestBatteryOptimization() {
+  settingsResult.value = '请在系统弹窗中允许 U50 Pro 控制台忽略电池优化';
+  routerApi.requestIgnoreBatteryOptimizations();
+}
+
+// 回到页面时把原生服务在息屏期间落盘的历史合并进图表与电池曲线。
+// 分钟桶并集幂等，重复回补安全；短信快照仅在短信列表为空时兜底显示。
+let backfillingBackground = false;
+async function backfillBackgroundHistory() {
+  if (backfillingBackground || !backgroundState.available) return;
+  backfillingBackground = true;
+  try {
+    const history = await routerApi.getBackgroundHistory();
+    if (!history || typeof history !== 'object') return;
+    if (history.chart) applyChartUpdater(current => mergeChartHistory(current, history.chart, { cutoff: Date.now() - METRIC_HISTORY_WINDOW_MS, sampleMs: CHART_HISTORY_SAMPLE_MS, maxPoints: CHART_HISTORY_MAX_POINTS }));
+    if (Array.isArray(history.battery) && history.battery.length) {
+      const merged = routerApi.mergeExternalBattery(history.battery);
+      if (data.value.battery) data.value.battery = { ...data.value.battery, samples: merged };
+    }
+    if (history.sms?.messages?.length && !messages.value.length) applySmsSnapshot(history.sms);
+    const count = Number(history.snapshotCount) || 0;
+    Object.keys(collectionSourceLabels).forEach(source => { backgroundSourceCounts[source] = Number(history.sourceCounts?.[source]) || 0; });
+    backgroundBackfill.value = count ? `已回补 ${count} 条分钟记录（含前台与后台）` : '';
+  } catch (error) {
+    backgroundBackfill.value = `后台历史回补失败：${error.message}`;
+  } finally {
+    backfillingBackground = false;
+    syncBackgroundState();
+  }
+}
+
 function toggleOverlay(event) {
   const enabled = Boolean(event?.detail?.value);
   Object.assign(overlayState, routerApi.setOverlayEnabled(enabled));
@@ -1967,6 +2041,8 @@ function toggleOverlay(event) {
 
 function handlePageShow() {
   setTimeout(syncOverlayState, 250);
+  // 从后台/息屏回到页面：先回补原生落盘的历史，再由轮询接续。
+  setTimeout(backfillBackgroundHistory, 300);
 }
 
 function confirmAction(title, content, confirmText = '继续') {
@@ -2009,6 +2085,7 @@ async function testDeveloper() {
 }
 
 async function initialize() {
+  await backfillBackgroundHistory();
   await refresh();
 }
 
@@ -2023,8 +2100,10 @@ onMounted(() => {
   refreshSyncState();
   initialize();
   syncOverlayState();
+  syncBackgroundState();
   if (typeof window !== 'undefined') window.addEventListener('pageshow', handlePageShow);
   pollTimer = setInterval(refresh, 1000);
+  backgroundStateTimer = setInterval(syncBackgroundState, 5000);
   smsPollTimer = setInterval(() => {
     if (activeTab.value === 'manage' && managementTab.value === 'sms' && !actionBusy.value) loadSms();
   }, SMS_REFRESH_MS);
@@ -2051,6 +2130,7 @@ onBeforeUnmount(() => {
   clearInterval(pollTimer);
   clearInterval(smsPollTimer);
   clearInterval(clockTimer);
+  clearInterval(backgroundStateTimer);
   if (typeof window !== 'undefined') window.removeEventListener('pageshow', handlePageShow);
 });
 </script>

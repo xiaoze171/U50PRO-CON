@@ -121,6 +121,25 @@ public final class RouterBridge {
     }
 
     @JavascriptInterface
+    public void getBackgroundHistory(final String requestId) {
+        executor.execute(() -> {
+            String history = BackgroundMonitorService.readMonitorHistory(webView.getContext());
+            String script = "window.__mu5120HistoryResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(history) + ")";
+            webView.post(() -> webView.evaluateJavascript(script, null));
+        });
+    }
+
+    @JavascriptInterface
+    public String getBackgroundMonitorState() {
+        return BackgroundMonitorService.readMonitorState(webView.getContext());
+    }
+
+    @JavascriptInterface
+    public void updateBackgroundSms(String payload) {
+        BackgroundMonitorService.acceptSms(webView.getContext(), payload);
+    }
+
+    @JavascriptInterface
     public void updateBackgroundSnapshot(String payload) {
         BackgroundMonitorService.acceptSnapshot(webView.getContext(), payload);
     }
@@ -182,7 +201,7 @@ public final class RouterBridge {
                 String host = url.getHost();
                 if (!isLocalRouterHost(host)) throw new SecurityException("只允许访问局域网路由器地址");
 
-                connection = (HttpURLConnection) url.openConnection();
+                connection = RouterNetwork.open(webView.getContext(), url);
                 connection.setRequestMethod(input.optString("method", "GET").toUpperCase());
                 int timeout = Math.min(Math.max(input.optInt("timeoutMs", 12000), 1000), 20000);
                 connection.setConnectTimeout(timeout);

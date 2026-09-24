@@ -1,5 +1,6 @@
 import CryptoJS from 'crypto-js';
 import { mergeBatterySamples as mergeBatterySamplesShared } from '../utils/history.js';
+import routerFields from './router-fields.json' with { type: 'json' };
 
 const DEFAULT_CONFIG = {
   routerUrl: 'http://192.168.0.1',
@@ -8,43 +9,15 @@ const DEFAULT_CONFIG = {
   pollIntervalMs: 1000
 };
 
-const BATTERY_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
-const BATTERY_HISTORY_MAX_POINTS = 725;
+const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const BATTERY_HISTORY_MAX_POINTS = 1445;
 const NATIVE_BATTERY_MERGE_MS = 30000;
 
-const signalFields = [
-  'network_type', 'network_provider', 'Operator', 'rmcc', 'rmnc', 'mdm_mcc', 'mdm_mnc', 'rssi', 'lte_rssi', 'rscp', 'lte_rsrp', 'lte_rsrq', 'lte_snr', 'ecio',
-  'Z5g_snr', 'Z5g_SINR', 'Z5g_rsrp', 'Z5g_rsrq', 'Z5g_rssi', 'signalbar', 'wan_lte_ca', 'nr_ca_dl_state', 'nr_ca_ul_state',
-  'lte_pci', 'cell_id', 'wan_active_band', 'wan_active_channel', 'bandwidth', 'lte_ca_pcell_arfcn', 'lte_ca_pcell_band', 'lte_ca_pcell_bandwidth',
-  'lte_ca_scell_arfcn', 'lte_ca_scell_band', 'lte_ca_scell_bandwidth', 'lte_ca_scell_info', 'lte_multi_ca_scell_info', 'lte_multi_ca_scell_sig_info',
-  'nr5g_pci', 'nr5g_action_band', 'nr5g_action_channel', 'nr5g_cell_id', 'Z5g_CELL_ID', 'Z5g_dlEarfcn', 'nr5g_nsa_bandwidth', 'nr_multi_ca_scell_info'
-];
-
-const statusFields = [
-  'loginfo', 'modem_main_state', 'simcard_roam', 'sim_iccid', 'imei', 'imsi', 'sim_imsi', 'msisdn', 'sim_msisdn', 'phone_number', 'opms_wan_mode', 'opms_wan_auto_mode',
-  'ppp_status', 'wan_connect_status', 'wan_ipaddr', 'ipv6_wan_ipaddr', 'lan_ipaddr', 'wifi_mac_address', 'wa_inner_version', 'wa_version', 'hardware_version', 'web_version',
-  'realtime_tx_bytes', 'realtime_rx_bytes', 'realtime_tx_thrpt', 'realtime_rx_thrpt', 'realtime_time', 'monthly_rx_bytes', 'monthly_tx_bytes', 'monthly_time', 'total_time', 'date_month',
-  'wifi_onoff_state', 'wifi_lbd_enable', 'wifi_chip1_ssid1_ssid', 'wifi_chip2_ssid1_ssid', 'wifi_chip1_ssid1_access_sta_num', 'wifi_chip2_ssid1_access_sta_num', 'wifi_access_sta_num',
-  'battery_temp', 'battery_value', 'battery_vol_percent', 'battery_charging', 'battery_charg_type', 'external_charging_flag', 'battery_pers', 'battery_customer_mode',
-  'battery_time', 'battery_remain_time', 'battery_remaining_time', 'battery_capacity', 'battery_health', 'battery_voltage', 'battery_current', 'sms_unread_num'
-];
-
-// 流量页面使用的原厂字段。接口层保留路由器的原始格式，页面再转换为 GB。
-const featureFields = [
-  'data_volume_limit_switch', 'data_volume_limit_unit', 'data_volume_limit_size',
-  'data_volume_alert_percent', 'wan_auto_clear_flow_data_switch', 'traffic_clear_date'
-];
-
-const temperatureFields = [
-  'battery_temp', 'wifi_chip_temp', 'wifi_temp_level_1', 'wifi_temp_level_2', 'pm_sensor_pa1', 'pm_sensor_mdm', 'pm_modem_5g',
-  'therm_pa_level', 'therm_pa_frl_level', 'therm_tj_level', 'OOM_TEMP_PRO', 'cpu_temp', 'cpu_temperature', 'soc_temp', 'board_temp', 'modem_temp'
-];
-
-const resourceFields = [
-  'cpu_usage', 'cpu_load', 'cpu_percent', 'mem_usage', 'memory_usage', 'memory_percent', 'mem_total', 'mem_free', 'MemTotal', 'MemFree', 'ram_total', 'ram_free', 'loadavg'
-];
-
-const lockFields = ['nr5g_cell_lock', 'lte_band_lock', 'lte_freq_lock', 'lte_pci_lock', 'lte_earfcn_lock', 'nr5g_band_lock', 'nr5g_sa_band_lock', 'nr5g_nsa_band_lock', 'operate_mode'];
+// 与 Android 后台共享字段清单，新增字段会同时进入前后台采集。
+const {
+  status: statusFields, signal: signalFields, temperature: temperatureFields,
+  resources: resourceFields, locks: lockFields, features: featureFields
+} = routerFields;
 const lteBandMasks = { 1: '0x000000001', 3: '0x000000004', 5: '0x000000010', 7: '0x000000040', 8: '0x000000080', 20: '0x000080000', 28: '0x008000000', 34: '0x200000000', 38: '0x2000000000', 39: '0x4000000000', 40: '0x8000000000', 41: '0x10000000000' };
 const nrBandSet = new Set([1, 3, 5, 8, 28, 41, 77, 78]);
 
@@ -173,11 +146,12 @@ function syncBackgroundConfig() {
   }
 }
 
-function updateBackgroundSnapshot(status, temperature) {
+function updateBackgroundSnapshot(snapshot) {
   const bridge = nativeBridge();
   if (!bridge || typeof bridge.updateBackgroundSnapshot !== 'function') return;
   try {
-    bridge.updateBackgroundSnapshot(JSON.stringify({ status, temperature }));
+    const { battery, ...payload } = snapshot;
+    bridge.updateBackgroundSnapshot(JSON.stringify(payload));
   } catch {}
 }
 
@@ -206,6 +180,67 @@ function setOverlayEnabled(enabled) {
 function requestOverlayPermission() {
   const bridge = nativeBridge();
   if (bridge && typeof bridge.requestOverlayPermission === 'function') bridge.requestOverlayPermission();
+}
+
+// —— 安卓后台全量采集：历史回补、采集状态与电池优化授权 —— //
+
+let historyRequestSequence = 0;
+const historyRequests = new Map();
+
+// 读取原生服务落盘的 24 小时历史（分钟级图表序列 + 电池样本 + 短信快照）。
+// 文件可能有上千条记录，原生侧异步读取后经 window.__mu5120HistoryResponse 回调。
+function getBackgroundHistory() {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.getBackgroundHistory !== 'function') return Promise.resolve(null);
+  if (typeof window.__mu5120HistoryResponse !== 'function') {
+    window.__mu5120HistoryResponse = (id, raw) => {
+      const pending = historyRequests.get(id);
+      if (!pending) return;
+      historyRequests.delete(id);
+      clearTimeout(pending.timer);
+      try { pending.resolve(JSON.parse(raw || '{}')); } catch (error) { pending.reject(error); }
+    };
+  }
+  return new Promise((resolve, reject) => {
+    const id = `history-${Date.now()}-${++historyRequestSequence}`;
+    const timer = setTimeout(() => {
+      historyRequests.delete(id);
+      reject(new Error('读取后台历史超时'));
+    }, 15000);
+    historyRequests.set(id, { resolve, reject, timer });
+    try {
+      bridge.getBackgroundHistory(id);
+    } catch (error) {
+      clearTimeout(timer);
+      historyRequests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+function getBackgroundMonitorState() {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.getBackgroundMonitorState !== 'function') return { available: false };
+  try {
+    return { available: true, ...JSON.parse(bridge.getBackgroundMonitorState() || '{}') };
+  } catch {
+    return { available: true };
+  }
+}
+
+function getBatteryOptimizationState() {
+  const bridge = nativeBridge();
+  if (!bridge || typeof bridge.isIgnoringBatteryOptimizations !== 'function') return { available: false, ignoring: false };
+  try {
+    return { available: true, ignoring: Boolean(bridge.isIgnoringBatteryOptimizations()) };
+  } catch {
+    return { available: true, ignoring: false };
+  }
+}
+
+function requestIgnoreBatteryOptimizations() {
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.requestIgnoreBatteryOptimizations === 'function') bridge.requestIgnoreBatteryOptimizations();
 }
 
 function sha256(value) {
@@ -431,7 +466,7 @@ async function dashboard() {
     getFields(lockFields),
     getCommand('station_list').catch(() => ({ station_list: [] })),
     getCommand('lan_station_list').catch(() => ({ lan_station_list: [] })),
-    getFields(['network_type', 'lte_ngbr_cell_info_ext', 'sa_ngbr_cell_manual_result_ext']).catch(() => ({})),
+    getFields(routerFields.neighbors).catch(() => ({})),
     getFields(featureFields).catch(() => ({}))
   ]);
   mergeNativeBatteryHistory();
@@ -444,9 +479,9 @@ async function dashboard() {
     });
     saveBatteryHistory();
   }
-  updateBackgroundSnapshot(status, temperature);
-  return {
+  const snapshot = {
     timestamp: Date.now(),
+    source: 'foreground',
     login: { ...loginState },
     status,
     signal,
@@ -459,6 +494,8 @@ async function dashboard() {
     features,
     battery
   };
+  updateBackgroundSnapshot(snapshot);
+  return snapshot;
 }
 
 function trafficSizeValue(gigabytes) {
@@ -518,6 +555,7 @@ function recordBattery(status, temperature) {
   if (last && timestamp - last.timestamp < 60000 && last.charging === charging) return null;
   const sample = {
     timestamp,
+    source: 'foreground',
     percent,
     charging,
     temperature: numeric(temperature.battery_temp),
@@ -584,11 +622,18 @@ async function listSms() {
     getCommand('sms_data_total', { page: 0, data_per_page: 500, mem_store: 1, tags: 10, order_by: 'order by id desc' }),
     getCommand('sms_capacity_info')
   ]);
-  return {
+  const snapshot = {
+    timestamp: Date.now(),
+    source: 'foreground',
     ready,
     capacity,
     messages: normalizeList(list.messages).map(item => ({ ...item, content: decodeSmsHex(item.content), rawContent: item.content }))
   };
+  const bridge = nativeBridge();
+  if (bridge && typeof bridge.updateBackgroundSms === 'function') {
+    bridge.updateBackgroundSms(JSON.stringify(snapshot));
+  }
+  return snapshot;
 }
 
 async function sendSms(number, message) {
@@ -906,6 +951,10 @@ export const routerApi = {
   getOverlayState,
   setOverlayEnabled,
   requestOverlayPermission,
+  getBackgroundHistory,
+  getBackgroundMonitorState,
+  getBatteryOptimizationState,
+  requestIgnoreBatteryOptimizations,
   controlDevice,
   login,
   developerLogin,

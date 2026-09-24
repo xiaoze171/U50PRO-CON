@@ -27,6 +27,7 @@ final class MonitorOverlay {
     private final WindowManager windowManager;
     private OverlayView root;
     private WindowManager.LayoutParams layoutParams;
+    private volatile boolean showing;
 
     MonitorOverlay(Context context) {
         this.context = context.getApplicationContext();
@@ -49,6 +50,7 @@ final class MonitorOverlay {
     }
 
     void remove() {
+        showing = false;
         if (root == null || windowManager == null) return;
         try {
             windowManager.removeView(root);
@@ -60,6 +62,8 @@ final class MonitorOverlay {
     private boolean canDraw() {
         return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context);
     }
+
+    boolean isShowing() { return showing && canDraw(); }
 
     private void ensureView() {
         if (root != null || windowManager == null) return;
@@ -93,6 +97,7 @@ final class MonitorOverlay {
         try {
             windowManager.addView(container, layoutParams);
             root = container;
+            showing = true;
         } catch (Exception ignored) {
             root = null;
             layoutParams = null;

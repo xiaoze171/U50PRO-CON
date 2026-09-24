@@ -25,7 +25,9 @@ export function normalizePoints(list, options = {}) {
     const pointValue = numeric(item?.[1]);
     if (!Number.isFinite(timestamp) || timestamp < cutoff || pointValue == null) return;
     const bucketTime = Math.floor(timestamp / sampleMs) * sampleMs;
-    buckets.set(bucketTime, [bucketTime, pointValue]);
+    const point = [bucketTime, pointValue];
+    if (typeof item[2] === 'string') point.push(item[2]);
+    buckets.set(bucketTime, point);
   });
   const points = [...buckets.values()].sort((left, right) => left[0] - right[0]);
   return Number.isFinite(maxPoints) ? points.slice(-maxPoints) : points;
@@ -79,7 +81,9 @@ export function mergeBatterySamples(sources, options = {}) {
     const charging = Boolean(item?.charging);
     const key = `${Math.floor(timestamp / MINUTE_MS)}:${charging ? 1 : 0}`;
     const previous = buckets.get(key) || {};
-    buckets.set(key, { ...previous, ...item, timestamp, percent, charging });
+    const merged = { ...previous, ...item, timestamp, percent, charging };
+    if (!Object.hasOwn(item, 'source')) delete merged.source;
+    buckets.set(key, merged);
   });
   const samples = [...buckets.values()].sort((left, right) => left.timestamp - right.timestamp);
   return Number.isFinite(maxPoints) ? samples.slice(-maxPoints) : samples;

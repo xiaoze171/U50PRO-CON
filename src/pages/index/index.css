@@ -244,7 +244,8 @@
   align-items: center;
   gap: 14px;
   border-bottom: 1px solid var(--glass-line);
-  background: rgba(255, 255, 255, 0.42);
+  /* Match Android's page_background status bar without a translucent seam. */
+  background: #eef1f7;
   backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.8);
 }
@@ -1648,6 +1649,45 @@ textarea {
   color: #6d5bd0;
 }
 
+.history-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 0;
+}
+
+.source-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid rgba(109, 91, 208, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.45);
+  color: #47536b;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.source-hint {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.collection-source-summary {
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.collection-source-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .sms-compose {
   display: grid;
   grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1.55fr);
@@ -2488,7 +2528,7 @@ textarea {
     gap: 7px;
   }
 
-  .history-row text:last-child {
+  .history-row > text:last-child {
     display: none;
   }
 }
@@ -2501,7 +2541,7 @@ textarea {
 
   .sidebar { background: rgba(255, 255, 255, 0.96); }
 
-  .topbar { background: rgba(255, 255, 255, 0.97); }
+  .topbar { background: #eef1f7; }
 
   .panel,
   .network-hero,

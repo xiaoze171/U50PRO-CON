@@ -14,25 +14,18 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -53,6 +46,7 @@ public final class BackgroundMonitorService extends Service {
     private static final String ACTION_FOREGROUND = "cn.mu5120.console.monitor.FOREGROUND";
     private static final String ACTION_CONFIGURE = "cn.mu5120.console.monitor.CONFIGURE";
     private static final String ACTION_SNAPSHOT = "cn.mu5120.console.monitor.SNAPSHOT";
+    private static final String ACTION_SMS = "cn.mu5120.console.monitor.SMS";
     private static final String ACTION_SESSION = "cn.mu5120.console.monitor.SESSION";
     private static final String ACTION_CLEAR_SESSION = "cn.mu5120.console.monitor.CLEAR_SESSION";
     private static final String ACTION_OVERLAY = "cn.mu5120.console.monitor.OVERLAY";
@@ -72,16 +66,25 @@ public final class BackgroundMonitorService extends Service {
     private WifiManager.WifiLock wifiLock;
     private volatile boolean running;
     private volatile boolean appForeground = true;
-    private String routerUrl = "http://192.168.0.1";
-    private String password = "111111";
+    private volatile long foregroundUntil;
+    private volatile String routerUrl = "http://192.168.0.1";
+    private volatile String password = "111111";
+    private MonitorHistoryStore historyStore;
+    private MonitorRouterClient routerClient;
+    private String clientUrl = "";
+    private String clientPassword = "";
+    private long lastSmsPoll;
+    private long lastWatchdog;
+    private long lastStateWrite;
+    private long lastSavedAt;
+    private String lastCollectionError = "";
     private String lastSpeedDown = "0 B/s";
     private String lastSpeedUp = "0 B/s";
     private String lastBattery = "未知";
     private String lastTemperature = "未知";
     private String lastError = "";
     private volatile long lastSuccessAt;
-    private boolean loggedIn;
-    private boolean overlayEnabled;
+    private volatile boolean overlayEnabled;
 
     public static void start(Context context) {
         sendCommand(context, new Intent(context, BackgroundMonitorService.class));
@@ -133,6 +136,23 @@ public final class BackgroundMonitorService extends Service {
         sendCommand(context, intent);
     }
 
+    public static void acceptSms(Context context, String payload) {
+        sendCommand(context, new Intent(context, BackgroundMonitorService.class)
+            .setAction(ACTION_SMS).putExtra("payload", payload));
+    }
+
+    public static String readMonitorHistory(Context context) {
+        try { return new MonitorHistoryStore(context.getFilesDir()).read(System.currentTimeMillis(), false).toString(); }
+        catch (Exception error) {
+            Log.e(TAG, "read history failed", error);
+            return "{}";
+        }
+    }
+
+    public static String readMonitorState(Context context) {
+        return MonitorHistoryStore.readJson(new File(context.getFilesDir(), "monitor-state.json")).toString();
+    }
+
     public static void acceptSession(Context context, String cookieHeader) {
         Intent intent = new Intent(context, BackgroundMonitorService.class)
             .setAction(ACTION_SESSION)
@@ -162,8 +182,12 @@ public final class BackgroundMonitorService extends Service {
 
     private static void sendCommand(Context context, Intent intent) {
         Context app = context.getApplicationContext();
-        if (Build.VERSION.SDK_INT >= 26) app.startForegroundService(intent);
-        else app.startService(intent);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) app.startForegroundService(intent);
+            else app.startService(intent);
+        } catch (RuntimeException error) {
+            Log.e(TAG, "无法启动后台监测，请打开应用并允许后台运行", error);
+        }
     }
 
     @Override
@@ -176,6 +200,7 @@ public final class BackgroundMonitorService extends Service {
         password = preferences.getString(KEY_PASSWORD, "111111");
         overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false);
         appForeground = preferences.getLong(KEY_FOREGROUND_UNTIL, 0) > System.currentTimeMillis();
+        foregroundUntil = appForeground ? SystemClock.elapsedRealtime() + 15000 : 0;
         Log.w(TAG, "service created foreground=" + appForeground);
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
@@ -184,12 +209,14 @@ public final class BackgroundMonitorService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification("正在启动后台监测…"));
         updateOverlay();
         acquireLocks();
+        historyStore = new MonitorHistoryStore(getFilesDir());
+        JSONObject savedState = MonitorHistoryStore.readJson(new File(getFilesDir(), "monitor-state.json"));
+        lastSavedAt = savedState.optLong("lastSavedAt");
         executor = Executors.newSingleThreadScheduledExecutor();
-        if (!isAppForeground()) {
-            pollNow();
-            startFastPolling();
-            scheduleWatchdog();
-        }
+        // Keep a low-cost ticker alive even in the foreground. If the UI process disappears
+        // without onPause, its heartbeat expires and native collection takes over.
+        startFastPolling();
+        scheduleWatchdog();
     }
 
     @Override
@@ -202,16 +229,8 @@ public final class BackgroundMonitorService extends Service {
                     Log.w(TAG, foreground ? "[FG] 应用切换到前台" : "[BG] 应用切换到后台");
                 }
                 appForeground = foreground;
-                updateNotification();
-                if (foreground) {
-                    stopFastPolling();
-                    cancelWatchdog();
-                }
-                else {
-                    pollNow();
-                    startFastPolling();
-                    scheduleWatchdog();
-                }
+                foregroundUntil = foreground ? SystemClock.elapsedRealtime() + 15000 : 0;
+                if (!foreground) scheduleWatchdog();
             } else if (ACTION_CONFIGURE.equals(action)) {
                 routerUrl = intent.getStringExtra(KEY_URL);
                 password = intent.getStringExtra(KEY_PASSWORD);
@@ -221,14 +240,10 @@ public final class BackgroundMonitorService extends Service {
                     .putString(KEY_URL, routerUrl)
                     .putString(KEY_PASSWORD, password)
                     .apply();
-                if (intent.getBooleanExtra("changed", false)) {
-                    loggedIn = false;
-                    RouterSession.clear();
-                }
+                if (intent.getBooleanExtra("changed", false)) RouterSession.clear();
             } else if (ACTION_SESSION.equals(action)) {
                 RouterSession.replace(intent.getStringExtra("cookies"));
             } else if (ACTION_CLEAR_SESSION.equals(action)) {
-                loggedIn = false;
                 RouterSession.clear();
             } else if (ACTION_OVERLAY.equals(action)) {
                 overlayEnabled = intent.hasExtra("enabled")
@@ -236,9 +251,16 @@ public final class BackgroundMonitorService extends Service {
                     : getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_OVERLAY_ENABLED, false);
                 updateOverlay();
             } else if (ACTION_SNAPSHOT.equals(action)) {
-                applySnapshotPayload(intent.getStringExtra("payload"));
+                String payload = intent.getStringExtra("payload");
+                executor.execute(() -> applySnapshotPayload(payload, "foreground"));
+            } else if (ACTION_SMS.equals(action)) {
+                String payload = intent.getStringExtra("payload");
+                executor.execute(() -> {
+                    try { historyStore.recordSms(new JSONObject(payload).put("source", "foreground"), System.currentTimeMillis()); }
+                    catch (Exception error) { Log.e(TAG, "save SMS failed", error); }
+                });
             } else if (ACTION_POLL.equals(action)) {
-                if (!isAppForeground()) pollNow();
+                startFastPolling();
             }
         }
         return START_STICKY;
@@ -263,12 +285,32 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void pollRouter() {
-        if (!running || isAppForeground()) {
-            return;
-        }
+        if (!running) return;
+        if (isAppForeground()) { writeMonitorState(false); return; }
+        String url = routerUrl;
+        String secret = password;
         try {
-            JSONObject status = fetchStatus(routerUrl, password);
-            applySnapshot(status);
+            if (routerClient == null || !url.equals(clientUrl) || !secret.equals(clientPassword)) {
+                routerClient = new MonitorRouterClient(this, url, secret);
+                clientUrl = url;
+                clientPassword = secret;
+            }
+            String source = nativeCollectionSource();
+            JSONObject snapshot = routerClient.dashboard();
+            if (!url.equals(routerUrl) || !secret.equals(password)) return;
+            applySnapshotPayload(snapshot.toString(), source);
+            long now = System.currentTimeMillis();
+            if (now - lastSmsPoll >= 5000) {
+                lastSmsPoll = now;
+                try {
+                    String smsSource = nativeCollectionSource();
+                    historyStore.recordSms(routerClient.sms().put("source", smsSource), System.currentTimeMillis());
+                }
+                catch (Exception error) {
+                    lastCollectionError = "短信：" + MonitorRouterClient.message(error);
+                    Log.w(TAG, lastCollectionError);
+                }
+            }
             lastError = "";
         } catch (Throwable error) {
             lastError = error.getMessage() == null ? "等待路由器连接" : error.getMessage();
@@ -276,20 +318,16 @@ public final class BackgroundMonitorService extends Service {
             updateNotification();
             updateOverlay();
         } finally {
-            if (running && !isAppForeground()) scheduleWatchdog();
+            writeMonitorState(false);
+            if (running) scheduleWatchdog();
         }
-    }
-
-    private void pollNow() {
-        ScheduledExecutorService current = executor;
-        if (current != null && !current.isShutdown()) current.execute(this::pollRouter);
     }
 
     private void startFastPolling() {
         ScheduledExecutorService current = executor;
-        if (current == null || current.isShutdown() || isAppForeground()) return;
-        if (fastPollTask != null && !fastPollTask.isCancelled()) return;
-        fastPollTask = current.scheduleAtFixedRate(this::pollRouter, 0, 1000, TimeUnit.MILLISECONDS);
+        if (current == null || current.isShutdown()) return;
+        if (fastPollTask != null && !fastPollTask.isDone()) return;
+        fastPollTask = current.scheduleWithFixedDelay(this::pollRouter, 0, 1000, TimeUnit.MILLISECONDS);
         Log.w(TAG, "fast polling enabled interval=1000ms");
     }
 
@@ -302,13 +340,19 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void scheduleWatchdog() {
-        if (alarmManager == null || isAppForeground()) return;
-        long triggerAt = android.os.SystemClock.elapsedRealtime() + 1000;
+        if (alarmManager == null) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastWatchdog < 30000) return;
+        lastWatchdog = now;
+        long triggerAt = now + 60000;
         PendingIntent pending = watchdogPendingIntent();
-        if (Build.VERSION.SDK_INT >= 23) {
+        try {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
-        } else {
-            alarmManager.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
+        } catch (SecurityException error) {
+            // Exact alarm access can be revoked; collection must not crash with it.
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pending);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "watchdog unavailable", error);
         }
     }
 
@@ -324,81 +368,49 @@ public final class BackgroundMonitorService extends Service {
         return PendingIntent.getBroadcast(this, 5121, intent, flags);
     }
 
-    private void applySnapshotPayload(String payload) {
+    private void applySnapshotPayload(String payload, String source) {
         try {
             JSONObject input = new JSONObject(payload == null ? "{}" : payload);
+            if (input.optBoolean("stale")) return;
             JSONObject status = input.optJSONObject("status");
-            if (status == null) status = input;
+            if (status == null || !"ok".equals(status.optString("loginfo"))) return;
+            input.put("source", CollectionSource.normalize(source));
             JSONObject temperature = input.optJSONObject("temperature");
             if (temperature != null && !status.has("battery_temp") && temperature.has("battery_temp")) {
                 status.put("battery_temp", temperature.opt("battery_temp"));
             }
-            applySnapshot(status);
-        } catch (Exception ignored) {}
-    }
-
-    private JSONObject fetchStatus(String routerUrl, String password) throws Exception {
-        JSONObject status = getFields(routerUrl, "loginfo,realtime_rx_thrpt,realtime_tx_thrpt,battery_temp,battery_value,battery_vol_percent,battery_charging,battery_charg_type,external_charging_flag");
-        if (!"ok".equals(status.optString("loginfo"))) {
-            login(routerUrl, password);
-            status = getFields(routerUrl, "loginfo,realtime_rx_thrpt,realtime_tx_thrpt,battery_temp,battery_value,battery_vol_percent,battery_charging,battery_charg_type,external_charging_flag");
+            applySnapshot(status, source, input.optLong("timestamp", System.currentTimeMillis()));
+            JSONObject errors = input.optJSONObject("errors");
+            lastCollectionError = errors == null ? "" : errors.toString();
+            boolean saved = historyStore.record(input, System.currentTimeMillis());
+            if (saved) {
+                lastSavedAt = input.optLong("timestamp");
+                Log.i(TAG, "full snapshot saved timestamp=" + lastSavedAt + " background=" + !isAppForeground()
+                    + " source=" + source + " groups=" + input.length() + " partial=" + (errors != null));
+            }
+            writeMonitorState(saved);
+        } catch (Exception error) {
+            lastCollectionError = "保存数据失败：" + MonitorRouterClient.message(error);
+            Log.e(TAG, lastCollectionError, error);
         }
-        if (!"ok".equals(status.optString("loginfo"))) throw new Exception("路由器登录失败");
-        return status;
     }
 
-    private void login(String routerUrl, String password) throws Exception {
-        RouterSession.clear();
-        request(routerUrl + "/index.html", "GET", "");
-        getFields(routerUrl, "Language,cr_version,wa_inner_version");
-        JSONObject token = getFields(routerUrl, "LD");
-        String hashed = sha256(sha256(password) + token.optString("LD"));
-        String body = form("isTest", "false", "goformId", "LOGIN", "password", hashed);
-        request(routerUrl + "/goform/goform_set_cmd_process", "POST", body);
-        JSONObject check = getFields(routerUrl, "loginfo");
-        loggedIn = "ok".equals(check.optString("loginfo"));
-        if (!loggedIn) throw new Exception("路由器登录失败");
-    }
-
-    private JSONObject getFields(String routerUrl, String fields) throws Exception {
-        String query = form("isTest", "false", "multi_data", "1", "cmd", fields, "_", String.valueOf(System.currentTimeMillis()));
-        String raw = request(routerUrl + "/goform/goform_get_cmd_process?" + query, "GET", "");
-        return new JSONObject(raw);
-    }
-
-    private String request(String address, String method, String body) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(address).openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(8000);
-        connection.setUseCaches(false);
-        connection.setInstanceFollowRedirects(true);
-        connection.setRequestProperty("Connection", "close");
-        connection.setRequestProperty("Accept", "application/json, text/javascript, */*; q=0.01");
-        connection.setRequestProperty("X-Requested-With", "XMLHttpRequest");
-        connection.setRequestProperty("Referer", address.substring(0, address.indexOf('/', address.indexOf("//") + 2) + 1) + "index.html");
-        String sessionCookie = RouterSession.header();
-        if (!sessionCookie.isEmpty()) connection.setRequestProperty("Cookie", sessionCookie);
-        if (body != null && !body.isEmpty() && !"GET".equals(method)) {
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
-        }
+    private void writeMonitorState(boolean force) {
+        long now = System.currentTimeMillis();
+        if (!force && now - lastStateWrite < 5000) return;
+        lastStateWrite = now;
         try {
-            int status = connection.getResponseCode();
-            RouterSession.remember(connection.getHeaderFields());
-            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            String response = readText(stream);
-            if (status < 200 || status >= 300) throw new Exception("路由器返回 HTTP " + status);
-            return response;
-        } finally {
-            connection.disconnect();
-        }
+            JSONObject state = new JSONObject().put("checkedAt", now).put("lastSuccessAt", lastSuccessAt)
+                .put("lastSavedAt", lastSavedAt).put("background", !isAppForeground())
+                .put("source", isAppForeground() ? "foreground" : nativeCollectionSource())
+                .put("lastError", lastError).put("collectionError", lastCollectionError)
+                .put("wakeLockHeld", wakeLock != null && wakeLock.isHeld())
+                .put("wifiLockHeld", wifiLock != null && wifiLock.isHeld());
+            MonitorHistoryStore.writeJson(new File(getFilesDir(), "monitor-state.json"), state);
+        } catch (Exception error) { Log.e(TAG, "save monitor state failed", error); }
     }
 
-    private void applySnapshot(JSONObject status) {
+    private void applySnapshot(JSONObject status, String source, long timestamp) {
         double down = number(status, "realtime_rx_thrpt");
         double up = number(status, "realtime_tx_thrpt");
         double percent = number(status, "battery_vol_percent");
@@ -410,7 +422,7 @@ public final class BackgroundMonitorService extends Service {
         lastTemperature = Double.isFinite(temperature) ? formatNumber(temperature) + "°C" : "未知";
         lastError = "";
         lastSuccessAt = System.currentTimeMillis();
-        recordBattery(this, status, null);
+        recordBattery(this, status, null, source, timestamp);
         updateNotification();
         updateOverlay();
     }
@@ -426,7 +438,7 @@ public final class BackgroundMonitorService extends Service {
         });
     }
 
-    private static void recordBattery(Context context, JSONObject status, JSONObject temperatureObject) {
+    private static void recordBattery(Context context, JSONObject status, JSONObject temperatureObject, String source, long timestamp) {
         if (status == null) return;
         synchronized (HISTORY_LOCK) {
             double percent = number(status, "battery_vol_percent");
@@ -445,7 +457,8 @@ public final class BackgroundMonitorService extends Service {
             }
             JSONObject sample = new JSONObject();
             try {
-                sample.put("timestamp", now);
+                sample.put("timestamp", timestamp);
+                sample.put("source", CollectionSource.normalize(source));
                 sample.put("percent", percent);
                 sample.put("charging", charging);
                 double batteryTemp = number(status, "battery_temp");
@@ -490,7 +503,14 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private boolean isAppForeground() {
-        return appForeground;
+        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+        return appForeground && SystemClock.elapsedRealtime() < foregroundUntil && power != null && power.isInteractive();
+    }
+
+    private String nativeCollectionSource() {
+        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+        return CollectionSource.resolve(false, power == null || power.isInteractive(),
+            overlayEnabled && overlay != null && overlay.isShowing());
     }
 
     private void createNotificationChannel() {
@@ -551,33 +571,6 @@ public final class BackgroundMonitorService extends Service {
         if (value >= 1024 * 1024) return String.format(Locale.US, "%.1f MB/s", value / (1024 * 1024));
         if (value >= 1024) return String.format(Locale.US, "%.1f KB/s", value / 1024);
         return formatNumber(value) + " B/s";
-    }
-
-    private static String sha256(String value) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-        StringBuilder output = new StringBuilder();
-        for (byte item : digest) output.append(String.format(Locale.US, "%02X", item));
-        return output.toString();
-    }
-
-    private static String form(String... values) throws Exception {
-        StringBuilder output = new StringBuilder();
-        for (int index = 0; index + 1 < values.length; index += 2) {
-            if (output.length() > 0) output.append('&');
-            output.append(URLEncoder.encode(values[index], "UTF-8"));
-            output.append('=').append(URLEncoder.encode(values[index + 1], "UTF-8"));
-        }
-        return output.toString();
-    }
-
-    private static String readText(InputStream stream) throws Exception {
-        if (stream == null) return "";
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) output.append(line).append('\n');
-        }
-        return output.toString().trim();
     }
 
     private static File historyFile(Context context) {
