@@ -38,10 +38,7 @@ export default {
     window.addEventListener('resize', this.resizeHandler);
     window.addEventListener('pageshow', this.pageShowHandler);
     document.addEventListener('visibilitychange', this.visibilityHandler);
-    this.$el.addEventListener('touchstart', this.touchStartHandler, { passive: false, capture: true });
-    this.$el.addEventListener('touchmove', this.touchMoveHandler, { passive: false, capture: true });
-    this.$el.addEventListener('touchend', this.touchEndHandler, { passive: false, capture: true });
-    this.$el.addEventListener('touchcancel', this.touchEndHandler, { passive: false, capture: true });
+    this.syncTouchListeners();
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.scheduleRender(true));
       this.resizeObserver.observe(this.$el);
@@ -64,15 +61,28 @@ export default {
     this.instance?.dispose();
   },
   methods: {
+    syncTouchListeners() {
+      if (!this.touchStartHandler) return;
+      const canCancel = (this.lastOption?.dataZoom || []).some(item => item.type === 'slider');
+      if (this.touchCanCancel === canCancel) return;
+      this.touchCanCancel = canCancel;
+      for (const [type, handler] of [
+        ['touchstart', this.touchStartHandler], ['touchmove', this.touchMoveHandler],
+        ['touchend', this.touchEndHandler], ['touchcancel', this.touchEndHandler]
+      ]) {
+        this.$el.removeEventListener(type, handler, true);
+        this.$el.addEventListener(type, handler, { passive: !canCancel, capture: true });
+      }
+    },
     handleTouchStart(event) {
       const touch = event.touches?.[0];
-      const option = this.instance?.getOption?.();
-      const dataZoom = option?.dataZoom || [];
       if (!touch || !this.instance) return;
+      this.pageTouch = { x: touch.clientX, y: touch.clientY };
+      if (!(this.lastOption?.dataZoom || []).some(item => item.type === 'slider')) return;
       const rect = this.$el.getBoundingClientRect();
       const y = touch.clientY - rect.top;
-      this.pageTouch = { x: touch.clientX, y: touch.clientY };
-      if (!dataZoom.some(item => item.type === 'slider') || y < rect.height - 42) return;
+      if (y < rect.height - 42) return;
+      const dataZoom = this.instance.getOption()?.dataZoom || [];
       const dataZoomIndex = dataZoom.findIndex(item => item.type === 'slider');
       const current = dataZoom[dataZoomIndex] || dataZoom[0];
       const start = Number(current.start);
@@ -143,6 +153,7 @@ export default {
       if (!value) return;
       this.lastOption = value;
       this.pendingOption = value;
+      this.syncTouchListeners();
       if (this.touchZoom) return;
       this.scheduleRender(false);
     },
@@ -166,6 +177,8 @@ export default {
             : null;
         });
         this.hasRendered = false;
+        this.renderWidth = width;
+        this.renderHeight = height;
       }
       return true;
     },
@@ -184,11 +197,13 @@ export default {
         this.pendingOption = null;
         const force = this.forceFullRender || !this.hasRendered;
         this.forceFullRender = false;
-        this.instance.resize({
-          width: this.$el.clientWidth,
-          height: this.$el.clientHeight,
-          silent: true
-        });
+        const width = this.$el.clientWidth;
+        const height = this.$el.clientHeight;
+        if (width !== this.renderWidth || height !== this.renderHeight) {
+          this.instance.resize({ width, height, silent: true });
+          this.renderWidth = width;
+          this.renderHeight = height;
+        }
         const renderOption = this.zoomState && Array.isArray(option.dataZoom)
           ? {
               ...option,
@@ -200,7 +215,6 @@ export default {
             }
           : option;
         this.instance.setOption(renderOption, { notMerge: force, lazyUpdate: false, silent: true });
-        this.instance.getZr().refreshImmediately();
         this.hasRendered = true;
       });
     },

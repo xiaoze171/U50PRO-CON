@@ -325,14 +325,9 @@
               <AppChart :option="batteryChartOption" height="280px" />
               <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
             </section>
-            <section class="panel">
+            <section class="panel battery-history-panel">
               <view class="panel-header"><view><text class="panel-title">续航记录</text><text class="panel-subtitle">最近 {{ batterySamples.length }} 条</text></view></view>
-              <view class="history-list">
-                <view v-for="sample in batterySamples.slice().reverse()" :key="sample.timestamp" class="history-row">
-                  <view class="history-time"><text>{{ formatDate(sample.timestamp) }}</text><text class="source-badge">{{ collectionSourceLabel(sample.source) }}</text></view><b>{{ sample.percent }}%</b><text>{{ sample.charging ? '充电' : '放电' }}</text><text>{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
-                </view>
-                <view v-if="!batterySamples.length" class="empty-state">记录样本不足，应用会继续自动积累。</view>
-              </view>
+              <BatteryHistory :samples="batterySamples" />
             </section>
           </template>
 
@@ -548,7 +543,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
@@ -564,6 +559,7 @@ import {
   IconWifiOff as WifiOff, IconWorld as World
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
+import BatteryHistory from '../../components/BatteryHistory.vue';
 import DataList from '../../components/DataList.vue';
 import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
@@ -576,7 +572,7 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.55';
+const APP_VERSION = '1.3.56';
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -980,9 +976,10 @@ const signalChartOption = computed(() => lineOption([
 
 const temperatureChartOption = computed(() => {
   const colors = ['#ffb020', '#36c963', '#6d5bd0', '#d94848', '#f472b6', '#2dd4bf'];
+  const cutoff = Math.ceil(Date.now() / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS - CHART_RECENT_WINDOW_MS;
   const series = Object.entries(histories.temperatures || {})
     .filter(([, values]) => Array.isArray(values) && values.length)
-    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(values, 3), color: colors[index % colors.length] }));
+    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(chartWindowPoints(values, cutoff), 3), color: colors[index % colors.length] }));
   return lineOption(series, false, {}, { windowMs: CHART_RECENT_WINDOW_MS, zoom: false, xAxisLabels: false });
 });
 const batteryChartOption = computed(() => {
@@ -1032,13 +1029,14 @@ function persistChartHistory(force = false) {
   if (!force && now - lastChartHistorySave < 5000) return;
   lastChartHistorySave = now;
   try {
+    const raw = toRaw(histories);
     uni.setStorageSync(CHART_HISTORY_KEY, {
-      rsrp: normalizePointList(histories.rsrp, now - METRIC_HISTORY_WINDOW_MS),
-      sinr: normalizePointList(histories.sinr, now - METRIC_HISTORY_WINDOW_MS),
-      rsrq: normalizePointList(histories.rsrq, now - METRIC_HISTORY_WINDOW_MS),
-      down: normalizePointList(histories.down, now - METRIC_HISTORY_WINDOW_MS),
-      up: normalizePointList(histories.up, now - METRIC_HISTORY_WINDOW_MS),
-      temperatures: Object.fromEntries(Object.entries(histories.temperatures || {})
+      rsrp: normalizePointList(raw.rsrp, now - METRIC_HISTORY_WINDOW_MS),
+      sinr: normalizePointList(raw.sinr, now - METRIC_HISTORY_WINDOW_MS),
+      rsrq: normalizePointList(raw.rsrq, now - METRIC_HISTORY_WINDOW_MS),
+      down: normalizePointList(raw.down, now - METRIC_HISTORY_WINDOW_MS),
+      up: normalizePointList(raw.up, now - METRIC_HISTORY_WINDOW_MS),
+      temperatures: Object.fromEntries(Object.entries(raw.temperatures || {})
         .map(([key, values]) => [key, normalizePointList(values, now - METRIC_HISTORY_WINDOW_MS)])
         .filter(([, values]) => values.length))
     });
@@ -1049,13 +1047,14 @@ function persistChartHistory(force = false) {
 
 // 把 histories 反应式对象拍平成普通结构，交给 syncClient 发布或作为合并输入。
 function chartSnapshot() {
+  const raw = toRaw(histories);
   return {
-    rsrp: histories.rsrp.slice(),
-    sinr: histories.sinr.slice(),
-    rsrq: histories.rsrq.slice(),
-    down: histories.down.slice(),
-    up: histories.up.slice(),
-    temperatures: Object.fromEntries(Object.entries(histories.temperatures || {}).map(([key, values]) => [key, values.slice()]))
+    rsrp: raw.rsrp.slice(),
+    sinr: raw.sinr.slice(),
+    rsrq: raw.rsrq.slice(),
+    down: raw.down.slice(),
+    up: raw.up.slice(),
+    temperatures: Object.fromEntries(Object.entries(raw.temperatures || {}).map(([key, values]) => [key, values.slice()]))
   };
 }
 
@@ -1158,7 +1157,8 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
   const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || CHART_HISTORY_SAMPLE_MS);
   const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
   const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
-  const animate = behavior.animation !== false;
+  const animate = behavior.animation === true;
+  series = series.map(item => ({ ...item, data: chartWindowPoints(item.data, chartNow - windowMs) }));
   // 隐藏 x 轴时刻标签（如电池图：底部只保留拖动条，界面更干净）。
   const hideAxisLabels = behavior.xAxisLabels === false;
   const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
@@ -1271,6 +1271,19 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
     ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.08)', width: 1 } } }],
     series: series.map(item => buildLineSeries(item, windowMs, chartNow))
   };
+}
+
+function chartWindowPoints(points, cutoff) {
+  if (!Array.isArray(points) || !points.length || Number(points.at(-1)?.[0]) < cutoff) return [];
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (Number(points[middle]?.[0]) < cutoff) low = middle + 1;
+    else high = middle;
+  }
+  // Keep one preceding point for a continuous line at the visible left edge.
+  return points.slice(Math.max(0, low - 1));
 }
 
 function lineGradient(color) {
@@ -1434,7 +1447,7 @@ async function refresh(manual = false) {
     try {
       await syncClient.afterTick({
         live: merged,
-        localStore: { chart: chartSnapshot(), battery: merged.battery?.samples || [] },
+        localStore: () => ({ chart: chartSnapshot(), battery: toRaw(data.value.battery?.samples) || [] }),
         onMergeChart: applyChartUpdater
       });
     } catch {}
@@ -1452,6 +1465,8 @@ async function refresh(manual = false) {
 }
 
 function sameDashboardValue(current, next) {
+  current = toRaw(current);
+  next = toRaw(next);
   if (Object.is(current, next)) return true;
   if (!current || !next || typeof current !== 'object' || typeof next !== 'object') return false;
   try { return JSON.stringify(current) === JSON.stringify(next); } catch { return false; }

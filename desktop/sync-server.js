@@ -93,7 +93,14 @@ function handle(req, res) {
     });
   }
   if (req.method === 'GET' && url.pathname === '/sync/live') {
-    return sendJson(res, 200, { live: publishedStore.live, time: Date.now() });
+    let live = publishedStore.live;
+    if (live?.battery) {
+      const { samples, ...battery } = live.battery;
+      // Legacy viewers expect samples in /sync/live; updated viewers opt out.
+      if (url.searchParams.get('history') !== '0') battery.samples = samples || publishedStore.battery;
+      live = { ...live, battery };
+    }
+    return sendJson(res, 200, { live, time: Date.now() });
   }
   if (req.method === 'GET' && url.pathname === '/sync/history') {
     const since = Number(url.searchParams.get('since'));

@@ -33,6 +33,9 @@ public final class RouterBridge {
 
     private final WebView webView;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
+    // Serial publication preserves live/history ordering without blocking JS
+    // while org.json parses a full day's archive on the bridge thread.
+    private final ExecutorService syncPublisher = Executors.newSingleThreadExecutor();
     private final StockProxyServer stockProxy = new StockProxyServer();
     private String lastSharedSession = "";
     // 最近一次 H5 configureBackground 传来的路由器地址，供 StockProxyServer
@@ -40,7 +43,7 @@ public final class RouterBridge {
     private static volatile String routerBaseUrl = "http://192.168.0.1";
 
     // —— 局域网同步状态（主进程内，与 RouterBridge 同生命周期；镜像 Electron 主进程模型）——
-    private SyncServer syncServer;
+    private volatile SyncServer syncServer;
     private DiscoveryBeacon discovery;
     private boolean syncEnabled = false;
     private boolean syncStarted = false;
@@ -121,12 +124,22 @@ public final class RouterBridge {
     }
 
     @JavascriptInterface
+    public void getBackgroundBatteryHistoryAsync(final String requestId) {
+        executor.execute(() -> deliverHistory(requestId,
+            BackgroundMonitorService.readBatteryHistory(webView.getContext())));
+    }
+
+    @JavascriptInterface
     public void getBackgroundHistory(final String requestId) {
         executor.execute(() -> {
             String history = BackgroundMonitorService.readMonitorHistory(webView.getContext());
-            String script = "window.__mu5120HistoryResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(history) + ")";
-            webView.post(() -> webView.evaluateJavascript(script, null));
+            deliverHistory(requestId, history);
         });
+    }
+
+    private void deliverHistory(String requestId, String history) {
+        String script = "window.__mu5120HistoryResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(history) + ")";
+        webView.post(() -> webView.evaluateJavascript(script, null));
     }
 
     @JavascriptInterface
@@ -314,7 +327,7 @@ public final class RouterBridge {
     @JavascriptInterface
     public void syncPublish(String json) {
         SyncServer server = syncServer;
-        if (server != null) server.publish(json);
+        if (server != null) syncPublisher.execute(() -> server.publish(json));
     }
 
     @JavascriptInterface
@@ -349,6 +362,7 @@ public final class RouterBridge {
             syncStarted = false;
         }
         executor.shutdownNow();
+        syncPublisher.shutdownNow();
     }
 
     // 生成/读取稳定设备身份：UUID 存主进程 SharedPreferences，名称取 Build.MODEL。

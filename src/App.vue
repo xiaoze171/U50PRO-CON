@@ -1,18 +1,6 @@
 <script>
-function disablePinchZoom() {
-  if (typeof document === 'undefined') return;
-  const preventMultiTouch = event => {
-    if (event.touches && event.touches.length > 1) event.preventDefault();
-  };
-  document.addEventListener('touchstart', preventMultiTouch, { passive: false });
-  document.addEventListener('touchmove', preventMultiTouch, { passive: false });
-  document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false });
-  document.addEventListener('gesturechange', event => event.preventDefault(), { passive: false });
-}
-
 export default {
   onLaunch() {
-    disablePinchZoom();
     let current = null;
     try { current = uni.getStorageSync('mu5120-config'); } catch {}
     if (!current || typeof current !== 'object' || Array.isArray(current)) {
@@ -41,6 +29,8 @@ html,
 body,
 #app,
 uni-app {
+  /* Pinch policy stays in CSS + viewport/WebSettings. A non-passive document
+   * touchmove listener makes every single-finger scroll wait for JavaScript. */
   touch-action: pan-x pan-y;
 }
 

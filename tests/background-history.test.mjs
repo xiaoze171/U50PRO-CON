@@ -4,6 +4,8 @@ import { test } from 'node:test';
 const storage = new Map();
 const snapshots = [];
 const smsSnapshots = [];
+const nativeTimestamp = Math.floor(Date.now() / 60000) * 60000 - 60000;
+let synchronousBatteryReads = 0;
 const fixtures = {
   loginfo: 'ok', battery_vol_percent: '0', battery_charging: '0', battery_temp: '33',
   realtime_rx_thrpt: '2048', realtime_tx_thrpt: '512', monthly_rx_bytes: '987654',
@@ -17,14 +19,15 @@ globalThis.uni = {
   setStorageSync: (key, value) => storage.set(key, value)
 };
 const nativeHistory = {
-  chart: { rsrp: [[1790133360000, -95]], sinr: [], rsrq: [], down: [[1790133360000, 4096]], up: [], temperatures: { wifi_chip_temp: [[1790133360000, 40]] } },
-  battery: [{ timestamp: 1790133360000, percent: 48, charging: false }],
+  chart: { rsrp: [[nativeTimestamp, -95]], sinr: [], rsrq: [], down: [[nativeTimestamp, 4096]], up: [], temperatures: { wifi_chip_temp: [[nativeTimestamp, 40]] } },
+  battery: [{ timestamp: nativeTimestamp, percent: 48, charging: false }],
   snapshotCount: 1,
   lastSavedAt: 1790133361000
 };
 globalThis.window = {
   AndroidRouter: {
-    getBackgroundBatteryHistory: () => '[]',
+    getBackgroundBatteryHistory() { synchronousBatteryReads++; return '[]'; },
+    getBackgroundBatteryHistoryAsync(id) { queueMicrotask(() => window.__mu5120HistoryResponse(id, '[]')); },
     getBackgroundHistory(id) { queueMicrotask(() => window.__mu5120HistoryResponse(id, JSON.stringify(nativeHistory))); },
     getBackgroundMonitorState: () => JSON.stringify({ lastSavedAt: 1790133361000, background: true, lastError: '' }),
     isIgnoringBatteryOptimizations: () => false,
@@ -67,6 +70,11 @@ test('foreground samples hand all dashboard groups and their original timestamp 
   assert.equal(saved.battery?.samples, undefined, 'do not duplicate the entire battery history in every snapshot');
 });
 
+test('dashboard history reads use the asynchronous bridge instead of blocking the WebView', async () => {
+  await routerApi.dashboard();
+  assert.equal(synchronousBatteryReads, 0);
+});
+
 test('SMS snapshots preserve decoded content, raw content and capacity for offline recovery', async () => {
   const result = await routerApi.listSms();
   const saved = smsSnapshots.at(-1);
@@ -84,7 +92,7 @@ test('native history backfill returns chart series, battery samples and merges b
   assert.equal(history.chart.temperatures.wifi_chip_temp[0][1], 40);
   assert.equal(history.snapshotCount, 1);
   const merged = routerApi.mergeExternalBattery(history.battery);
-  assert.ok(merged.some(item => item.timestamp === 1790133360000 && item.percent === 48), 'background battery samples must enter local history');
+  assert.ok(merged.some(item => item.timestamp === nativeTimestamp && item.percent === 48), 'background battery samples must enter local history');
 });
 
 test('background monitor state and battery optimization status are readable from the page', () => {

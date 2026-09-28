@@ -89,9 +89,15 @@ export function formatMonth(raw) {
   return /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}` : firstValue(raw);
 }
 
+const historyDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: 'numeric', day: 'numeric',
+  hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
+});
+
 export function formatDate(timestamp) {
   if (!timestamp) return '—';
-  return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? 'Invalid Date' : historyDateFormatter.format(date);
 }
 
 export function extractVerificationCode(raw) {

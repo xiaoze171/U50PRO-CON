@@ -57,7 +57,7 @@ async function run() {
   check('错误令牌被拒 (403)', wrongToken.status === 403);
 
   // publish + /sync/live
-  const live = { timestamp: Date.now(), signal: { rsrp: -95 }, status: { loginfo: 'ok' } };
+  const live = { timestamp: Date.now(), signal: { rsrp: -95 }, status: { loginfo: 'ok' }, battery: { percent: 82 } };
   syncServer.publish({
     live,
     chart: {
@@ -73,6 +73,10 @@ async function run() {
   const liveResp = await syncServer.fetchPeer({ host: '127.0.0.1', port: syncServer.SYNC_HTTP_PORT, path: '/sync/live' });
   const liveBody = JSON.parse(liveResp.body);
   check('/sync/live 返回已发布快照', liveBody.live && liveBody.live.signal.rsrp === -95);
+  check('/sync/live 为旧查看端补回电池历史', liveBody.live?.battery?.samples?.length === 2);
+  const compactLive = JSON.parse((await syncServer.fetchPeer({ host: '127.0.0.1', port: syncServer.SYNC_HTTP_PORT, path: '/sync/live?history=0' })).body);
+  check('精简实时接口不携带电池历史', compactLive.live?.battery?.percent === 82 && !Object.hasOwn(compactLive.live.battery, 'samples'));
+  syncServer.publish({ live: { ...live, battery: { percent: 83 } } });
 
   // /sync/history 全量
   const histFull = JSON.parse((await syncServer.fetchPeer({ host: '127.0.0.1', port: syncServer.SYNC_HTTP_PORT, path: '/sync/history' })).body);

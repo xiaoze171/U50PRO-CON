@@ -21,6 +21,7 @@ import { electCollector } from '../utils/election.js';
 const SYNC_HTTP_PORT = 51200;
 const SETTINGS_KEY = 'mu5120-sync-settings-v1';
 const HUB_HISTORY_INTERVAL_MS = 20000; // 查看端拉取采集器历史的最小间隔
+const HISTORY_PUBLISH_INTERVAL_MS = 20000;
 const PEER_REFRESH_MS = 3000;          // 角色/对端刷新最小间隔
 
 let bridgeCache = null;
@@ -46,6 +47,7 @@ let lastPeerRefresh = 0;
 let lastHubHistoryPull = 0;
 let hubHistoryCursor = 0;       // 已从采集器同步到的时间戳
 let nativeEnabled = false;
+let lastHistoryPublish = 0;
 
 function loadSettings() {
   let stored = {};
@@ -149,14 +151,21 @@ function pushAdvertise(nextRole, collecting) {
 
 function publishStore(store) {
   const bridge = syncBridge();
-  if (!bridge || typeof bridge.syncPublish !== 'function') return;
+  if (!bridge || typeof bridge.syncPublish !== 'function') return false;
   try {
-    bridge.syncPublish(JSON.stringify({
-      live: store.live || null,
-      chart: store.chart || emptyChartHistory(),
-      battery: Array.isArray(store.battery) ? store.battery : []
-    }));
-  } catch {}
+    // Both native servers retain omitted fields. Keep second-by-second live
+    // values small; the archive travels separately at the history cadence.
+    const live = store.live ? { ...store.live } : null;
+    if (live?.battery) {
+      const { samples, ...summary } = live.battery;
+      live.battery = summary;
+    }
+    const payload = { live };
+    if (store.chart) payload.chart = store.chart;
+    if (Array.isArray(store.battery)) payload.battery = store.battery;
+    bridge.syncPublish(JSON.stringify(payload));
+    return true;
+  } catch { return false; }
 }
 
 function drainInbound() {
@@ -187,6 +196,7 @@ function refreshRole(force = false) {
   self = readSelf();
   peers = settings.enabled ? readPeers() : [];
   const resolved = resolveRole();
+  if (resolved.role !== role) lastHistoryPublish = 0;
   role = resolved.role;
   hub = resolved.hub;
   // 广播本机对外角色（direct 视作独立采集器身份，但不与他人协作）
@@ -195,7 +205,7 @@ function refreshRole(force = false) {
 
 async function fetchHubLive() {
   if (!hub) return null;
-  const response = await nativeSyncFetch({ host: hub.host, port: hub.port || SYNC_HTTP_PORT, path: '/sync/live', method: 'GET' });
+  const response = await nativeSyncFetch({ host: hub.host, port: hub.port || SYNC_HTTP_PORT, path: '/sync/live?history=0', method: 'GET' });
   if (!response.ok) { lastError = `读取采集器实时数据失败：${response.error || response.status}`; return null; }
   try {
     const parsed = JSON.parse(response.body || '{}');
@@ -216,7 +226,11 @@ async function fetchHubHistory(onMergeChart) {
   let parsed;
   try { parsed = JSON.parse(response.body || '{}'); } catch { return; }
   applyExternalHistory(parsed, onMergeChart);
-  if (Number.isFinite(Number(parsed.now))) hubHistoryCursor = Number(parsed.now);
+  if (Number.isFinite(Number(parsed.now))) {
+    // A newly published minute bucket can be older than the previous HTTP
+    // response time. Overlap the sampling + publishing window; merges dedupe it.
+    hubHistoryCursor = Math.max(0, Number(parsed.now) - MINUTE_MS - HISTORY_PUBLISH_INTERVAL_MS);
+  }
 }
 
 // 把外部 {chart,battery} 合并进本地历史（图表经回调交 index.vue，电池写回 router-client）。
@@ -248,6 +262,7 @@ async function backfillHub(localStore) {
 
 function init(options = {}) {
   bridgeCache = null;
+  lastHistoryPublish = 0;
   if (options && typeof options === 'object') mergeOptions = { ...mergeOptions, ...options };
   refreshRole(true);
 }
@@ -260,6 +275,7 @@ function setEnabled(enabled) {
   settings = { ...settings, enabled: !!enabled };
   saveSettings();
   pushEnabled(settings.enabled);
+  lastHistoryPublish = 0;
   refreshRole(true);
   return getSettings();
 }
@@ -290,7 +306,15 @@ async function dashboard() {
   refreshRole();
   if (role === 'viewer' && hub) {
     const live = await fetchHubLive();
-    if (live) { lastError = ''; return live; }
+    if (live) {
+      lastError = '';
+      // New collectors keep history out of /sync/live. Reuse the local archive
+      // populated by /sync/history; older collectors can still send samples.
+      if (live.battery && !Array.isArray(live.battery.samples)) {
+        live.battery = { ...live.battery, samples: routerApi.getBatteryHistory() };
+      }
+      return live;
+    }
     // 采集器本 tick 不可达 → 退回直连本 tick（保证不断更新；下一 tick 角色会重算）
   }
   const data = await routerApi.dashboard();
@@ -299,24 +323,29 @@ async function dashboard() {
 }
 
 // index.vue 每个 tick 更新完本地图表后调用：按角色发布/回补/拉取。
-// live：本 tick 的 dashboard 结果；localStore：{ chart, battery }（当前本地历史）；
+// live：本 tick 的 dashboard 结果；localStore：按需返回 { chart, battery } 的函数，也兼容对象；
 // onMergeChart(updater)：用 updater(currentChart)->mergedChart 更新并持久化 index.vue 的图表历史。
 async function afterTick({ live, localStore, onMergeChart } = {}) {
   refreshRole();
-  const store = localStore || { chart: emptyChartHistory(), battery: [] };
+  const readStore = () => (typeof localStore === 'function' ? localStore() : localStore)
+    || { chart: emptyChartHistory(), battery: [] };
 
   // 角色切换：采集器 -> 查看端，把本地片段回补给新采集器
   if (previousRole === 'collector' && role === 'viewer' && hub) {
-    await backfillHub(store);
+    await backfillHub(readStore());
     hubHistoryCursor = 0; // 换了采集器，重新全量对齐一次
   }
   if (role !== 'viewer') { previousRole = role; }
 
   if (role === 'collector') {
-    publishStore({ live, chart: store.chart, battery: store.battery });
+    const now = Date.now();
+    const publishHistory = !lastHistoryPublish || now - lastHistoryPublish >= HISTORY_PUBLISH_INTERVAL_MS;
+    const store = publishHistory ? readStore() : {};
+    if (publishStore({ live, chart: store.chart, battery: store.battery }) && publishHistory) lastHistoryPublish = now;
     // 吸收别人 POST 来的离线片段
     const inbound = drainInbound();
     inbound.forEach(item => applyExternalHistory(item, onMergeChart));
+    if (inbound.length) lastHistoryPublish = 0;
     previousRole = 'collector';
   } else if (role === 'viewer' && hub) {
     await fetchHubHistory(onMergeChart);

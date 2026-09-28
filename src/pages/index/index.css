@@ -538,6 +538,14 @@
   margin-bottom: 0;
 }
 
+/* A full day's virtual list still has a very tall scroll surface. Filtering
+ * that entire surface stalls WebView composition as new rows enter the screen.
+ * Keep the translucent tint/highlights without a history-height blur layer. */
+.battery-history-panel {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .panel-header {
   display: flex;
   min-height: 38px;

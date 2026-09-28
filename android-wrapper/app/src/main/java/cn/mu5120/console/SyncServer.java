@@ -102,6 +102,19 @@ final class SyncServer {
         } catch (Exception ignored) {}
     }
 
+    private JSONObject liveSnapshot(boolean includeHistory) throws Exception {
+        synchronized (lock) {
+            if (publishedLive == null) return null;
+            JSONObject live = new JSONObject(publishedLive.toString());
+            JSONObject battery = live.optJSONObject("battery");
+            if (battery != null) {
+                if (!includeHistory) battery.remove("samples");
+                else if (!battery.has("samples")) battery.put("samples", publishedBattery);
+            }
+            return live;
+        }
+    }
+
     /** 取走并清空入站队列（前端来合并后再 publish 回来）。 */
     JSONArray drainInbound() {
         JSONArray output = new JSONArray();
@@ -197,7 +210,10 @@ final class SyncServer {
                 respond(output, 200, helloBody());
             } else if ("GET".equals(method) && "/sync/live".equals(path)) {
                 JSONObject body = new JSONObject();
-                synchronized (lock) { body.put("live", publishedLive == null ? JSONObject.NULL : publishedLive); }
+                boolean compact = false;
+                for (String item : query.split("&")) if ("history=0".equals(item)) compact = true;
+                JSONObject live = liveSnapshot(!compact);
+                body.put("live", live == null ? JSONObject.NULL : live);
                 body.put("time", System.currentTimeMillis());
                 respond(output, 200, body);
             } else if ("GET".equals(method) && "/sync/history".equals(path)) {

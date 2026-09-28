@@ -118,6 +118,8 @@ function loadBatteryHistory() {
 function readNativeBatteryHistory() {
   try {
     const bridge = nativeBridge();
+    // Modern Android bridges backfill asynchronously after page initialization.
+    if (typeof bridge?.getBackgroundBatteryHistoryAsync === 'function') return [];
     if (!bridge || typeof bridge.getBackgroundBatteryHistory !== 'function') return [];
     const value = JSON.parse(bridge.getBackgroundBatteryHistory() || '[]');
     return Array.isArray(value) ? value : [];
@@ -131,11 +133,15 @@ function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTOR
   return mergeBatterySamplesShared([local, native], { cutoff, maxPoints: BATTERY_HISTORY_MAX_POINTS });
 }
 
-function mergeNativeBatteryHistory(force = false) {
+async function mergeNativeBatteryHistory(force = false) {
   const now = Date.now();
   if (!force && now - lastNativeBatteryMerge < NATIVE_BATTERY_MERGE_MS) return;
   lastNativeBatteryMerge = now;
-  const merged = mergeBatterySamples(batteryHistory, readNativeBatteryHistory());
+  const bridge = nativeBridge();
+  const native = typeof bridge?.getBackgroundBatteryHistoryAsync === 'function'
+    ? await requestBackgroundHistory('getBackgroundBatteryHistoryAsync').catch(() => [])
+    : readNativeBatteryHistory();
+  const merged = mergeBatterySamples(batteryHistory, Array.isArray(native) ? native : []);
   if (merged.length) batteryHistory = merged;
 }
 
@@ -189,9 +195,9 @@ const historyRequests = new Map();
 
 // 读取原生服务落盘的 24 小时历史（分钟级图表序列 + 电池样本 + 短信快照）。
 // 文件可能有上千条记录，原生侧异步读取后经 window.__mu5120HistoryResponse 回调。
-function getBackgroundHistory() {
+function requestBackgroundHistory(method) {
   const bridge = nativeBridge();
-  if (!bridge || typeof bridge.getBackgroundHistory !== 'function') return Promise.resolve(null);
+  if (!bridge || typeof bridge[method] !== 'function') return Promise.resolve(null);
   if (typeof window.__mu5120HistoryResponse !== 'function') {
     window.__mu5120HistoryResponse = (id, raw) => {
       const pending = historyRequests.get(id);
@@ -209,13 +215,17 @@ function getBackgroundHistory() {
     }, 15000);
     historyRequests.set(id, { resolve, reject, timer });
     try {
-      bridge.getBackgroundHistory(id);
+      bridge[method](id);
     } catch (error) {
       clearTimeout(timer);
       historyRequests.delete(id);
       reject(error);
     }
   });
+}
+
+function getBackgroundHistory() {
+  return requestBackgroundHistory('getBackgroundHistory');
 }
 
 function getBackgroundMonitorState() {
@@ -469,7 +479,7 @@ async function dashboard() {
     getFields(routerFields.neighbors).catch(() => ({})),
     getFields(featureFields).catch(() => ({}))
   ]);
-  mergeNativeBatteryHistory();
+  await mergeNativeBatteryHistory();
   const sample = recordBattery(status, temperature);
   const battery = batterySummary(status);
   if (sample) {
@@ -478,6 +488,7 @@ async function dashboard() {
       remainingMinutes: battery.remainingHours == null ? null : Math.round(battery.remainingHours * 60)
     });
     saveBatteryHistory();
+    battery.samples = batteryHistory;
   }
   const snapshot = {
     timestamp: Date.now(),
@@ -566,9 +577,8 @@ function recordBattery(status, temperature) {
     capacity: status.battery_capacity || '',
     health: status.battery_health || ''
   };
-  batteryHistory.push(sample);
   const cutoff = timestamp - BATTERY_HISTORY_WINDOW_MS;
-  batteryHistory = batteryHistory.filter(item => item.timestamp >= cutoff).slice(-BATTERY_HISTORY_MAX_POINTS);
+  batteryHistory = [...batteryHistory.filter(item => item.timestamp >= cutoff), sample].slice(-BATTERY_HISTORY_MAX_POINTS);
   return sample;
 }
 
@@ -611,6 +621,10 @@ function mergeExternalBattery(samples) {
   if (!Array.isArray(samples) || !samples.length) return batteryHistory;
   batteryHistory = mergeBatterySamples(batteryHistory, samples);
   try { uni.setStorageSync('mu5120-battery-history', batteryHistory); } catch {}
+  return batteryHistory;
+}
+
+function getBatteryHistory() {
   return batteryHistory;
 }
 
@@ -960,6 +974,7 @@ export const routerApi = {
   developerLogin,
   stockUiSession,
   dashboard,
+  getBatteryHistory,
   mergeExternalBattery,
   setTrafficPlan,
   calibrateTraffic,

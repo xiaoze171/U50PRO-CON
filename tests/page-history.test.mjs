@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { parse } from '@babel/parser';
 import { historyTooltip } from '../src/utils/collection-source.js';
+import { reactive, toRaw } from 'vue';
 
 // Exercise the page's actual pure functions, without starting its router polling lifecycle.
 const page = readFileSync(new URL('../src/pages/index/index.vue', import.meta.url), 'utf8');
@@ -42,4 +43,27 @@ test('chart tooltip displays each sample source and safely handles legacy or ext
   assert.ok(html.includes('30 · 息屏'));
   assert.ok(html.includes('50 · 未标记'));
   assert.ok(!html.includes('<img'));
+});
+
+test('unchanged battery archives are compared without traversing Vue proxy getters', () => {
+  const compare = pageFunction('sameDashboardValue', { toRaw });
+  const raw = { percent: 48, samples: [{ timestamp: 1800000000000, percent: 48 }] };
+  const current = reactive(raw);
+  let serializedProxy = false;
+  const realStringify = JSON.stringify;
+  const json = { stringify(value) { if (value === current) serializedProxy = true; return realStringify(value); } };
+  const measuredCompare = pageFunction('sameDashboardValue', { toRaw, JSON: json });
+  assert.equal(measuredCompare(current, { ...raw }), true);
+  assert.equal(serializedProxy, false, 'serializing the proxy visits the full reactive archive on every poll');
+  assert.equal(compare(current, { ...raw, percent: 47 }), false);
+});
+
+test('two-hour charts exclude expired points but retain the boundary segment and sample sources', () => {
+  const node = ast.program.body.find(item => item.type === 'FunctionDeclaration' && item.id.name === 'chartWindowPoints');
+  assert.ok(node, 'charts must clip their input before building and smoothing series');
+  const select = pageFunction('chartWindowPoints');
+  const points = [[60, 10, 'screenOff'], [120, 20, 'background'], [180, 30, 'foreground'], [240, 40, 'foreground']];
+  assert.deepEqual(Array.from(select(points, 180), item => Array.from(item)), points.slice(1));
+  assert.deepEqual(Array.from(select(points, 300)), []);
+  assert.equal(points.length, 4, 'display clipping must not prune the saved archive');
 });
