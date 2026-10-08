@@ -434,6 +434,15 @@
 
             <template v-else>
             <section class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">软件更新</text><text class="panel-subtitle">当前版本 v{{ APP_VERSION }}</text></view><RefreshCw :size="20" /></view>
+              <view class="action-row">
+                <button class="primary-button" :disabled="softwareUpdate.busy" @click="checkSoftwareUpdate(true)">{{ softwareUpdate.busy ? '正在检查…' : '检查更新' }}</button>
+                <button class="secondary-button" @click="openSoftwareRelease">{{ softwareUpdate.result?.isNewer ? '前往下载新版' : '查看发布页' }}</button>
+                <text class="action-result">{{ softwareUpdate.message }}</text>
+              </view>
+              <text v-if="softwareUpdate.result?.isNewer && softwareUpdate.result.body" class="update-notes">{{ softwareUpdate.result.body }}</text>
+            </section>
+            <section class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">路由器连接</text><text class="panel-subtitle">手机连接 U50 Pro Wi-Fi 后直接访问 192.168.0.1</text></view><Settings :size="20" /></view>
               <view class="settings-form">
                 <label><text>路由器地址</text><input v-model="settingsForm.routerUrl" placeholder="http://192.168.0.1" /></label>
@@ -572,7 +581,31 @@ import {
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
-const APP_VERSION = '1.3.56';
+import { version as APP_VERSION } from '../../../package.json';
+import { createUpdateChecker, RELEASES_PAGE } from '../../services/update-check.js';
+
+const softwareUpdate = reactive({ busy: false, result: null, message: '' });
+const checkRelease = createUpdateChecker({ storage: {
+  getItem: key => uni.getStorageSync(key),
+  setItem: (key, value) => uni.setStorageSync(key, value)
+} });
+async function checkSoftwareUpdate(force = false) {
+  if (softwareUpdate.busy) return;
+  softwareUpdate.busy = true;
+  softwareUpdate.message = '正在检查更新…';
+  try {
+    const result = await checkRelease(APP_VERSION, force);
+    softwareUpdate.result = result;
+    softwareUpdate.message = result.isNewer ? `发现新版本 v${result.version}` : '当前已是最新版本';
+  } catch (error) {
+    softwareUpdate.message = error.message || '检查失败，请检查网络后重试';
+  } finally { softwareUpdate.busy = false; }
+}
+function openSoftwareRelease() {
+  if (typeof window === 'undefined') return;
+  if (window.AndroidRouter) window.location.assign(RELEASES_PAGE);
+  else window.open(RELEASES_PAGE, '_blank', 'noopener,noreferrer');
+}
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -1162,7 +1195,6 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
   // 隐藏 x 轴时刻标签（如电池图：底部只保留拖动条，界面更干净）。
   const hideAxisLabels = behavior.xAxisLabels === false;
   const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
-  const hasData = series.some(item => Array.isArray(item.data) && item.data.length);
   const timestamps = series.flatMap(item => (Array.isArray(item.data) ? item.data : []))
     .map(point => Number(point?.[0]))
     .filter(Number.isFinite)
@@ -1195,13 +1227,6 @@ function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
       axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.45)', width: 1, type: 'dashed' } }
     },
     legend: { top: 0, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
-    graphic: hasData ? [] : [{
-      type: 'text',
-      left: 'center',
-      top: '42%',
-      silent: true,
-      style: { text: '等待采集数据，曲线将自动滚动显示', fill: '#94a3b8', fontSize: 12 }
-    }],
     xAxis: {
       type: 'time',
       min: chartNow - windowMs,
@@ -2105,6 +2130,7 @@ async function initialize() {
 }
 
 onMounted(() => {
+  void checkSoftwareUpdate();
   // 用页面自身的图表/电池窗口参数初始化同步编排，确保跨设备合并与本地保留窗口一致。
   syncClient.init({
     chartWindowMs: METRIC_HISTORY_WINDOW_MS,

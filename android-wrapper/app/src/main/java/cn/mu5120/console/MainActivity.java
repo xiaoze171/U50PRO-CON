@@ -72,12 +72,14 @@ public final class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request.isForMainFrame() && openReleasePage(request.getUrl())) return true;
                 return !isAppAssetUrl(request.getUrl()) && !isRouterUrl(request.getUrl());
             }
 
             @Override
             @SuppressWarnings("deprecation")
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (openReleasePage(Uri.parse(url))) return true;
                 return !isAppAssetUrl(Uri.parse(url)) && !isRouterUrl(Uri.parse(url));
             }
 
@@ -95,6 +97,17 @@ public final class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl("https://" + APP_ASSET_HOST + "/index.html");
+    }
+
+    private boolean openReleasePage(Uri uri) {
+        if (!"https".equals(uri.getScheme()) || !"github.com".equals(uri.getHost())
+                || !"/xiaoze171/U50PRO-CON/releases".equals(uri.getPath())) return false;
+        try {
+            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, uri));
+        } catch (android.content.ActivityNotFoundException error) {
+            android.widget.Toast.makeText(this, "未找到浏览器，请安装浏览器后重试", android.widget.Toast.LENGTH_LONG).show();
+        }
+        return true;
     }
 
     private boolean isAppAssetUrl(Uri uri) {

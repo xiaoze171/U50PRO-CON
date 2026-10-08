@@ -11,7 +11,6 @@
         <text class="history-temperature">{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
       </view>
     </view>
-    <view v-if="!samples.length" class="empty-state">记录样本不足，应用会继续自动积累。</view>
   </view>
 </template>
 

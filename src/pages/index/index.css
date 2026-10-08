@@ -2773,3 +2773,14 @@ textarea:focus {
   padding: 0;
   background: transparent;
 }
+.update-notes {
+  display: block;
+  margin-top: 14px;
+  max-height: 260px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #64748b;
+}

@@ -229,3 +229,14 @@ CA 和辅载波：
 - `pin_status=0` 不作为有效 SIM 状态显示。
 - 关闭 Wi-Fi 会立即断开连接；设备关机后不能通过本应用远程开机。
 - 配置和历史只保存在本机，卸载或清除应用数据会删除这些内容。
+# GitHub Release 软件更新
+
+在「设备管理 → 设置与控制 → 软件更新」中检查新版本并打开发布页下载。启动时静默检查，成功结果缓存一小时；手动检查跳过缓存。更新来源为 `xiaoze171/U50PRO-CON` 的最新正式 GitHub Release，草稿和预发布不会推送。
+
+发布新版时：
+
+1. 同步修改根目录与 `desktop/package.json` 的版本、`src/manifest.json` 的 `versionName`、`android-wrapper/app/build.gradle` 的 `versionName`；安卓的两处版本代码也需递增。页面版本直接读取根目录 `package.json`。
+2. 构建安装包，在 GitHub 创建正式 Release，标签使用 `v主版本.次版本.修订号`（例如 `v1.3.57`），更新说明填写在 Release 正文。
+3. 上传 Windows Setup、Portable EXE 和 Android APK，并将该 Release 设为 Latest。APK 必须沿用原签名才能覆盖安装。
+
+当前功能负责检查、展示更新说明和打开下载页，用户选择对应安装包下载并安装；不会自动替换运行中的程序。浏览器 H5 版本由部署者更新站点文件。
