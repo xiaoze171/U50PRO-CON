@@ -1,6 +1,13 @@
 export const RELEASES_PAGE = 'https://github.com/xiaoze171/U50PRO-CON/releases';
 const API_URL = 'https://api.github.com/repos/xiaoze171/U50PRO-CON/releases/latest';
-const CACHE_KEY = 'u50pro-release-v1';
+const CACHE_KEY = 'u50pro-release-v2';
+
+function selectApk(release) {
+  const name = `U50PRO-Console-${release.tag_name}.apk`;
+  const url = `${RELEASES_PAGE}/download/${release.tag_name}/${name}`;
+  const asset = release.assets?.find(item => item.name === name && item.browser_download_url === url && item.size > 0);
+  return asset ? { url, size: asset.size } : null;
+}
 
 export function compareVersions(left, right) {
   const parse = value => /^v?\d+\.\d+\.\d+$/i.test(String(value).trim())
@@ -41,7 +48,7 @@ export function createUpdateChecker({ fetcher = (...args) => fetch(...args), sto
         const comparison = compareVersions(release.tag_name, current);
         if (release.draft || release.prerelease || comparison === null) throw new Error('Release 版本号无效，请使用 v1.3.57 格式的正式版本');
         const result = {
-          current, version: release.tag_name.replace(/^v/i, ''),
+          current, version: release.tag_name.replace(/^v/i, ''), apk: selectApk(release),
           body: String(release.body || ''), publishedAt: release.published_at || '',
           url: `${RELEASES_PAGE}/tag/${encodeURIComponent(release.tag_name)}`,
           isNewer: comparison > 0, checkedAt: Date.now()

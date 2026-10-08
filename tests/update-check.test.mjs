@@ -44,3 +44,17 @@ test('storage failures do not prevent successful checks; concurrent checks share
   assert.equal(calls, 1);
   assert.equal(results[0].isNewer, true);
 });
+
+test('update selects only the version-matched APK from this repository', async () => {
+  const url = 'https://github.com/xiaoze171/U50PRO-CON/releases/download/v1.3.57/U50PRO-Console-v1.3.57.apk';
+  const release = { tag_name: 'v1.3.57', assets: [
+    { name: 'setup.exe', browser_download_url: url.replace('.apk', '.exe') },
+    { name: 'U50PRO-Console-v1.3.57.apk', browser_download_url: url, size: 627268 }
+  ] };
+  const check = createUpdateChecker({ fetcher: async () => ({ ok: true, json: async () => release }) });
+  assert.equal((await check('1.3.56')).apk.url, url);
+  release.assets[1].browser_download_url = 'https://example.com/app.apk';
+  assert.equal((await check('1.3.56', true)).apk, null);
+  release.assets[1].browser_download_url = url.replace('v1.3.57/', 'v1.3.58/');
+  assert.equal((await check('1.3.56', true)).apk, null);
+});

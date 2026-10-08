@@ -437,9 +437,12 @@
               <view class="panel-header"><view><text class="panel-title">软件更新</text><text class="panel-subtitle">当前版本 v{{ APP_VERSION }}</text></view><RefreshCw :size="20" /></view>
               <view class="action-row">
                 <button class="primary-button" :disabled="softwareUpdate.busy" @click="checkSoftwareUpdate(true)">{{ softwareUpdate.busy ? '正在检查…' : '检查更新' }}</button>
-                <button class="secondary-button" @click="openSoftwareRelease">{{ softwareUpdate.result?.isNewer ? '前往下载新版' : '查看发布页' }}</button>
+                <button v-if="nativeUpdate && softwareUpdate.result?.isNewer" class="secondary-button" :disabled="apkDownload.state === 'downloading' || !softwareUpdate.result.apk" @click="downloadSoftwareUpdate">{{ apkDownload.state === 'downloading' ? '下载中…' : apkDownload.state === 'ready' ? '安装更新' : '下载并安装更新' }}</button>
+                <button v-if="!nativeUpdate" class="secondary-button" @click="openSoftwareRelease">查看发布页</button>
                 <text class="action-result">{{ softwareUpdate.message }}</text>
               </view>
+              <view v-if="nativeUpdate && apkDownload.message" class="action-result">{{ apkDownload.message }}</view>
+              <progress v-if="apkDownload.state === 'downloading'" :percent="Math.max(0, apkDownload.progress)" :show-info="apkDownload.progress >= 0" stroke-width="4" />
               <text v-if="softwareUpdate.result?.isNewer && softwareUpdate.result.body" class="update-notes">{{ softwareUpdate.result.body }}</text>
             </section>
             <section class="panel settings-panel">
@@ -585,6 +588,33 @@ import { version as APP_VERSION } from '../../../package.json';
 import { createUpdateChecker, RELEASES_PAGE } from '../../services/update-check.js';
 
 const softwareUpdate = reactive({ busy: false, result: null, message: '' });
+const nativeUpdate = typeof window !== 'undefined' && !!window.AndroidUpdate;
+const apkDownload = reactive({ state: 'idle', progress: 0, message: '' });
+let updatePollTimer;
+let autoInstallVersion = '';
+function pollApkDownload() {
+  if (!nativeUpdate) return;
+  try {
+    const state = JSON.parse(window.AndroidUpdate.status());
+    if (state.version && state.version === APP_VERSION) return;
+    Object.assign(apkDownload, state);
+    if (state.state === 'ready') {
+      apkDownload.message = '下载完成，点击安装更新；若系统要求授权，请允许后返回继续安装。';
+      if (autoInstallVersion === state.version) {
+        autoInstallVersion = '';
+        window.AndroidUpdate.install();
+      }
+    }
+  } catch { apkDownload.message = '无法读取下载状态，请重试'; }
+}
+function downloadSoftwareUpdate() {
+  if (apkDownload.state === 'ready') { window.AndroidUpdate.install(); return; }
+  const result = softwareUpdate.result;
+  if (!result?.apk || !result.isNewer) return;
+  autoInstallVersion = result.version;
+  window.AndroidUpdate.download(result.apk.url, result.version);
+  pollApkDownload();
+}
 const checkRelease = createUpdateChecker({ storage: {
   getItem: key => uni.getStorageSync(key),
   setItem: (key, value) => uni.setStorageSync(key, value)
@@ -597,6 +627,7 @@ async function checkSoftwareUpdate(force = false) {
     const result = await checkRelease(APP_VERSION, force);
     softwareUpdate.result = result;
     softwareUpdate.message = result.isNewer ? `发现新版本 v${result.version}` : '当前已是最新版本';
+    if (nativeUpdate && result.isNewer && !result.apk) softwareUpdate.message += '，该版本尚未提供 Android 安装包';
   } catch (error) {
     softwareUpdate.message = error.message || '检查失败，请检查网络后重试';
   } finally { softwareUpdate.busy = false; }
@@ -2131,6 +2162,10 @@ async function initialize() {
 
 onMounted(() => {
   void checkSoftwareUpdate();
+  if (nativeUpdate) {
+    pollApkDownload();
+    updatePollTimer = setInterval(pollApkDownload, 1000);
+  }
   // 用页面自身的图表/电池窗口参数初始化同步编排，确保跨设备合并与本地保留窗口一致。
   syncClient.init({
     chartWindowMs: METRIC_HISTORY_WINDOW_MS,
@@ -2167,6 +2202,7 @@ onLoad(options => {
 });
 
 onBeforeUnmount(() => {
+  clearInterval(updatePollTimer);
   persistChartHistory(true);
   clearInterval(pollTimer);
   clearInterval(smsPollTimer);

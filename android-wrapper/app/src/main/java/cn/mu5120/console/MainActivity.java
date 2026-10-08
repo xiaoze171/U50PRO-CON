@@ -58,6 +58,7 @@ public final class MainActivity extends Activity {
         webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         routerBridge = new RouterBridge(webView);
         webView.addJavascriptInterface(routerBridge, "AndroidRouter");
+        webView.addJavascriptInterface(new UpdateBridge(this), "AndroidUpdate");
         BackgroundMonitorService.start(this);
         BackgroundMonitorService.setAppForeground(this, true);
         BackgroundMonitorService.refreshOverlay(this);
@@ -226,6 +227,7 @@ public final class MainActivity extends Activity {
         }
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidRouter");
+            webView.removeJavascriptInterface("AndroidUpdate");
             webView.destroy();
         }
         super.onDestroy();
