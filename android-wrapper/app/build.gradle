@@ -45,7 +45,7 @@ android {
 
     useLibrary 'android.test.runner'
     useLibrary 'android.test.base'
-    // Never package a legacy source-tree H5 bundle: generate from the selected profile.
+    // Generate the embedded app UI from the selected battery profile.
     sourceSets.main.assets.srcDirs = ["$buildDir/generated/monitorAssets", "$buildDir/generated/webAssets"]
 }
 
@@ -58,10 +58,10 @@ preBuild.dependsOn prepareMonitorAssets
 
 task buildMonitorWeb(type: Exec) {
     workingDir '../..'
-    commandLine 'node', 'android-wrapper/build-web-assets.mjs'
+    commandLine 'node', 'android-wrapper/build-app-ui.mjs'
 }
 task prepareWebAssets(type: Sync, dependsOn: buildMonitorWeb) {
-    from '../../dist/build/h5'
+    from "$buildDir/compiledUi"
     into "$buildDir/generated/webAssets/www"
 }
 preBuild.dependsOn prepareWebAssets

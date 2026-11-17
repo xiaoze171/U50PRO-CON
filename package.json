@@ -4,10 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:h5": "uni -p h5 --host 0.0.0.0 --port 5120",
-    "build:h5": "uni build -p h5",
-    "dev:app": "uni -p app",
-    "build:app": "uni build -p app"
+    "build:app": "node android-wrapper/build-apk.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5020420260813001",

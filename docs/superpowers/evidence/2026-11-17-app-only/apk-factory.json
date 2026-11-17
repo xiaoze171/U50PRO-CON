@@ -1,0 +1,36 @@
+{
+  "profile": "factory",
+  "assets": 6,
+  "package": "cn.mu5120.console",
+  "versionName": "1.4.5",
+  "versionCode": 77,
+  "signatureSha256": "30f26f85ad1c970de9c00ac9ba0e042f48855f065b73b6b64f7e7840b6323ff4",
+  "sha256": "c61d40386403736085f7537e025215f5750723c55ce1b6e4c6ee7f7520bfe73b",
+  "bytes": 1113504,
+  "apk": "D:\\code\\github\\U50PRO-CON\\release-apks\\U50PRO-Console-v1.4.5-apk-only-factory.apk",
+  "removedSymbols": [
+    "DesktopRouter",
+    "syncGetSelf",
+    "syncGetPeers",
+    "syncDrainInbound",
+    "syncSetEnabled",
+    "syncSetAdvertise",
+    "syncPublish",
+    "syncFetch",
+    "__mu5120SyncResponse",
+    "u50pro_sync",
+    "SyncServer",
+    "DiscoveryBeacon",
+    "shutdownSync",
+    "/router-api",
+    "/battery-api"
+  ],
+  "checks": [
+    "generated assets byte-identical",
+    "web and native profile match",
+    "removed sync and desktop symbols absent from JS and DEX",
+    "local monitor/history/session/proxy/update classes present",
+    "multicast permission removed",
+    "package/version and signing identity preserved"
+  ]
+}

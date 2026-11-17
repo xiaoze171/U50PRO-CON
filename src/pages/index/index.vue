@@ -387,7 +387,6 @@
                 <view><text class="panel-title">原厂后台</text><text class="panel-subtitle">{{ stockConsole.message }}</text></view>
                 <view class="stock-header-actions">
                   <button class="secondary-button" :disabled="stockConsole.busy" @click="openStockConsole(true)"><RefreshCw :size="17" />{{ stockConsole.busy ? '登录中…' : '重新自动登录' }}</button>
-                  <button v-if="stockOpenMode === 'external'" class="secondary-button" @click="openStockConsoleExternal"><ExternalLink :size="17" />新窗口打开</button>
                 </view>
               </view>
               <view v-if="stockOpenMode === 'embed'" class="stock-zoom-row">
@@ -401,7 +400,7 @@
                 <view v-else class="stock-placeholder">{{ stockConsole.busy ? '正在自动登录并加载原厂后台…' : '正在准备原厂后台…' }}</view>
               </view>
               <template v-else>
-                <view class="stock-native-hint">{{ stockOpenMode === 'navigate' ? '原厂后台将以全屏方式打开：已用保存的密码自动登录管理员与开发者权限，按系统返回键回到本应用。' : '原厂后台将在系统浏览器中打开，暂不支持免密自动登录，需手动输入一次密码。' }}</view>
+                <view class="stock-native-hint">原厂后台将以全屏方式打开：已用保存的密码自动登录管理员与开发者权限，按系统返回键回到本应用。</view>
                 <button class="primary-button stock-native-open" :disabled="stockConsole.busy" @click="openStockConsoleNative">
                   <RouterIcon :size="17" />{{ stockConsole.busy ? '正在确认登录状态…' : '进入原厂后台' }}
                 </button>
@@ -637,8 +636,7 @@ async function checkSoftwareUpdate(force = false) {
 }
 function openSoftwareRelease() {
   if (typeof window === 'undefined') return;
-  if (window.AndroidRouter) window.location.assign(RELEASES_PAGE);
-  else window.open(RELEASES_PAGE, '_blank', 'noopener,noreferrer');
+  window.location.assign(RELEASES_PAGE);
 }
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -679,13 +677,9 @@ const smsComposeOpen = ref(false);
 const freshnessNow = ref(Date.now());
 // 原厂后台内嵌状态：与 App 共享同一会话 Cookie，打开时自动登录管理员 + 开发者会话。
 const stockConsole = reactive({ url: '', busy: false, loggedIn: false, message: '未打开' });
-// 打开方式：浏览器/安卓壳内嵌 iframe（安卓经 127.0.0.1 本地反代，POST 完整），
-// 安卓反代未启动时退回全屏直连；桌面壳暂以系统浏览器兜底。
+// 安卓经 127.0.0.1 本地反代内嵌 iframe，反代未启动时退回全屏直连。
 const stockOpenMode = routerApi.stockUiOpenMode();
 const stockUiCanFullscreen = typeof window !== 'undefined' && !!window.AndroidRouter;
-// 浏览器内嵌是同源 iframe（可读 hash 做精准自愈）；安卓本地反代是跨源
-// （127.0.0.1 vs appassets），只能改为轮询会话的自愈方式。
-const stockUiSameOrigin = stockOpenMode === 'embed' && !stockUiCanFullscreen;
 
 // 原厂后台独立缩放：应用的双指缩放被刻意禁用，且跨源 iframe 内的手势父页面
 // 接不到，所以用按钮对 iframe 做 transform 缩放（放大时内部视口变窄、文字
@@ -1187,7 +1181,6 @@ function buildBatteryDiagnostics(measurement = {}, raw = {}, summary = {}) {
 }
 const runtimeDetails = computed(() => toItems({
   '当前数据通道': '本机直连路由器',
-  'H5 浏览器': '开发预览通过本机代理访问路由器',
   'Android App': '原生 HTTP 直连路由器，原厂后台走本机反向代理',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
   '图表窗口': '可查看最近 2 小时 / 24 小时',
@@ -1577,19 +1570,9 @@ async function openStockConsole(force = false) {
   stockConsole.busy = true;
   stockConsole.message = '正在用保存的密码自动登录…';
   try {
-    let landed = false;
-    let loginFailedMessage = '';
-    // 原厂后台只在加载瞬间判断一次登录态：若恰好撞上会话被其他设备抢占的
-    // 窗口，它会停在原厂登录页且不会自行恢复，因此检测后重登重载，最多 3 次。
-    for (let attempt = 0; attempt < 3 && !landed; attempt++) {
-      const main = await routerApi.login(true);
-      stockConsole.loggedIn = Boolean(main.loggedIn);
-      if (!main.loggedIn) {
-        loginFailedMessage = `自动登录失败：${main.message}`;
-        stockConsole.message = `${loginFailedMessage}。可进入原厂后台中手动登录。`;
-        stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
-        break;
-      }
+    const main = await routerApi.login(true);
+    stockConsole.loggedIn = Boolean(main.loggedIn);
+    if (main.loggedIn) {
       let developerState = '开发者权限未建立';
       try {
         const developer = await routerApi.developerLogin();
@@ -1597,123 +1580,48 @@ async function openStockConsole(force = false) {
       } catch (error) {
         developerState = `开发者权限：${error.message}`;
       }
-      stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
       stockConsole.message = `管理员会话已就绪 · ${developerState}`;
-      // 跨源 iframe（安卓本地反代）读不到 hash，全屏直连模式没有 iframe：
-      // 两种情况都不存在"停在登录页"的检测，直接视为就绪（否则空转 3×3 秒，
-      // 按钮长时间禁用，看起来像打不开）。
-      landed = stockUiSameOrigin ? await waitForStockConsoleHome() : true;
-      if (!landed) stockConsole.message = '原厂后台加载时撞上会话被抢占，正在重试…';
+    } else {
+      stockConsole.message = `自动登录失败：${main.message}。可进入原厂后台中手动登录。`;
     }
-    if (stockConsole.loggedIn && !landed) {
-      stockConsole.message += ' · 仍停在原厂登录页：路由器登录正被其他设备抢占，稍后可点"重新自动登录"重试';
-    }
+    stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
   } finally {
     stockConsole.busy = false;
-    // 看守接管后续会话抢占的自愈（也覆盖 3 次重试后仍停在登录页的情况）；
-    // 仅内嵌模式有意义——全屏直连模式下原厂页面是另一个文档，读不到 hash。
+    // 内嵌页面通过原生会话状态检测并恢复被其他设备抢占的登录。
     if (stockConsole.url && stockOpenMode === 'embed' && activeTab.value === 'devices' && managementTab.value === 'stock') {
       startStockConsoleWatcher();
     }
   }
 }
 
-// 轮询 iframe 的 hash：原厂后台离开 #login 即视为已进入主界面（同源 iframe 可读）。
-function waitForStockConsoleHome(timeoutChecks = 12, intervalMs = 250) {
-  return new Promise(resolve => {
-    let checks = 0;
-    const timer = setInterval(() => {
-      checks += 1;
-      const frame = document.querySelector('.stock-frame');
-      const hash = frame && frame.contentWindow ? frame.contentWindow.location.hash : '';
-      if (hash && hash !== '#login') {
-        clearInterval(timer);
-        resolve(true);
-      } else if (checks >= timeoutChecks) {
-        clearInterval(timer);
-        resolve(false);
-      }
-    }, intervalMs);
-  });
-}
-
 // —— 原厂后台自愈看守 ——
 // 会话被其他设备抢占后：主会话丢失 → 原厂界面退回 #login 且不会自恢复；
 // 开发者标志丢失 → 进"开发者选项"被原厂 router.js 跳到 #developer_login 要求二次输密码。
-// 看守检测到这两种状态时用已保存的密码自动恢复会话，并把界面跳回原处。
+// 看守检测到这两种状态时用已保存的密码自动恢复会话，并重新加载内嵌页面。
 let stockConsoleWatcherTimer = null;
 let stockConsoleFixBusy = false;
-
-function stockConsoleHash() {
-  try {
-    const frame = document.querySelector('.stock-frame');
-    return frame && frame.contentWindow ? frame.contentWindow.location.hash : '';
-  } catch {
-    // 跨域 iframe（安卓/桌面壳直连模式）读 hash 会抛异常，看守自然退化为不动作。
-    return '';
-  }
-}
-
-function stockConsoleNavigate(hash) {
-  try {
-    const frame = document.querySelector('.stock-frame');
-    if (frame && frame.contentWindow) frame.contentWindow.location.hash = hash;
-  } catch {}
-}
 
 async function checkStockConsoleState() {
   if (stockConsoleFixBusy || stockConsole.busy || !stockConsole.url) return;
   // 跨源 iframe（安卓本地反代）：读不到原厂页面状态，改为轮询会话；会话被
   // 抢占丢失时重登（主 + 开发者）并重载 iframe，让原厂界面回到已登录视图。
-  if (!stockUiSameOrigin) {
-    stockConsoleFixBusy = true;
-    try {
-      const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false, developer: false }));
-      if (session.loggedIn && session.developer) return;
-      const main = await routerApi.login(true);
-      if (!main.loggedIn) return;
-      try { await routerApi.developerLogin(); } catch {}
-      stockConsole.message = '会话曾被其他设备抢占，已自动恢复';
-      stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
-    } catch {} finally {
-      stockConsoleFixBusy = false;
-    }
-    return;
-  }
-  const hash = stockConsoleHash();
-  if (hash === '#login') {
-    stockConsoleFixBusy = true;
-    try {
-      const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false }));
-      if (!session.loggedIn) await routerApi.login(true);
-      const after = await routerApi.stockUiSession().catch(() => ({ loggedIn: false }));
-      if (after.loggedIn) {
-        stockConsoleNavigate('#home');
-        stockConsole.message = '会话曾被其他设备抢占，已自动恢复';
-      }
-    } catch {} finally {
-      stockConsoleFixBusy = false;
-    }
-    return;
-  }
-  if (hash === '#developer_login') {
-    stockConsoleFixBusy = true;
-    try {
-      await routerApi.developerLogin();
-      stockConsoleNavigate('#developer_options');
-      stockConsole.message = '开发者会话已自动恢复，无需输入密码';
-    } catch (error) {
-      stockConsole.message = `开发者会话自动恢复失败：${error.message}。可在原厂页面手动输入。`;
-    } finally {
-      stockConsoleFixBusy = false;
-    }
+  stockConsoleFixBusy = true;
+  try {
+    const session = await routerApi.stockUiSession().catch(() => ({ loggedIn: false, developer: false }));
+    if (session.loggedIn && session.developer) return;
+    const main = await routerApi.login(true);
+    if (!main.loggedIn) return;
+    try { await routerApi.developerLogin(); } catch {}
+    stockConsole.message = '会话曾被其他设备抢占，已自动恢复';
+    stockConsole.url = `${routerApi.stockUiUrl()}?_t=${Date.now()}`;
+  } catch {} finally {
+    stockConsoleFixBusy = false;
   }
 }
 
 function startStockConsoleWatcher() {
   if (stockConsoleWatcherTimer) return;
-  // 同源模式查 DOM hash（800ms）；跨源模式发网络请求轮询会话（2s，避免叠加请求量）。
-  stockConsoleWatcherTimer = setInterval(checkStockConsoleState, stockUiSameOrigin ? 800 : 2000);
+  stockConsoleWatcherTimer = setInterval(checkStockConsoleState, 2000);
 }
 
 function stopStockConsoleWatcher() {
@@ -1733,16 +1641,15 @@ watch([activeTab, managementTab], () => {
 
 onBeforeUnmount(stopStockConsoleWatcher);
 
-function openStockConsoleExternal() {
-  const config = routerApi.getConfig();
-  window.open(`${config.routerUrl.replace(/\/$/, '')}/index.html`, '_blank');
-}
-
 // 安卓"全屏打开"（内嵌视图的备选入口，或反代未启动时的主入口）：先确认会话
 // 仍有效（可能又被其他设备抢占），再经原生 loadUrl 全屏直连路由器——与内嵌
 // iframe 同一出口 IP，天然共享会话；按系统返回键回到本应用。
 async function openStockConsoleNative() {
-  if (stockOpenMode === 'external') { openStockConsoleExternal(); return; }
+  const bridge = typeof window !== 'undefined' ? window.AndroidRouter : null;
+  if (!bridge || typeof bridge.openStockUi !== 'function') {
+    stockConsole.message = 'Android 原生桥接不可用，无法打开原厂后台';
+    return;
+  }
   if (stockConsole.busy) return;
   stockConsole.busy = true;
   stockConsole.message = '正在确认自动登录状态…';
@@ -1767,9 +1674,7 @@ async function openStockConsoleNative() {
   }
   const config = routerApi.getConfig();
   const directUrl = `${config.routerUrl.replace(/\/$/, '')}/index.html`;
-  const bridge = typeof window !== 'undefined' ? window.AndroidRouter : null;
-  if (bridge && typeof bridge.openStockUi === 'function') bridge.openStockUi(directUrl);
-  else window.location.href = directUrl;
+  bridge.openStockUi(directUrl);
 }
 
 function managementTabSummary(id) {

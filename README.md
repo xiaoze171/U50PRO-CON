@@ -8,7 +8,6 @@
 - 开发者：晓泽
 - 默认路由器地址：`http://192.168.0.1`
 - 默认登录密码：`111111`
-- H5 开发端口：`5120`
 
 ## 1.4.5 信号调优入口与折线图
 
@@ -49,27 +48,19 @@
 
 ### 2. 数据通道
 
-- H5：浏览器请求 `/router-api`，Vite 代理转发到路由器。
 - Android：Vue 页面通过 `AndroidRouter` 调用原生 `HttpURLConnection`，直接访问局域网路由器。
 - 默认轮询间隔：`1000ms`。
 - 请求有超时和请求重入保护。
 
-H5 开发：
+构建 Android App：
 
 ```powershell
-cd D:\code\github\e\U50PRO-CON
+cd D:\code\github\U50PRO-CON
 npm install
-npm run dev:h5
+npm run build:app
 ```
 
-浏览器访问：`http://127.0.0.1:5120`
-
-路由器地址不是默认地址时：
-
-```powershell
-$env:ROUTER_ORIGIN='http://你的路由器地址'
-npm run dev:h5
-```
+需要 Java、Gradle 和 Android SDK。构建结果为 `android-wrapper/app/build/outputs/apk/release/app-release.apk`，路由器地址在 App 设置中修改。
 
 ## 二、页面和业务功能
 
@@ -144,7 +135,7 @@ CA 和辅载波：
 - 续航记录：时间、电量、充放电状态、温度。
 - 电池详情显示净电流、功率、电压、可用容量、USB 输入质量、系统轨、累计充放电和满充观察；缺失值不当成零。前后台分钟统计按采集段保存，页面恢复本机后台的估算及计算时刻。
 
-项目只发布 Android APK，不提供 EXE 或跨设备数据互通。Gradle 从当前源码生成 APK 内的 H5 页面及电池配置，生成的网页不纳入 Git；切换电池分支后重新构建即可得到对应来源。H5 开发预览和构建工具继续用于 APK 页面调试与打包。
+项目只提供 Android App。独立 H5 网页、浏览器开发代理、EXE 和跨设备数据互通均已移除。Gradle 在 Android 构建目录中生成 App 内嵌页面及电池配置；切换电池分支后重新构建即可得到对应来源。Vue/uni-H5/Vite 是 Android WebView 页面的内部编译依赖，继续保留，不单独发布网页版本。
 
 ### 5. 短信
 

@@ -55,6 +55,55 @@ test('Android full-screen stock UI uses the confirmed local session and saved ro
   assert.equal(context.stockConsole.busy, false);
 });
 
+test('full-screen stock UI reports a missing Android bridge without browser navigation', async () => {
+  const context = {
+    stockOpenMode: 'navigate',
+    stockConsole: { busy: false, loggedIn: false, message: '' },
+    routerApi: { stockUiSession: async () => ({ loggedIn: true, developer: true }),
+      getConfig: () => ({ routerUrl: 'http://192.168.8.1/' }) },
+    window: { location: { href: 'https://appassets.androidplatform.net/' } }
+  };
+  await pageFunction('openStockConsoleNative', context)();
+  assert.match(context.stockConsole.message, /Android.*桥接/);
+  assert.equal(context.window.location.href, 'https://appassets.androidplatform.net/');
+  assert.equal(context.stockConsole.busy, false);
+});
+
+test('embedded stock UI logs in and starts native session recovery immediately', async () => {
+  let watched = 0;
+  const context = {
+    stockOpenMode: 'embed',
+    activeTab: { value: 'devices' }, managementTab: { value: 'stock' },
+    stockConsole: { url: '', busy: false, loggedIn: false, message: '' },
+    Date: { now: () => 12345 },
+    routerApi: { login: async () => ({ loggedIn: true }),
+      developerLogin: async () => ({ ok: true }), stockUiUrl: () => 'http://127.0.0.1:32123/index.html' },
+    startStockConsoleWatcher() { watched++; }
+  };
+  await pageFunction('openStockConsole', context)();
+  assert.equal(context.stockConsole.url, 'http://127.0.0.1:32123/index.html?_t=12345');
+  assert.equal(context.stockConsole.loggedIn, true);
+  assert.equal(context.stockConsole.busy, false);
+  assert.equal(watched, 1);
+});
+
+test('embedded stock UI restores a lost native session and reloads the local proxy', async () => {
+  let restored = 0;
+  const context = {
+    stockConsoleFixBusy: false,
+    stockConsole: { url: 'http://127.0.0.1:32123/index.html', busy: false, message: '' },
+    Date: { now: () => 54321 },
+    routerApi: { stockUiSession: async () => ({ loggedIn: false, developer: false }),
+      login: async () => ({ loggedIn: true }), developerLogin: async () => { restored++; },
+      stockUiUrl: () => 'http://127.0.0.1:32123/index.html' }
+  };
+  await pageFunction('checkStockConsoleState', context)();
+  assert.equal(restored, 1);
+  assert.equal(context.stockConsole.url, 'http://127.0.0.1:32123/index.html?_t=54321');
+  assert.match(context.stockConsole.message, /已自动恢复/);
+  assert.equal(context.stockConsoleFixBusy, false);
+});
+
 test('carrier aggregation summary does not treat firmware flags as active carriers', () => {
   const describe = pageFunction('carrierAggregationText');
   assert.equal(describe({}), '待获取');

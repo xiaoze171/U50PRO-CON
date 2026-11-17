@@ -32,7 +32,6 @@ const lteBandMasks = { 1: '0x000000001', 3: '0x000000004', 5: '0x000000010', 7: 
 const nrBandSet = new Set([1, 3, 5, 8, 28, 41, 77, 78]);
 
 let config = loadConfig();
-let cookies = new Map();
 let accessIdSeed = '';
 let loginState = { loggedIn: false, lastAttempt: 0, message: '尚未连接', method: 'sha256' };
 let batteryHistory = loadBatteryHistory();
@@ -49,17 +48,12 @@ const archivedBatteryRevisions = new Map(batteryHistory.filter(item => item.curr
   .map(item => [item.currentStats.blockId, item.currentStats.revision]));
 const localBatteryBlockReadings = new Map();
 let lastNativeBatteryMerge = 0;
-let isH5 = false;
 let nativeRequestSequence = 0;
 const nativeRequests = new Map();
 let writeQueue = Promise.resolve();
 
-// #ifdef H5
-isH5 = true;
-// #endif
-
 function nativeBridge() {
-  // Android WebView 通过原生桥直连路由器，浏览器预览使用开发代理。
+  // Android WebView 通过原生桥直连路由器，并由原生层维护会话。
   const candidate = typeof window !== 'undefined'
     ? window.AndroidRouter
     : null;
@@ -302,11 +296,6 @@ function sha256(value) {
   return CryptoJS.SHA256(String(value)).toString(CryptoJS.enc.Hex).toUpperCase();
 }
 
-function baseUrl() {
-  if (isH5) return '/router-api';
-  return config.routerUrl.replace(/\/$/, '');
-}
-
 // 安卓壳的原厂后台本地反代端口（StockProxyServer，127.0.0.1），0 = 未启动。
 function stockProxyPort() {
   if (typeof window === 'undefined' || !window.AndroidRouter) return 0;
@@ -315,24 +304,16 @@ function stockProxyPort() {
   return Number.isInteger(port) && port > 0 ? port : 0;
 }
 
-// 原厂后台入口地址：
-// - 浏览器 H5：vite 代理路径 /router-api/index.html（与 App 同源）。
-// - 安卓壳：本地反代 http://127.0.0.1:<port>/index.html（POST 完整转发，
-//   响应剥离 X-Frame-Options/CSP，iframe 可内嵌，体验与浏览器一致）。
+// 原厂后台经安卓本地反代内嵌；反代未启动时使用路由器直连地址全屏打开。
 function stockUiUrl() {
   const port = stockProxyPort();
   if (port > 0) return `http://127.0.0.1:${port}/index.html`;
-  if (isH5 && !nativeBridge()) return '/router-api/index.html';
   return `${config.routerUrl.replace(/\/$/, '')}/index.html`;
 }
 
-// 原厂后台打开方式：浏览器 H5 与安卓壳（本地反代可用时）均为 embed 内嵌；
-// 安卓反代未启动时退回 navigate 全屏直连。
+// 安卓反代可用时内嵌，否则通过原生 WebView 全屏直连。
 function stockUiOpenMode() {
-  if (typeof window !== 'undefined' && window.AndroidRouter) {
-    return stockProxyPort() > 0 ? 'embed' : 'navigate';
-  }
-  return 'embed';
+  return stockProxyPort() > 0 ? 'embed' : 'navigate';
 }
 
 function queryString(values) {
@@ -342,60 +323,15 @@ function queryString(values) {
     .join('&');
 }
 
-function rememberCookies(response) {
-  if (isH5) return;
-  const values = [];
-  if (Array.isArray(response.cookies)) values.push(...response.cookies);
-  const headerValue = response.header?.['Set-Cookie'] || response.header?.['set-cookie'];
-  if (Array.isArray(headerValue)) values.push(...headerValue);
-  else if (headerValue) values.push(headerValue);
-  values.forEach(item => {
-    const first = String(item).split(';', 1)[0];
-    const index = first.indexOf('=');
-    if (index > 0) cookies.set(first.slice(0, index), first.slice(index + 1));
-  });
-}
-
-function cookieHeader() {
-  return [...cookies.entries()].map(([key, value]) => `${key}=${value}`).join('; ');
-}
-
 function requestRouter(path, options = {}) {
+  const bridge = nativeBridge();
+  if (!bridge) return Promise.reject(new Error('Android 原生桥接不可用，请在 Android App 中打开'));
   const headers = {
     Accept: 'application/json, text/javascript, */*; q=0.01',
     'X-Requested-With': 'XMLHttpRequest',
     ...(options.header || {})
   };
-  if (!isH5 && !options.url) {
-    headers.Origin = config.routerUrl;
-    headers.Referer = `${config.routerUrl.replace(/\/$/, '')}/index.html`;
-    if (cookieHeader()) headers.Cookie = cookieHeader();
-  }
-
-  const bridge = nativeBridge();
-  if (bridge) return nativeBridgeRequest(bridge, path, options, headers);
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url: options.url ? (isH5 ? `/battery-api?url=${encodeURIComponent(options.url)}` : options.url) : `${baseUrl()}${path}`,
-      method: options.method || 'GET',
-      data: options.data,
-      header: headers,
-      timeout: options.timeoutMs || 12000,
-      ...(options.responseType === 'text' ? { responseType: 'text', dataType: 'text' } : {}),
-      withCredentials: !options.url,
-      success(response) {
-        if (!options.url) rememberCookies(response);
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          reject(new Error(`路由器返回 HTTP ${response.statusCode}`));
-          return;
-        }
-        resolve(options.fullResponse ? { data: response.data, header: response.header || {} } : response.data);
-      },
-      fail(error) {
-        reject(new Error(error.errMsg || '无法连接路由器'));
-      }
-    });
-  });
+  return nativeBridgeRequest(bridge, path, options, headers);
 }
 
 async function getBatteryGauge(settings) {
@@ -457,8 +393,6 @@ async function login(force = false) {
   loginState.lastAttempt = now;
   if (!config.password) return (loginState = { loggedIn: false, lastAttempt: now, message: '未保存路由器密码', method: 'none' });
   try {
-    // H5 的路由器 Cookie 由浏览器保存，改密码后先注销旧会话，避免旧 Cookie 让错误密码看起来也能登录。
-    if (force && isH5) await setGoform('LOGOUT').catch(() => {});
     await requestRouter('/index.html');
     const version = await getFields(['Language', 'cr_version', 'wa_inner_version']);
     accessIdSeed = `${version.wa_inner_version || ''}${version.cr_version || ''}`;
@@ -1160,7 +1094,6 @@ function updateConfig(next) {
 }
 
 function clearSession() {
-  cookies.clear();
   accessIdSeed = '';
   loginState = { loggedIn: false, lastAttempt: 0, message: '配置已更新，等待重新登录', method: 'sha256' };
   const bridge = nativeBridge();
