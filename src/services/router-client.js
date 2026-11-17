@@ -832,7 +832,9 @@ async function deleteSms(ids) {
 
 async function scanNeighbors() {
   await ensureLogin();
-  return setGoform('SCAN_NR5G_NEIGHBOR_CELL');
+  const result = await setGoform('SCAN_NR5G_NEIGHBOR_CELL');
+  assertSuccess(result, '扫描邻区');
+  return result;
 }
 
 async function linkedCellLock(candidate) {
@@ -879,13 +881,13 @@ async function setLteCellLock(values) {
 async function unlockAllCellLocks() {
   await ensureDeveloperAccess();
   const errors = [];
-  for (const task of [
-    () => setGoform('NR5G_LOCK_CELL_SET', { nr5g_cell_lock: '1,1,1,1' }),
-    () => setGoform('LTE_LOCK_CELL_SET', { lte_pci_lock: '', lte_earfcn_lock: '' })
+  for (const [label, task] of [
+    ['5G 解除锁定', () => setGoform('NR5G_LOCK_CELL_SET', { nr5g_cell_lock: '1,1,1,1' })],
+    ['LTE 解除锁定', () => setGoform('LTE_LOCK_CELL_SET', { lte_pci_lock: '', lte_earfcn_lock: '' })]
   ]) {
-    try { await task(); } catch (error) { errors.push(error.message); }
+    try { assertSuccess(await task(), label); } catch (error) { errors.push(`${label}：${error.message}`); }
   }
-  if (errors.length === 2) throw new Error(errors[0]);
+  if (errors.length === 2) throw new Error(errors.join('；'));
   return { result: 'success', partial: errors.length ? errors : undefined };
 }
 

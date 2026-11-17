@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $generatedConfig) 
 $profileFile = Join-Path $repository 'config/battery-profile.json'
 $profileMode = if ($Profile) { $Profile } else { (Get-Content -Raw -LiteralPath $profileFile | ConvertFrom-Json).mode }
 if ($profileMode -notin @('factory', 'gauge88-csv')) { throw 'Invalid battery profile' }
-Set-Content -LiteralPath $generatedConfig -Encoding utf8 -Value "package cn.mu5120.console; public final class BuildConfig { public static final String BATTERY_PROFILE = `"$profileMode`"; public static final boolean DEBUG = true; public static final String VERSION_NAME = `"1.4.5`"; public static final int VERSION_CODE = 77; }"
+Set-Content -LiteralPath $generatedConfig -Encoding utf8 -Value "package cn.mu5120.console; public final class BuildConfig { public static final String BATTERY_PROFILE = `"$profileMode`"; public static final boolean DEBUG = true; public static final String VERSION_NAME = `"1.3.58`"; public static final int VERSION_CODE = 78; }"
 $sources += $generatedConfig
 & javac -encoding UTF-8 -source 8 -target 8 -cp $classPath -d $output @sources
 if ($LASTEXITCODE -ne 0) { throw 'Native source/test compilation failed' }

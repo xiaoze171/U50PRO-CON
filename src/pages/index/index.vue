@@ -1769,8 +1769,10 @@ async function unlockAllCells() {
   actionBusy.value = true;
   radioActionResult.value = '正在解除小区锁定…';
   try {
-    await routerApi.unlockAllCellLocks();
-    radioActionResult.value = '已解除小区锁定（5G 与 LTE）';
+    const result = await routerApi.unlockAllCellLocks();
+    radioActionResult.value = result.partial?.length
+      ? `部分小区锁定未解除：${result.partial.join('；')}`
+      : '已解除小区锁定（5G 与 LTE）';
     await refresh();
   } catch (error) {
     radioActionResult.value = error.message;
