@@ -21,19 +21,147 @@
 
 ## 界面预览
 
-以下为 1.3.58 常规 Android 版实机截图，裁去系统状态栏，未替换界面数据。
+截图来自常规版实机，按页面内容裁切并移除系统状态栏；敏感标识、短信内容和验证码已遮挡，原厂未返回的字段保留实际缺失值。长页面按滚动区域分图展示。展开下方图册可查看各项功能，点击图片可查看原图。
 
-**首页：实时速率、电池、信号与温度**
+**首页：实时上传与下载、电量与时间估算、信号、温度，以及流量、设备和短信快捷入口**
 
 ![1.3.58 常规版首页](docs/images/v1.3.58/overview.png)
 
-**趋势：最近 2 小时或 24 小时的监测记录**
+<details>
+<summary><strong>网速、温度与信号趋势（7 张）</strong></summary>
 
-![1.3.58 常规版趋势页](docs/images/v1.3.58/trends.png)
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/trends-throughput-2h.png"><img src="docs/images/v1.3.58/trends-throughput-2h.png" width="280" alt="网速趋势：最近 2 小时的上传与下载" /></a><br /><strong>网速 · 2 小时</strong><br />上传与下载曲线、图例，以及流量管理入口。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/trends-throughput-24h-tooltip.png"><img src="docs/images/v1.3.58/trends-throughput-24h-tooltip.png" width="280" alt="网速趋势：24 小时窗口与采集来源提示" /></a><br /><strong>网速 · 24 小时与点按提示</strong><br />切换时间范围，点按曲线查看数值、时间与采集来源。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/trends-temperature-chart.png"><img src="docs/images/v1.3.58/trends-temperature-chart.png" width="280" alt="温度趋势：各传感器曲线与图例" /></a><br /><strong>温度曲线</strong><br />各传感器的监测历史，点击图例可显示或隐藏曲线。</td>
+<td align="center"><a href="docs/images/v1.3.58/trends-temperature-readings.png"><img src="docs/images/v1.3.58/trends-temperature-readings.png" width="280" alt="温度趋势下部：传感器读数与采集详情入口" /></a><br /><strong>温度读数</strong><br />全部温度指标、异常或缺失说明，以及原始读数入口。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/trends-signal-rsrp.png"><img src="docs/images/v1.3.58/trends-signal-rsrp.png" width="280" alt="信号趋势：RSRP" /></a><br /><strong>信号 · RSRP</strong><br />接收功率趋势，支持 2 小时与 24 小时切换。</td>
+<td align="center"><a href="docs/images/v1.3.58/trends-signal-sinr.png"><img src="docs/images/v1.3.58/trends-signal-sinr.png" width="280" alt="信号趋势：SINR" /></a><br /><strong>信号 · SINR</strong><br />信干噪比趋势。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/trends-signal-rsrq.png"><img src="docs/images/v1.3.58/trends-signal-rsrq.png" width="280" alt="信号趋势：RSRQ" /></a><br /><strong>信号 · RSRQ</strong><br />接收质量趋势。</td>
+<td></td>
+</tr>
+</table>
 
-**设置：路由器连接、后台采集、悬浮监测与软件更新**
+</details>
 
-![1.3.58 常规版设置页](docs/images/v1.3.58/settings.png)
+<details>
+<summary><strong>原厂电池与续航记录（4 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/battery-chart-readings.png"><img src="docs/images/v1.3.58/battery-chart-readings.png" width="280" alt="原厂电池：电量曲线、充放电状态与续航估算" /></a><br /><strong>电量曲线与时间估算</strong><br />原厂电量、充放电状态、电池温度、预计充满与剩余可用。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/battery-diagnostics-top.png"><img src="docs/images/v1.3.58/battery-diagnostics-top.png" width="280" alt="电池测量与估算依据上部：原厂缺失指标保留为空" /></a><br /><strong>测量与估算依据 · 上部</strong><br />电流、电压、容量与 USB 输入等字段；原厂未提供的数值保留为缺失。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/battery-diagnostics-bottom.png"><img src="docs/images/v1.3.58/battery-diagnostics-bottom.png" width="280" alt="电池测量与估算依据下部：确认、校准与采样质量" /></a><br /><strong>测量与估算依据 · 下部</strong><br />满充确认、校准、采样质量、缺口与有效估算覆盖；保留原厂接口的实际缺失状态。</td>
+<td align="center"><a href="docs/images/v1.3.58/battery-history.png"><img src="docs/images/v1.3.58/battery-history.png" width="280" alt="续航记录：时间、电量、充放电与采集来源" /></a><br /><strong>续航记录</strong><br />按时间查看电量与充放电历史，记录保留采集来源。</td>
+</tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>流量、套餐与手动校准（3 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/usage-plan.png"><img src="docs/images/v1.3.58/usage-plan.png" width="280" alt="流量管理：当前会话、本月合计与套餐用量" /></a><br /><strong>流量与套餐概况</strong><br />当前会话、本月合计，以及套餐状态、额度、已用和剩余流量。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/usage-settings.png"><img src="docs/images/v1.3.58/usage-settings.png" width="280" alt="流量设置：套餐、提醒、清零日期与已用校准" /></a><br /><strong>套餐设置与校准</strong><br />启用套餐、每月 GB、提醒比例、自动清零与日期，手动校准本月已用流量。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/usage-details.png"><img src="docs/images/v1.3.58/usage-details.png" width="280" alt="用量明细：会话及本月上传、下载与联网时间" /></a><br /><strong>用量明细</strong><br />会话与本月的上传、下载和联网时间。</td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>连接设备、网络调优与频段锁定（7 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/devices-clients.png"><img src="docs/images/v1.3.58/devices-clients.png" width="280" alt="连接设备：无线、有线设备与常用功能入口" /></a><br /><strong>连接设备</strong><br />无线与有线设备、网络和锁定摘要，以及短信、调优、原厂后台、设备控制入口。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/radio-network-serving.png"><img src="docs/images/v1.3.58/radio-network-serving.png" width="280" alt="网络调优：当前网络、服务小区与无线质量" /></a><br /><strong>当前网络与服务小区</strong><br />网络信息、RSRP / RSRQ / SINR / RSSI，以及 PCI、频段、ARFCN 和带宽。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/radio-ca-trend.png"><img src="docs/images/v1.3.58/radio-ca-trend.png" width="280" alt="网络调优：辅载波、NR CA 与无线质量趋势" /></a><br /><strong>辅载波、CA 与无线质量趋势</strong><br />路由器实际返回的载波聚合信息，以及最近 2 小时信号曲线。</td>
+<td align="center"><a href="docs/images/v1.3.58/radio-neighbors.png"><img src="docs/images/v1.3.58/radio-neighbors.png" width="280" alt="邻小区：候选排序、搜索、重新扫描与选择" /></a><br /><strong>邻小区扫描与选择</strong><br />候选按信号强度排序，可搜索 PCI、ARFCN、Band，重新扫描并选择小区。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/radio-cell-lock.png"><img src="docs/images/v1.3.58/radio-cell-lock.png" width="280" alt="小区锁定：当前锁定状态、所选参数与解除按钮" /></a><br /><strong>小区锁定</strong><br />当前锁定状态、所选候选参数，以及锁定和解除小区锁定入口。</td>
+<td align="center"><a href="docs/images/v1.3.58/radio-bands-lte.png"><img src="docs/images/v1.3.58/radio-bands-lte.png" width="280" alt="LTE 频段：选择、保存与解除限制" /></a><br /><strong>LTE 频段</strong><br />独立选择 LTE 频段、保存或解除限制。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/radio-bands-sa-nsa.png"><img src="docs/images/v1.3.58/radio-bands-sa-nsa.png" width="280" alt="5G SA 与 NSA 频段：两组独立选择、保存与解除限制" /></a><br /><strong>5G SA 与 NSA 频段</strong><br />两组独立频段选项及保存、解除限制按钮。</td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>短信、原厂后台与设备控制（6 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/sms-inbox.png"><img src="docs/images/v1.3.58/sms-inbox.png" width="280" alt="短信收件箱：容量、列表与验证码复制" /></a><br /><strong>短信收件箱</strong><br />容量、消息列表、刷新与验证码复制；敏感短信信息已遮挡。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/sms-selection.png"><img src="docs/images/v1.3.58/sms-selection.png" width="280" alt="短信选择：勾选、全选、数量与批量删除入口" /></a><br /><strong>短信选择与批量删除</strong><br />勾选消息、全选、已选数量，以及批量删除入口。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/sms-compose.png"><img src="docs/images/v1.3.58/sms-compose.png" width="280" alt="写短信：收件人、内容、字数与发送入口" /></a><br /><strong>写短信</strong><br />通过路由器 SIM 卡发送，提供收件人、内容和字数计数。</td>
+<td align="center"><a href="docs/images/v1.3.58/stock-console.png"><img src="docs/images/v1.3.58/stock-console.png" width="280" alt="原厂后台：完整原厂页面、自动登录状态与缩放入口" /></a><br /><strong>原厂后台</strong><br />缩小后完整查看原厂页面；自动登录状态、缩放与重置入口。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/device-details.png"><img src="docs/images/v1.3.58/device-details.png" width="280" alt="设备详情：固件、标识、开机信息与网络概况" /></a><br /><strong>设备详情</strong><br />固件、设备标识、开机与累计使用信息、网络概况；敏感标识已遮挡。</td>
+<td align="center"><a href="docs/images/v1.3.58/device-controls.png"><img src="docs/images/v1.3.58/device-controls.png" width="280" alt="设备控制：Wi-Fi 开关、重启与关机" /></a><br /><strong>设备控制</strong><br />Wi-Fi 开关、重启和关机，以及网络、流量、电池详情跳转入口。</td>
+</tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>连接设置、原厂电量、后台采集与悬浮监测（5 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/settings.png"><img src="docs/images/v1.3.58/settings.png" width="280" alt="设置主页：连接、监控、悬浮开关、更新与诊断" /></a><br /><strong>设置入口</strong><br />路由器连接、电量来源、后台权限、悬浮开关、软件更新与诊断。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/settings-connection.png"><img src="docs/images/v1.3.58/settings-connection.png" width="280" alt="路由器连接：地址、密码、保存登录与开发者验证" /></a><br /><strong>路由器连接</strong><br />管理地址、密码、保存并登录，以及开发者权限验证。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/settings-battery-factory.png"><img src="docs/images/v1.3.58/settings-battery-factory.png" width="280" alt="电量来源：常规版使用路由器原厂电池百分比" /></a><br /><strong>原厂电量来源</strong><br />常规版使用路由器原厂返回的电池百分比。</td>
+<td align="center"><a href="docs/images/v1.3.58/settings-background.png"><img src="docs/images/v1.3.58/settings-background.png" width="280" alt="后台采集与权限：采集状态、历史回补与电池优化" /></a><br /><strong>后台采集与权限</strong><br />采集状态、历史回补、采集来源、电池优化豁免与手机后台权限说明。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/overlay-live.png"><img src="docs/images/v1.3.58/overlay-live.png" width="280" alt="其他应用上方的实时悬浮监测：网速、电量与电池温度" /></a><br /><strong>实时悬浮监测</strong><br />在其他应用上方显示上传、下载、电量与电池温度，可拖动位置。</td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+<details>
+<summary><strong>软件更新与采集诊断（3 张）</strong></summary>
+
+<table>
+<tr>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/settings-update.png"><img src="docs/images/v1.3.58/settings-update.png" width="280" alt="软件更新：当前版本、手动检查与实际检查结果" /></a><br /><strong>软件更新</strong><br />当前版本、手动检查更新与实际检查结果。</td>
+<td align="center" width="50%"><a href="docs/images/v1.3.58/diagnostics-sources-temperature.png"><img src="docs/images/v1.3.58/diagnostics-sources-temperature.png" width="280" alt="采集诊断：24 小时来源统计与温度原始返回" /></a><br /><strong>来源统计与原始温度</strong><br />最近 24 小时的归档来源计数、温度原始字段与异常读数说明。</td>
+</tr>
+<tr>
+<td align="center"><a href="docs/images/v1.3.58/diagnostics-runtime.png"><img src="docs/images/v1.3.58/diagnostics-runtime.png" width="280" alt="采集与运行方式：通信、登录、历史保存与软件版本" /></a><br /><strong>采集与运行方式</strong><br />本机通信、登录方式、图表窗口、历史保存、软件版本与开发者信息。</td>
+<td></td>
+</tr>
+</table>
+
+</details>
 
 ## 四个页面入口
 
