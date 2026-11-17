@@ -2,14 +2,16 @@
 
 本文档整理当前项目实际使用的中兴 U50 Pro/MU5120 类路由器 HTTP 接口。接口返回值保持路由器原始格式，字段通常是字符串；空字符串表示固件没有返回值或当前状态不可用。
 
+适用版本：Android 常规版 1.3.58。应用界面和功能截图见 [项目说明](../README.md)，最终验收范围见 [1.3.58 验收记录](verification-1.3.58.md)。
+
 ## 1. 传输与认证
 
 ### 1.1 基础地址
 
 默认地址：`http://192.168.0.1`
 
-- H5：请求经过 Vite 代理，基础路径为 `/router-api`。
 - Android：通过 `window.AndroidRouter.request()` 原生桥接直接访问路由器。
+- App 内嵌页面不提供独立浏览器入口；原厂后台通过 Android 本机代理加载。
 - 请求超时：路由器请求 12 秒，原生桥总超时约 13 秒。
 - 请求头：`Accept: application/json, text/javascript, */*; q=0.01`、`X-Requested-With: XMLHttpRequest`；原生请求还带 `Origin`、`Referer` 和 Cookie。
 
@@ -294,7 +296,7 @@ GET /goform/goform_get_cmd_process
 | `goformId` | 参数 | 权限 | 作用 |
 |---|---|---|---|
 | `LOGIN` | `password` | 无 | 主登录 |
-| `LOGOUT` | 无 | 主会话 | H5 强制登录前注销旧会话 |
+| `LOGOUT` | 无 | 主会话 | App 强制登录前注销旧会话 |
 | `DEVELOPER_OPTION_LOGIN` | `password` | 主登录 | 建立开发者会话 |
 
 ### 3.2 流量设置
@@ -371,6 +373,6 @@ GET /goform/goform_get_cmd_process
 
 ## 6. 源码位置
 
-- 请求、认证、字段集合和所有写接口：[src/services/router-client.js](/D:/code/U50PRO-CON/src/services/router-client.js)
-- 页面字段展示和单位换算：[src/pages/index/index.vue](/D:/code/U50PRO-CON/src/pages/index/index.vue)
-- LTE/NR 邻小区解析：[src/utils/cells.js](/D:/code/U50PRO-CON/src/utils/cells.js)
+- 请求、认证、字段集合和所有写接口：[src/services/router-client.js](../src/services/router-client.js)
+- 页面字段展示和单位换算：[src/pages/index/index.vue](../src/pages/index/index.vue)
+- LTE/NR 邻小区解析：[src/utils/cells.js](../src/utils/cells.js)

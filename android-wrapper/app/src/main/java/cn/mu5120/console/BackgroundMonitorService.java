@@ -194,7 +194,9 @@ public final class BackgroundMonitorService extends Service {
     }
 
     public static void refreshOverlay(Context context) {
-        sendCommand(context, new Intent(context, BackgroundMonitorService.class).setAction(ACTION_OVERLAY));
+        // The UI and :monitor have separate SharedPreferences caches.
+        sendCommand(context, new Intent(context, BackgroundMonitorService.class)
+            .setAction(ACTION_OVERLAY).putExtra("enabled", isOverlayEnabled(context)));
     }
 
     private static void sendCommand(Context context, Intent intent) {
@@ -276,9 +278,12 @@ public final class BackgroundMonitorService extends Service {
             } else if (ACTION_CLEAR_SESSION.equals(action)) {
                 RouterSession.clear();
             } else if (ACTION_OVERLAY.equals(action)) {
-                overlayEnabled = intent.hasExtra("enabled")
-                    ? intent.getBooleanExtra("enabled", false)
-                    : getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_OVERLAY_ENABLED, false);
+                if (intent.hasExtra("enabled")) {
+                    overlayEnabled = intent.getBooleanExtra("enabled", false);
+                    // Keep this process's cache current before it saves other settings.
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(KEY_OVERLAY_ENABLED, overlayEnabled).apply();
+                }
                 updateOverlay();
             } else if (ACTION_SNAPSHOT.equals(action)) {
                 String payload = intent.getStringExtra("payload");
