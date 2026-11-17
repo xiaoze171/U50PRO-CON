@@ -24,6 +24,14 @@ public final class SyncPublicationTest extends AndroidTestCase {
 
         JSONObject sample = new JSONObject().put("timestamp", 1800000000000L).put("percent", 48).put("source", "screenOff");
         JSONObject live = new JSONObject().put("timestamp", 1800000000000L).put("battery", new JSONObject().put("percent", 48));
+        live.getJSONObject("battery")
+            .put("measurement", new JSONObject().put("schemaVersion", 2).put("rawSoc", 48.001).put("netCurrentMa", -400))
+            .put("currentStats", new JSONArray().put(new JSONObject().put("blockId", "native-fixture:1800000000000").put("revision", 3)))
+            .put("timeToFull", new JSONObject().put("minutes", JSONObject.NULL).put("state", "not-applicable"))
+            .put("runtime", new JSONObject().put("minutes", 600).put("state", "estimated"))
+            .put("calculatedAt", 1800000000000L).put("windowSeconds", 60);
+        sample.put("measurement", live.getJSONObject("battery").getJSONObject("measurement"))
+            .put("currentStats", live.getJSONObject("battery").getJSONArray("currentStats").getJSONObject(0));
         publish.invoke(server, new JSONObject().put("live", live)
             .put("chart", new JSONObject().put("rsrp", new JSONArray().put(new JSONArray().put(1800000000000L).put(-95).put("screenOff"))))
             .put("battery", new JSONArray().put(sample)).toString());
@@ -33,11 +41,17 @@ public final class SyncPublicationTest extends AndroidTestCase {
         JSONObject compact = (JSONObject) liveSnapshot.invoke(server, false);
         assertEquals(47, compact.getJSONObject("battery").getInt("percent"));
         assertFalse(compact.getJSONObject("battery").has("samples"));
+        assertTrue(compact.getJSONObject("battery").getJSONObject("timeToFull").isNull("minutes"));
+        assertEquals(600, compact.getJSONObject("battery").getJSONObject("runtime").getInt("minutes"));
+        assertEquals(1800000000000L, compact.getJSONObject("battery").getLong("calculatedAt"));
+        assertEquals(48.001, compact.getJSONObject("battery").getJSONObject("measurement").getDouble("rawSoc"), 0);
+        assertEquals(3, compact.getJSONObject("battery").getJSONArray("currentStats").getJSONObject(0).getInt("revision"));
         JSONObject legacy = (JSONObject) liveSnapshot.invoke(server, true);
         assertEquals("screenOff", legacy.getJSONObject("battery").getJSONArray("samples").getJSONObject(0).getString("source"));
         assertFalse(((JSONObject) liveSnapshot.invoke(server, false)).getJSONObject("battery").has("samples"));
         JSONObject saved = (JSONObject) history.invoke(server, 0L);
         assertEquals(1, saved.getJSONArray("battery").length());
+        assertEquals(3, saved.getJSONArray("battery").getJSONObject(0).getJSONObject("currentStats").getInt("revision"));
         assertEquals(-95, saved.getJSONObject("chart").getJSONArray("rsrp").getJSONArray(0).getInt(1));
     }
 }

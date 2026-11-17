@@ -29,10 +29,11 @@ defineProps({
 .data-row {
   display: grid;
   grid-template-columns: minmax(96px, 0.8fr) minmax(0, 1.4fr);
-  gap: 14px;
+  gap: 12px;
   align-items: center;
-  min-height: 37px;
-  border-bottom: 1px solid #eceef2;
+  min-height: 44px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line, #e6ecf3);
 }
 
 .data-row:last-child {
@@ -40,27 +41,29 @@ defineProps({
 }
 
 .data-label {
-  color: #8a94a6;
-  font-size: 13px;
+  color: var(--text-muted, #61728a);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .data-value {
   width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
-  word-break: break-all;
+  word-break: normal;
   white-space: normal;
-  color: #101828;
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--text-strong, #172b45);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .empty-row {
-  padding: 24px 8px;
-  color: #8b97a8;
-  font-size: 13px;
+  padding: 14px 8px;
+  color: var(--text-muted, #61728a);
+  font-size: 12px;
   text-align: center;
 }
 </style>

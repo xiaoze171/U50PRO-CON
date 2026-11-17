@@ -25,17 +25,14 @@ defineProps({
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0 16px;
 }
 
 .metric-item {
   min-width: 0;
-  min-height: 62px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.62);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  min-height: 64px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line, #e6ecf3);
 }
 
 .metric-grid.centered .metric-item {
@@ -49,24 +46,24 @@ defineProps({
 .metric-label,
 .metric-note {
   display: block;
-  color: #8a94a6;
-  font-size: 12px;
-  line-height: 1.35;
+  color: var(--text-muted, #61728a);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .metric-value {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   overflow-wrap: anywhere;
-  color: #101828;
-  font-size: 19px;
-  font-weight: 750;
+  color: var(--text-strong, #172b45);
+  font-size: 16px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .metric-note {
-  margin-top: 5px;
+  margin-top: 3px;
 }
 
 .wide {
@@ -79,12 +76,12 @@ defineProps({
   }
 
   .metric-item {
-    min-height: 72px;
-    padding: 12px;
+    min-height: 60px;
+    padding: 8px 0;
   }
 
   .metric-value {
-    font-size: 16px;
+    font-size: 15px;
   }
 }
 </style>

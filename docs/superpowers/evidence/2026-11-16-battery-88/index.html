@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fff">
+<title>MU5120 电池</title>
+<style>
+:root{color-scheme:light;--text:#15171a;--muted:#7b818a;--line:#e8ebee;--soft:#f6f8f7;--green:#18ad67;--p:0%}*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:max(24px,env(safe-area-inset-top)) 16px max(28px,env(safe-area-inset-bottom));background:#fff;color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}main{width:min(820px,100%);margin:auto}header{display:flex;align-items:center;justify-content:space-between;margin:0 2px 20px}.model{margin:0 0 5px;color:var(--muted);font-size:12px;letter-spacing:.08em}h1{margin:0;font-size:25px;line-height:1.1;letter-spacing:-.03em}.live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}.live:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}.offline .live:before{background:#e65966}.panel{overflow:hidden;border:1px solid var(--line);border-radius:24px}.hero{padding:24px;background:linear-gradient(135deg,#f2fbf6,#fafcfb)}.hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.soc{display:flex;align-items:flex-start;font-size:52px;font-weight:720;line-height:.9;letter-spacing:-.065em;font-variant-numeric:tabular-nums}.soc span{margin:4px 0 0 5px;color:var(--muted);font-size:18px;font-weight:600;letter-spacing:0}.hint{margin-top:9px;color:var(--muted);font-size:12px}.state{padding:7px 11px;border-radius:999px;background:#e5f7ed;color:#128b54;font-size:12px;font-weight:680}.battery-row{display:flex;align-items:center;margin-top:24px}.battery{flex:1;height:28px;padding:3px;border:2px solid #cfd5d1;border-radius:8px}.cap{width:5px;height:12px;border-radius:0 3px 3px 0;background:#cfd5d1}.fill{width:var(--p);height:100%;border-radius:4px;background:var(--green);transition:width .4s}.metrics{display:grid;grid-template-columns:repeat(2,1fr)}.metric{padding:18px 20px;border-top:1px solid var(--line)}.metric:nth-child(odd){border-right:1px solid var(--line)}.label{margin-bottom:7px;color:var(--muted);font-size:12px}.value{font-size:23px;font-weight:680;line-height:1;font-variant-numeric:tabular-nums}.value small{margin-left:3px;color:var(--muted);font-size:12px;font-weight:550}footer{display:flex;justify-content:space-between;gap:12px;margin:14px 3px 0;color:var(--muted);font-size:11px}#error{display:none;color:#d84d5c}.offline #error{display:inline}@media(min-width:700px){body{padding-top:48px}.panel{display:grid;grid-template-columns:1.08fr .92fr}.hero{padding:34px}.soc{font-size:62px}.metrics{align-content:stretch}.metric{display:flex;flex-direction:column;justify-content:center;padding:25px 24px}.metric:nth-child(-n+2){border-top:0}.value{font-size:25px}}@media(max-width:350px){body{padding-left:10px;padding-right:10px}.hero{padding:20px}.soc{font-size:46px}.metric{padding:16px}.value{font-size:21px}footer{flex-direction:column;gap:3px}}@media(prefers-reduced-motion:reduce){.fill{transition:none}}
+.details{margin-top:14px;background:var(--panel,#fff);border:1px solid var(--line);border-radius:18px;overflow:hidden}.group-title{margin:0;padding:17px 20px 10px;font-size:15px}.note{margin:0;padding:0 20px 16px;color:var(--muted);font-size:12px;line-height:1.65}.diagnostics{padding:16px 20px;color:var(--muted);font-size:12px;line-height:1.8;overflow-wrap:anywhere}.diagnostics b{color:var(--text,#17261e);font-weight:550}@media(min-width:700px){.details .metric:nth-child(-n+2){border-top:1px solid var(--line)}}
+.header-actions{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex-shrink:0}.history-link{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:9px 12px;border:1px solid #b9dfcb;border-radius:10px;background:#f0faf4;color:#146b43;font-size:13px;font-weight:650;line-height:1.3;text-decoration:none;white-space:nowrap}.history-link:hover{background:#e1f5e9;border-color:#80c6a2}.history-link:focus-visible{outline:2px solid #146b43;outline-offset:3px}.history-link svg{width:16px;height:16px;flex:none}@media(max-width:350px){header{gap:8px}.model{font-size:10px;letter-spacing:0}.history-link{font-size:12px;padding:9px 10px;gap:5px}}
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite">
+<header><div><p class="model">MU5120 · 软件电量计</p><h1>电池状态</h1></div><div class="header-actions"><div class="live" id="live">连接中</div><a class="history-link" href="/backup/battery.html" aria-label="查看电量历史与续航分析"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 3v14h14M6 12l4-5 3 3 4-5" stroke-linecap="round" stroke-linejoin="round"/></svg>历史与续航分析</a></div></header>
+<section class="panel">
+<div class="hero">
+<div class="hero-top"><div><div class="soc"><b id="soc">--</b><span>%</span></div><div class="hint" id="estimate-hint">软件估算电量</div></div><div class="state" id="status">读取中</div></div>
+<div class="battery-row" id="battery" role="img" aria-label="软件估算电量"><div class="battery"><div class="fill"></div></div><div class="cap"></div></div>
+</div>
+<div class="metrics" aria-label="电池详细数据">
+<div class="metric"><div class="label">电池电压</div><div class="value"><b id="voltage">--</b><small>V</small></div></div>
+<div class="metric"><div class="label">电池净电流</div><div class="value"><b id="current">--</b><small>mA</small></div></div>
+<div class="metric"><div class="label">电池净功率</div><div class="value"><b id="power" title="电池侧净功率：正值充电，负值放电；不是USB输入功率">--</b><small>W</small></div></div>
+<div class="metric"><div class="label">温度</div><div class="value"><b id="temp">--</b><small>℃</small></div></div>
+<div class="metric"><div class="label">供电状态</div><div class="value"><b id="pmode">--</b></div></div>
+<div class="metric"><div class="label">已插电</div><div class="value"><b id="plug">--</b><small>分钟</small></div></div>
+</div></section>
+<section class="details" aria-label="USB总输入">
+<h2 class="group-title">USB 总输入</h2><p class="note">输入侧由内核电压、电流节点读取，不使用充电限流值冒充实测。</p>
+<div class="metrics">
+<div class="metric"><div class="label">输入电压</div><div class="value"><b id="input-voltage">--</b><small>V</small></div></div>
+<div class="metric"><div class="label">输入电流</div><div class="value"><b id="input-current">--</b><small>mA</small></div></div>
+<div class="metric"><div class="label">总输入功率</div><div class="value"><b id="input-power">--</b><small>W</small></div></div>
+<div class="metric"><div class="label">输入数据</div><div class="value"><b id="input-quality">--</b></div></div>
+</div></section>
+<section class="details" aria-label="设备系统侧">
+<h2 class="group-title">设备系统侧</h2><p class="note">系统供电轨不是 USB 电压。设备电流没有独立实测节点；消耗功率为估算，包含电源转换损耗。</p>
+<div class="metrics">
+<div class="metric"><div class="label">系统供电轨电压</div><div class="value"><b id="system-voltage">--</b><small>V</small></div></div>
+<div class="metric"><div class="label">设备独立电流（不可读）</div><div class="value"><b id="system-current">--</b><small>mA</small></div></div>
+<div class="metric"><div class="label">设备＋转换损耗（估算）</div><div class="value"><b id="device-power">--</b><small>W</small></div></div>
+<div class="metric"><div class="label">估算口径</div><div class="value" style="font-size:15px;line-height:1.5"><b id="device-basis">--</b></div></div>
+</div></section>
+<section class="details" aria-label="估算依据与累计电量">
+<h2 class="group-title">估算依据与累计电量</h2><p class="note">累计电量来自采样电流积分，不是硬件剩余容量；缺失采样不补算。可用满充容量按本机日志估算，非仪表校准或化学最大容量。</p>
+<div class="metrics">
+<div class="metric"><div class="label">估算可用满充容量</div><div class="value"><b id="capacity-used">--</b><small>mAh</small></div></div>
+<div class="metric"><div class="label">标称容量（非实测）</div><div class="value"><b id="capacity-nominal">--</b><small>mAh</small></div></div>
+<div class="metric"><div class="label">累计充入电池</div><div class="value"><b id="charge-total">--</b><small>mAh</small></div></div>
+<div class="metric"><div class="label">累计电池放出</div><div class="value"><b id="discharge-total">--</b><small>mAh</small></div></div>
+</div><div class="diagnostics">满充观察：<b id="full-progress">--</b><br>恢复来源：<b id="recovery">--</b><br>恢复诊断：<b id="rejections">--</b><br>采样缺口：<b id="gaps">--</b></div>
+</section>
+<footer><span id="error">连接中断，正在重试</span></footer>
+</main>
+<script>
+const app=document.getElementById('app'),battery=document.getElementById('battery'),live=document.getElementById('live'),hint=document.getElementById('estimate-hint');
+const ids=['soc','status','voltage','current','power','temp','pmode','plug','input-voltage','input-current','input-power','input-quality','system-voltage','system-current','device-power','device-basis','charge-total','discharge-total','capacity-used','capacity-nominal','full-progress','recovery','rejections','gaps'],el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
+const num=v=>(typeof v==='number'&&Number.isFinite(v))?v:null;
+const fmt=(v,d=0)=>num(v)===null?'--':v.toFixed(d);
+const scaled=(v,k)=>num(v)===null?null:v/k;
+function displaySoc(x){
+ const s=num(x.soc);
+ if(s===null||s<0||s>100)return null;
+ const pendingFull=(x.status==='Charging'||x.status==='Full')&&x.full_confirmed===false;
+ return Math.min(Number(s.toFixed(2)),s<100||pendingFull?99.99:100);
+}
+function unavailable(label){for(const id of ids)el[id].textContent='--';live.textContent=label;app.classList.add('offline');app.style.setProperty('--p','0%');battery.setAttribute('aria-label','电量数据不可用');hint.textContent='软件估算电量 · 数据不可用';}
+let pending=false;
+async function refresh(){
+ if(pending)return;
+ pending=true;
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
+ try{
+  const r=await fetch('state.json?t='+Date.now(),{cache:'no-store',signal:controller.signal});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const x=await r.json(),s=displaySoc(x),ageHeader=r.headers?.get('X-Gauge-Age');
+  const age=ageHeader!==null&&ageHeader!==undefined&&ageHeader.trim()!==''?Number(ageHeader):(num(x.ts)===null?Infinity:Date.now()/1000-x.ts);
+  if(!Number.isFinite(age)||age<0||age>5){unavailable('数据陈旧');return;}
+  el.soc.textContent=fmt(s,2);
+  el.status.textContent=x.status==='Full'&&x.full_confirmed===false?'满充观察':x.status_cn||x.status||'未知';
+  el.voltage.textContent=fmt(scaled(x.voltage_mv,1000),3);
+  el.current.textContent=fmt(x.current_ma);el.power.textContent=fmt(x.power_w,4);el.temp.textContent=fmt(x.temp_c,1);
+  el.pmode.textContent=x.power_mode_cn||'--';el.plug.textContent=fmt(x.plugged_min);
+  el['input-voltage'].textContent=fmt(scaled(x.input_voltage_mv,1000),3);el['input-current'].textContent=fmt(x.input_current_ma);el['input-power'].textContent=fmt(x.input_power_w,3);
+  el['input-quality'].textContent=({ok:'可读',disconnected:'未连接',unavailable:'不可读'})[x.input_data_quality]||'--';
+  el['system-voltage'].textContent=fmt(scaled(x.system_voltage_mv,1000),3);el['system-current'].textContent=fmt(x.system_current_ma);
+  el['device-power'].textContent=fmt(x.device_power_estimate_w,3);
+  el['device-basis'].textContent=({'input-minus-battery-including-losses':'输入 − 电池净功率','battery-output-including-losses':'电池输出功率'})[x.device_power_basis]||'不可估算';
+  el['capacity-used'].textContent=fmt(x.capacity_mah_used);el['capacity-nominal'].textContent=fmt(x.capacity_mah_nominal);
+  el['charge-total'].textContent=fmt(scaled(x.charge_uah,1000),1);el['discharge-total'].textContent=fmt(scaled(x.discharge_uah,1000),1);
+  el['full-progress'].textContent=x.full_confirmed?'本次已确认':x.full_anchor_valid?'历史基准已保留；本次 '+fmt(scaled(x.full_stable_s,60),1)+' / 20 分钟':fmt(scaled(x.full_stable_s,60),1)+' / 20 分钟';
+  el.recovery.textContent=({live:'运行态', 'live-v2':'旧版运行态迁移',checkpoint:'持久检查点',previous:'上一代检查点','legacy-live':'旧版运行态（未校准）','legacy-checkpoint':'近期旧版检查点',none:'无可靠恢复依据'})[x.recovery_source]||'--';
+  el.rejections.textContent=x.recovery_rejections&&x.recovery_rejections!=='-'?x.recovery_rejections:'无';
+  el.gaps.textContent=fmt(x.missing_s,1)+' 秒 / '+fmt(x.gap_events)+' 次';
+  app.style.setProperty('--p',(s===null?0:s)+'%');
+  battery.setAttribute('aria-label',s===null?'软件估算电量未知':'软件估算电量 '+fmt(s,2)+'%');
+  hint.textContent=s===null?'软件估算电量 · 等待可靠基准':x.full_anchor_valid?'满充基准已建立 · 容量未校准':'软件估算电量 · 未校准';
+  if(s!==null&&x.capacity_basis==='observed-usable-20261029')hint.textContent=(x.full_anchor_valid?'满充基准已建立':'软件估算电量 · 起点未校准')+' · 可用容量约 '+fmt(x.capacity_mah_used)+' mAh（日志估算）';
+  if(x.eod_imminent)hint.textContent+=' · 电压过低，请尽快充电';
+  if(s!==null&&x.gap_events>0)hint.textContent+=' · 含采样缺口';
+  const healthy=x.data_quality==='ok';
+  live.textContent=healthy?'实时':'采样异常';
+  if(healthy)app.classList.remove('offline');else app.classList.add('offline');
+ }catch(error){unavailable('离线');}
+ finally{clearTimeout(timeout);pending=false;}
+}
+refresh();setInterval(refresh,1000);
+</script>
+</body>
+</html>

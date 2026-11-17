@@ -20,9 +20,12 @@ export default {
 <style>
 page {
   min-height: 100%;
-  background: #eef1f7;
-  color: #101828;
-  font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f3f5f8;
+  color: #182332;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  font-size: 12px;
 }
 
 html,
@@ -47,51 +50,72 @@ label {
   box-sizing: border-box;
 }
 
-button::after {
+button::after,
+.app-shell button::after {
   border: 0;
 }
 
-/* 隐藏滚动条（Electron/WebView 里的竖向滚动条影响观感），滚动功能保留。 */
+/* Slim desktop scrollbars retain a useful indication of longer content. */
 ::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+  width: 5px;
+  height: 4px;
 }
 
-/* uni.showModal 弹窗玻璃化（H5/WebView 渲染为 DOM，全局样式可覆盖）：
- * 半透明白 + backdrop 模糊 + 顶部内高光，与页面玻璃面板同材质。 */
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: #c8d2df;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Modal layers share the same opaque surface as the application. */
 uni-modal .uni-modal {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(1.7);
-  -webkit-backdrop-filter: blur(20px) saturate(1.7);
-  box-shadow: 0 24px 56px rgba(24, 39, 75, 0.22), inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(23, 43, 69, 0.12);
 }
 
 uni-modal .uni-modal__hd {
-  padding: 20px 24px 0;
-  color: #101828;
-  font-weight: 700;
+  padding: 16px 20px 0;
+  color: #182332;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 uni-modal .uni-modal__bd {
-  padding: 12px 24px 20px;
-  color: #47536b;
+  padding: 10px 20px 16px;
+  color: #647186;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 uni-modal .uni-modal__btn {
-  color: #6d5bd0;
-  font-weight: 700;
+  min-height: 48px;
+  color: #4267ed;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 uni-modal .uni-modal__btn_default {
-  color: #64748b;
+  color: #647186;
   font-weight: 500;
 }
 
 uni-modal .uni-modal__ft::before {
-  background: rgba(23, 32, 51, 0.08);
+  background: #e5e9f0;
+}
+
+uni-toast .uni-toast { border-radius: 10px; background: #182332; box-shadow: none; }
+
+@media (max-width: 900px) {
+  ::-webkit-scrollbar { width: 0; height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 </style>

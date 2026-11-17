@@ -1,0 +1,24 @@
+{
+  "measurementCases": [
+    {
+      "name": "software discharge overrides factory charging",
+      "status": {"battery_charging": "1", "battery_current": "999", "battery_capacity": "9800", "battery_gauge": {"state": "valid", "percent": 50, "url": "http://fixture.invalid:88/state.json", "raw": {"data_quality": "ok", "soc": 50, "status": "Discharging", "current_ma": -400, "voltage_mv": 4000, "power_w": -1.6, "capacity_mah_used": 8000, "capacity_mah_nominal": 9800, "capacity_basis": "fixture", "usb_online": 0, "full_confirmed": false, "full_anchor_valid": true, "full_stable_s": 0, "full_anchor_ts": 1000, "full_anchor_voltage_mv": 4300, "eod_imminent": false, "eod_clamp": false, "boot_id": "fixture-boot", "sample_mono_s": 60}}},
+      "expected": {"schemaVersion": 2, "rawSoc": 50, "mode": "discharging", "netCurrentMa": -400, "voltageMv": 4000, "netPowerW": -1.6, "usableCapacityMah": 8000, "capacityBasis": "fixture", "externalPower": false, "fullConfirmed": false, "fullAnchorValid": true, "fullStableSeconds": 0, "eodImminent": false, "eodClamp": false, "bootId": "fixture-boot", "sampleMonoSeconds": 60, "anchorIdentity": "[true,1000,4300]", "percentageSource": "gauge88", "endpoint": "http://fixture.invalid:88/state.json"}
+    },
+    {"name": "USB does not imply net charging", "status": {"battery_charging": true, "battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 97.1294, "status": "Discharging", "current_ma": -283.813, "usb_online": 1}}}, "expected": {"mode": "discharging", "rawSoc": 97.1294, "netCurrentMa": -283.813, "externalPower": true, "usableCapacityMah": null}},
+    {"name": "nominal capacity is not usable capacity", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 50, "status": "Charging", "current_ma": 1000, "capacity_mah_nominal": 9800}}}, "expected": {"mode": "charging", "usableCapacityMah": null}},
+    {"name": "numeric strings cannot become gauge measurements", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 50, "status": "Charging", "current_ma": "1000", "voltage_mv": null, "power_w": "4", "capacity_mah_used": "8000", "sample_mono_s": "60"}}}, "expected": {"netCurrentMa": null, "voltageMv": null, "netPowerW": null, "usableCapacityMah": null, "sampleMonoSeconds": null}},
+    {"name": "invalid marker cannot resurrect raw data", "status": {"battery_charging": "1", "battery_gauge": {"state": "stale", "raw": {"data_quality": "ok", "soc": 50, "status": "Charging", "current_ma": 1000, "capacity_mah_used": 8000}}}, "expected": null},
+    {"name": "strict raw SOC remains required after marker", "status": {"battery_gauge": {"state": "valid", "percent": 50, "raw": {"data_quality": "ok", "soc": "50"}}}, "expected": null},
+    {"name": "contradictory current waits for confirmation", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 50, "status": "Charging", "current_ma": -400}}}, "expected": {"mode": "unknown"}},
+    {"name": "historical full anchor does not confirm this full", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 100, "status": "Full", "current_ma": 20, "full_anchor_valid": true, "full_confirmed": false}}}, "expected": {"mode": "confirming", "fullConfirmed": false, "fullAnchorValid": true}},
+    {"name": "confirmed full", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 100, "status": "Full", "current_ma": 20, "full_confirmed": true}}}, "expected": {"mode": "full", "fullConfirmed": true}},
+    {"name": "unknown status and power mode are not invented", "status": {"battery_gauge": {"state": "valid", "raw": {"data_quality": "ok", "soc": 50, "status": "Balancing", "power_mode": "future-mode", "current_ma": 100, "usb_online": 1}}}, "expected": {"mode": "unknown", "externalPower": true}},
+    {"name": "factory external power is not charging", "status": {"battery_vol_percent": "50", "external_charging_flag": "1", "battery_current": "1000", "battery_capacity": "8000"}, "expected": {"mode": "external", "percentageSource": "router", "netCurrentMa": null, "usableCapacityMah": null}},
+    {"name": "factory confirmed charging flag", "status": {"battery_vol_percent": "50", "battery_charging": "1"}, "expected": {"mode": "charging", "rawSoc": 50, "netCurrentMa": null}}
+  ],
+  "windowCases": [
+    {"name": "constant discharge", "timesSeconds": [0,30,60], "currentsMa": [-400,-400,-400], "meanCurrentMa": -400, "observedDurationMs": 60000, "sampleCount": 3},
+    {"name": "variable spacing trapezoid", "timesSeconds": [0,10,70], "currentsMa": [-200,-200,-600], "meanCurrentMa": -371.42857142857144, "observedDurationMs": 70000, "sampleCount": 3}
+  ]
+}

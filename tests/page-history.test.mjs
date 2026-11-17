@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { parse } from '@babel/parser';
 import { historyTooltip } from '../src/utils/collection-source.js';
+import { chartWindowPoints, temperatureSeries } from '../src/utils/chart-options.js';
 import { reactive, toRaw } from 'vue';
 
 // Exercise the page's actual pure functions, without starting its router polling lifecycle.
@@ -26,9 +27,8 @@ test('switching to an older collector cannot relabel new data with the previous 
   assert.equal(stale.status.value, 1);
 });
 
-test('temperature smoothing does not blend different collection sources', () => {
-  const smooth = pageFunction('smoothSeries', { numeric: Number.parseFloat });
-  const points = smooth([[60000, 30, 'foreground'], [120000, 40, 'screenOff']]);
+test('temperature display preserves measured peaks and their collection sources', () => {
+  const points = temperatureSeries({ battery_temp: [[60000, 30, 'foreground'], [120000, 40, 'screenOff']] })[0].data;
   assert.equal(points[0][1], 30);
   assert.equal(points[0][2], 'foreground');
   assert.equal(points[1][1], 40);
@@ -59,9 +59,7 @@ test('unchanged battery archives are compared without traversing Vue proxy gette
 });
 
 test('two-hour charts exclude expired points but retain the boundary segment and sample sources', () => {
-  const node = ast.program.body.find(item => item.type === 'FunctionDeclaration' && item.id.name === 'chartWindowPoints');
-  assert.ok(node, 'charts must clip their input before building and smoothing series');
-  const select = pageFunction('chartWindowPoints');
+  const select = chartWindowPoints;
   const points = [[60, 10, 'screenOff'], [120, 20, 'background'], [180, 30, 'foreground'], [240, 40, 'foreground']];
   assert.deepEqual(Array.from(select(points, 180), item => Array.from(item)), points.slice(1));
   assert.deepEqual(Array.from(select(points, 300)), []);

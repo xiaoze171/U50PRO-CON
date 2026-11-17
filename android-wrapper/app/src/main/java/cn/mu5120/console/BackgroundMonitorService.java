@@ -41,6 +41,9 @@ public final class BackgroundMonitorService extends Service {
     private static final String PREFS = "u50pro_background_monitor";
     private static final String KEY_URL = "routerUrl";
     private static final String KEY_PASSWORD = "password";
+    private static final String KEY_BATTERY_SOURCE = "batterySource";
+    private static final String KEY_BATTERY_HOST = "batteryHost";
+    private static final String KEY_BATTERY_PORT = "batteryPort";
     private static final String KEY_FOREGROUND_UNTIL = "appForegroundUntil";
     private static final String KEY_OVERLAY_ENABLED = "overlayEnabled";
     private static final String ACTION_FOREGROUND = "cn.mu5120.console.monitor.FOREGROUND";
@@ -54,6 +57,7 @@ public final class BackgroundMonitorService extends Service {
     private static final long BATTERY_WINDOW_MS = 24L * 60L * 60L * 1000L;
     private static final int BATTERY_MAX_POINTS = 1445;
     private static final Object HISTORY_LOCK = new Object();
+    private static final Object CONFIG_LOCK = new Object();
     private static volatile BackgroundMonitorService instance;
 
     private ScheduledExecutorService executor;
@@ -69,10 +73,14 @@ public final class BackgroundMonitorService extends Service {
     private volatile long foregroundUntil;
     private volatile String routerUrl = "http://192.168.0.1";
     private volatile String password = "111111";
+    private volatile BatteryGaugeConfig batteryConfig = new BatteryGaugeConfig("gauge", "", 88);
+    private volatile long configGeneration;
     private MonitorHistoryStore historyStore;
+    private final BatteryCurrentWindow batteryCurrentWindow = new BatteryCurrentWindow();
     private MonitorRouterClient routerClient;
     private String clientUrl = "";
     private String clientPassword = "";
+    private BatteryGaugeConfig clientBatteryConfig;
     private long lastSmsPoll;
     private long lastWatchdog;
     private long lastStateWrite;
@@ -99,20 +107,29 @@ public final class BackgroundMonitorService extends Service {
         sendCommand(context, intent);
     }
 
-    public static void configure(Context context, String routerUrl, String password) {
+    public static void configure(Context context, String routerUrl, String password, String batterySettings) {
         String url = routerUrl == null || routerUrl.trim().isEmpty() ? "http://192.168.0.1" : routerUrl.trim().replaceAll("/+$", "");
         String nextPassword = password == null ? "" : password;
         android.content.SharedPreferences preferences = context.getSharedPreferences(PREFS, MODE_PRIVATE);
+        BatteryGaugeConfig config;
+        try { config = BatteryGaugeConfig.fromJson(new JSONObject(batterySettings == null ? "{}" : batterySettings)); }
+        catch (Exception error) { Log.w(TAG, "invalid battery configuration", error); return; }
         boolean changed = !url.equals(preferences.getString(KEY_URL, "http://192.168.0.1"))
             || !nextPassword.equals(preferences.getString(KEY_PASSWORD, "111111"));
         preferences.edit()
             .putString(KEY_URL, url)
             .putString(KEY_PASSWORD, nextPassword)
-            .apply();
+            .putString(KEY_BATTERY_SOURCE, config.source)
+            .putString(KEY_BATTERY_HOST, config.host)
+            .putInt(KEY_BATTERY_PORT, config.port)
+            .commit();
         Intent intent = new Intent(context, BackgroundMonitorService.class)
             .setAction(ACTION_CONFIGURE)
             .putExtra(KEY_URL, url)
             .putExtra(KEY_PASSWORD, nextPassword)
+            .putExtra(KEY_BATTERY_SOURCE, config.source)
+            .putExtra(KEY_BATTERY_HOST, config.host)
+            .putExtra(KEY_BATTERY_PORT, config.port)
             .putExtra("changed", changed);
         sendCommand(context, intent);
     }
@@ -198,6 +215,8 @@ public final class BackgroundMonitorService extends Service {
         android.content.SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         routerUrl = preferences.getString(KEY_URL, "http://192.168.0.1");
         password = preferences.getString(KEY_PASSWORD, "111111");
+        batteryConfig = new BatteryGaugeConfig(preferences.getString(KEY_BATTERY_SOURCE, "gauge"),
+            preferences.getString(KEY_BATTERY_HOST, ""), preferences.getInt(KEY_BATTERY_PORT, 88));
         overlayEnabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false);
         appForeground = preferences.getLong(KEY_FOREGROUND_UNTIL, 0) > System.currentTimeMillis();
         foregroundUntil = appForeground ? SystemClock.elapsedRealtime() + 15000 : 0;
@@ -226,21 +245,31 @@ public final class BackgroundMonitorService extends Service {
             if (ACTION_FOREGROUND.equals(action)) {
                 boolean foreground = intent.getBooleanExtra("foreground", false);
                 if (foreground != appForeground) {
+                    batteryCurrentWindow.reset();
                     Log.w(TAG, foreground ? "[FG] 应用切换到前台" : "[BG] 应用切换到后台");
                 }
                 appForeground = foreground;
                 foregroundUntil = foreground ? SystemClock.elapsedRealtime() + 15000 : 0;
                 if (!foreground) scheduleWatchdog();
             } else if (ACTION_CONFIGURE.equals(action)) {
+                synchronized (CONFIG_LOCK) {
+                configGeneration++;
                 routerUrl = intent.getStringExtra(KEY_URL);
                 password = intent.getStringExtra(KEY_PASSWORD);
                 if (routerUrl == null || routerUrl.isEmpty()) routerUrl = "http://192.168.0.1";
                 if (password == null) password = "";
+                batteryConfig = new BatteryGaugeConfig(intent.getStringExtra(KEY_BATTERY_SOURCE),
+                    intent.getStringExtra(KEY_BATTERY_HOST), intent.getIntExtra(KEY_BATTERY_PORT, 88));
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                     .putString(KEY_URL, routerUrl)
                     .putString(KEY_PASSWORD, password)
+                    .putString(KEY_BATTERY_SOURCE, batteryConfig.source)
+                    .putString(KEY_BATTERY_HOST, batteryConfig.host)
+                    .putInt(KEY_BATTERY_PORT, batteryConfig.port)
                     .apply();
+                configGeneration++;
                 if (intent.getBooleanExtra("changed", false)) RouterSession.clear();
+                }
             } else if (ACTION_SESSION.equals(action)) {
                 RouterSession.replace(intent.getStringExtra("cookies"));
             } else if (ACTION_CLEAR_SESSION.equals(action)) {
@@ -286,19 +315,25 @@ public final class BackgroundMonitorService extends Service {
 
     private void pollRouter() {
         if (!running) return;
-        if (isAppForeground()) { writeMonitorState(false); return; }
+        if (isAppForeground()) { batteryCurrentWindow.reset(); writeMonitorState(false); return; }
         String url = routerUrl;
         String secret = password;
+        BatteryGaugeConfig selectedBattery = batteryConfig;
+        long generation = configGeneration;
+        if ((generation & 1) != 0) return;
         try {
-            if (routerClient == null || !url.equals(clientUrl) || !secret.equals(clientPassword)) {
-                routerClient = new MonitorRouterClient(this, url, secret);
+            if (routerClient == null || !url.equals(clientUrl) || !secret.equals(clientPassword)
+                || clientBatteryConfig == null || !selectedBattery.source.equals(clientBatteryConfig.source)
+                || !selectedBattery.host.equals(clientBatteryConfig.host) || selectedBattery.port != clientBatteryConfig.port) {
+                routerClient = new MonitorRouterClient(this, url, secret, selectedBattery);
                 clientUrl = url;
                 clientPassword = secret;
+                clientBatteryConfig = selectedBattery;
             }
             String source = nativeCollectionSource();
             JSONObject snapshot = routerClient.dashboard();
-            if (!url.equals(routerUrl) || !secret.equals(password)) return;
-            applySnapshotPayload(snapshot.toString(), source);
+            if (generation != configGeneration || !url.equals(routerUrl) || !secret.equals(password) || isAppForeground()) return;
+            applySnapshotPayload(snapshot.toString(), source, generation);
             long now = System.currentTimeMillis();
             if (now - lastSmsPoll >= 5000) {
                 lastSmsPoll = now;
@@ -369,17 +404,24 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void applySnapshotPayload(String payload, String source) {
+        applySnapshotPayload(payload, source, -1);
+    }
+
+    private void applySnapshotPayload(String payload, String source, long expectedGeneration) {
+        synchronized (CONFIG_LOCK) {
         try {
+            if (expectedGeneration >= 0 && expectedGeneration != configGeneration) return;
+            if (expectedGeneration >= 0 && isAppForeground()) return;
             JSONObject input = new JSONObject(payload == null ? "{}" : payload);
             if (input.optBoolean("stale")) return;
             JSONObject status = input.optJSONObject("status");
             if (status == null || !"ok".equals(status.optString("loginfo"))) return;
+            if (!batteryConfig.matches(status, routerUrl)) return;
+            if (expectedGeneration >= 0) BatteryGaugeReading.refreshStatus(status, System.currentTimeMillis());
             input.put("source", CollectionSource.normalize(source));
+            prepareBatterySnapshot(input, batteryCurrentWindow, expectedGeneration >= 0, routerUrl);
             JSONObject temperature = input.optJSONObject("temperature");
-            if (temperature != null && !status.has("battery_temp") && temperature.has("battery_temp")) {
-                status.put("battery_temp", temperature.opt("battery_temp"));
-            }
-            applySnapshot(status, source, input.optLong("timestamp", System.currentTimeMillis()));
+            applySnapshot(status, temperature, source, input.optLong("timestamp", System.currentTimeMillis()), input.optJSONObject("battery"));
             JSONObject errors = input.optJSONObject("errors");
             lastCollectionError = errors == null ? "" : errors.toString();
             boolean saved = historyStore.record(input, System.currentTimeMillis());
@@ -392,6 +434,7 @@ public final class BackgroundMonitorService extends Service {
         } catch (Exception error) {
             lastCollectionError = "保存数据失败：" + MonitorRouterClient.message(error);
             Log.e(TAG, lastCollectionError, error);
+        }
         }
     }
 
@@ -410,19 +453,49 @@ public final class BackgroundMonitorService extends Service {
         } catch (Exception error) { Log.e(TAG, "save monitor state failed", error); }
     }
 
-    private void applySnapshot(JSONObject status, String source, long timestamp) {
+    static void prepareBatterySnapshot(JSONObject input, BatteryCurrentWindow window, boolean ownsCollection, String routerEndpoint) throws Exception {
+        if (!ownsCollection) {
+            window.reset();
+            input.put("battery", MonitorHistoryStore.compactBattery(input.optJSONObject("battery")));
+            return;
+        }
+        JSONObject status = input.optJSONObject("status");
+        BatteryGaugeReading.refreshStatus(status, input.optLong("timestamp"));
+        JSONObject measurement = BatteryGaugeReading.normalizeBatteryMeasurement(status);
+        String endpoint = "router".equals(BatteryGaugeReading.source(status)) ? routerEndpoint : BatteryGaugeReading.endpoint(status);
+        if (measurement != null) measurement.put("endpoint", BatteryGaugeReading.normalizeBatteryEndpoint(endpoint));
+        JSONObject previousRevisions = new JSONObject();
+        JSONArray previousStats = window.snapshot().getJSONArray("currentStats");
+        for (int i = 0; i < previousStats.length(); i++) {
+            JSONObject block = previousStats.getJSONObject(i);
+            previousRevisions.put(block.getString("blockId"), block.getLong("revision"));
+        }
+        JSONObject current = window.ingest(input.optLong("timestamp"), endpoint, measurement);
+        JSONArray stats = current.getJSONArray("currentStats"); current.remove("currentStats");
+        JSONArray updates = new JSONArray();
+        for (int i = 0; i < stats.length(); i++) {
+            JSONObject block = stats.getJSONObject(i);
+            if (block.getLong("revision") > previousRevisions.optLong(block.getString("blockId")))
+                updates.put(new JSONObject().put("blockId", block.getString("blockId")).put("revision", block.getLong("revision")));
+        }
+        JSONObject summary = new JSONObject().put("percent", BatteryGaugeReading.orNull(BatteryGaugeReading.percent(status)))
+            .put("measurement", BatteryGaugeReading.orNull(measurement)).put("mode", measurement == null ? "unknown" : measurement.optString("mode"))
+            .put("currentStats", stats).put("currentStatsUpdates", updates).put("currentWindow", current);
+        input.put("battery", MonitorHistoryStore.compactBattery(summary));
+    }
+
+    private void applySnapshot(JSONObject status, JSONObject temperatures, String source, long timestamp, JSONObject summary) {
         double down = number(status, "realtime_rx_thrpt");
         double up = number(status, "realtime_tx_thrpt");
-        double percent = number(status, "battery_vol_percent");
-        if (!Double.isFinite(percent)) percent = number(status, "battery_value");
-        double temperature = number(status, "battery_temp");
+        Double percent = BatteryGaugeReading.percent(status);
+        TemperatureReading temperature = BatteryGaugeReading.temperature(temperatures, status);
         lastSpeedDown = formatRate(down);
         lastSpeedUp = formatRate(up);
-        lastBattery = Double.isFinite(percent) ? formatNumber(percent) + "%" : "未知";
-        lastTemperature = Double.isFinite(temperature) ? formatNumber(temperature) + "°C" : "未知";
+        lastBattery = percent != null ? formatNumber(percent) + "%" : "—";
+        lastTemperature = temperature.display();
         lastError = "";
         lastSuccessAt = System.currentTimeMillis();
-        recordBattery(this, status, null, source, timestamp);
+        recordBattery(this, status, temperatures, source, timestamp, summary);
         updateNotification();
         updateOverlay();
     }
@@ -438,38 +511,34 @@ public final class BackgroundMonitorService extends Service {
         });
     }
 
-    private static void recordBattery(Context context, JSONObject status, JSONObject temperatureObject, String source, long timestamp) {
+    private static void recordBattery(Context context, JSONObject status, JSONObject temperatureObject, String source, long timestamp, JSONObject summary) {
         if (status == null) return;
         synchronized (HISTORY_LOCK) {
-            double percent = number(status, "battery_vol_percent");
-            if (!Double.isFinite(percent)) percent = number(status, "battery_value");
-            if (!Double.isFinite(percent)) {
+            Double percent = BatteryGaugeReading.percent(status);
+            if (percent == null) {
                 Log.w(TAG, "recordBattery skipped: percent unavailable");
                 return;
             }
-            boolean charging = "1".equals(status.optString("battery_charging")) || "1".equals(status.optString("external_charging_flag"));
+            Object charging = MonitorHistoryStore.chargingValue(status);
             long now = System.currentTimeMillis();
             SharedHistory history = new SharedHistory(context);
             JSONArray samples = history.loadUnlocked();
             JSONObject previous = samples.length() == 0 ? null : samples.optJSONObject(samples.length() - 1);
-            if (previous != null && now - previous.optLong("timestamp", 0) < 60000 && charging == previous.optBoolean("charging", false)) {
-                return;
-            }
-            JSONObject sample = new JSONObject();
+            String percentSource = BatteryGaugeReading.source(status);
+            String percentEndpoint = BatteryGaugeReading.endpoint(status);
             try {
-                sample.put("timestamp", timestamp);
-                sample.put("source", CollectionSource.normalize(source));
-                sample.put("percent", percent);
-                sample.put("charging", charging);
-                double batteryTemp = number(status, "battery_temp");
-                if (!Double.isFinite(batteryTemp) && temperatureObject != null) batteryTemp = number(temperatureObject, "battery_temp");
-                if (Double.isFinite(batteryTemp)) sample.put("temperature", batteryTemp);
-                sample.put("chargeType", status.optString("battery_charg_type", ""));
-                sample.put("externalPower", "1".equals(status.optString("external_charging_flag")));
-                sample.put("voltage", status.optString("battery_voltage", ""));
-                sample.put("current", status.optString("battery_current", ""));
-                sample.put("capacity", status.optString("battery_capacity", ""));
-                sample.put("health", status.optString("battery_health", ""));
+                JSONObject snapshot = new JSONObject().put("timestamp", timestamp).put("status", status).put("temperature", temperatureObject)
+                    .put("source", source).put("battery", summary);
+                // Completed current blocks are persisted separately by MonitorHistoryStore. This legacy file stays minute-sized.
+                JSONObject sample = MonitorHistoryStore.batterySample(snapshot, null);
+                percentEndpoint = sample.optString("percentEndpoint", percentEndpoint);
+                JSONObject currentMeasurement = sample.optJSONObject("measurement"), previousMeasurement = previous == null ? null : previous.optJSONObject("measurement");
+                boolean sameMeasurement = currentMeasurement == null && previousMeasurement == null
+                    || BatteryCurrentWindow.sameIdentity(BatteryCurrentWindow.identity(currentMeasurement, percentEndpoint),
+                        BatteryCurrentWindow.identity(previousMeasurement, previous == null ? "" : previous.optString("percentEndpoint")));
+                if (previous != null && timestamp - previous.optLong("timestamp", 0) < 60000 && charging.equals(previous.opt("charging"))
+                    && percentSource.equals(previous.optString("percentSource", "router")) && percentEndpoint.equals(previous.optString("percentEndpoint", ""))
+                    && sameMeasurement && source.equals(previous.optString("source"))) return;
                 samples.put(sample);
                 history.saveUnlocked(pruneHistory(samples, now));
                 Log.w(TAG, "recordBattery saved percent=" + percent + " charging=" + charging + " len=" + samples.length());
@@ -548,7 +617,18 @@ public final class BackgroundMonitorService extends Service {
         long cutoff = now - BATTERY_WINDOW_MS;
         for (int index = 0; index < source.length(); index++) {
             JSONObject item = source.optJSONObject(index);
-            if (item != null && item.optLong("timestamp", 0) >= cutoff) values.add(item);
+            if (item != null && item.optLong("timestamp", 0) >= cutoff) {
+                try {
+                    double temperature = TemperatureReading.read("battery_temp", item.opt("temperature")).value;
+                    item.put("temperature", Double.isFinite(temperature) ? temperature : JSONObject.NULL);
+                    if (!(item.opt("charging") instanceof Boolean)) item.put("charging", JSONObject.NULL);
+                    JSONObject measurement = MonitorHistoryStore.sanitizeMeasurement(item.optJSONObject("measurement"));
+                    JSONObject stats = BatteryCurrentWindow.validateStats(item.optJSONObject("currentStats"));
+                    if (measurement == null || stats != null && !BatteryCurrentWindow.sameIdentity(stats.optJSONObject("identity"), BatteryCurrentWindow.identity(measurement, measurement.optString("endpoint")))) stats = null;
+                    item.put("measurement", BatteryGaugeReading.orNull(measurement)).put("currentStats", BatteryGaugeReading.orNull(stats));
+                    values.add(item);
+                } catch (Exception ignored) { }
+            }
         }
         int start = Math.max(0, values.size() - BATTERY_MAX_POINTS);
         JSONArray output = new JSONArray();
@@ -563,7 +643,7 @@ public final class BackgroundMonitorService extends Service {
 
     private static String formatNumber(double value) {
         if (!Double.isFinite(value)) return "未知";
-        return Math.abs(value - Math.rint(value)) < 0.05 ? String.valueOf((long) Math.rint(value)) : String.format(Locale.US, "%.1f", value);
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.format(Locale.US, "%.2f", value);
     }
 
     private static String formatRate(double value) {

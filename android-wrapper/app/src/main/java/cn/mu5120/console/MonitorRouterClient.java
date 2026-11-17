@@ -16,13 +16,23 @@ import java.util.Iterator;
 final class MonitorRouterClient {
     private final Context context;
     private final JSONObject fields;
+    private final BatteryGaugeConfig batteryConfig;
     private String routerUrl;
     private String password;
 
     MonitorRouterClient(Context context, String routerUrl, String password) throws Exception {
+        this(context, routerUrl, password, new BatteryGaugeConfig("gauge", "", 88));
+    }
+
+    MonitorRouterClient(Context context, String routerUrl, String password, String source, String host, int port) throws Exception {
+        this(context, routerUrl, password, new BatteryGaugeConfig(source, host, port));
+    }
+
+    MonitorRouterClient(Context context, String routerUrl, String password, BatteryGaugeConfig batteryConfig) throws Exception {
         this.context = context.getApplicationContext();
         this.routerUrl = routerUrl;
         this.password = password;
+        this.batteryConfig = batteryConfig;
         try (InputStream input = context.getAssets().open("router-fields.json")) {
             fields = new JSONObject(read(input));
         }
@@ -35,19 +45,28 @@ final class MonitorRouterClient {
             status = group("status");
         }
         if (!"ok".equals(status.optString("loginfo"))) throw new Exception("路由器登录失败");
+        if ("gauge".equals(batteryConfig.source)) status.put("battery_gauge", gauge());
         JSONObject snapshot = new JSONObject().put("status", status);
         JSONObject errors = new JSONObject();
         for (String name : new String[] { "signal", "temperature", "resources", "locks", "neighbors", "features" }) {
             try { snapshot.put(name, group(name)); }
             catch (Exception error) { errors.put(name, message(error)); }
         }
-        try { snapshot.put("stations", list(command("station_list"), "station_list")); }
+        JSONObject clientAvailability = new JSONObject().put("stations", false).put("cableStations", false);
+        try {
+            JSONObject response = command("station_list");
+            snapshot.put("stations", list(response, "station_list"));
+            clientAvailability.put("stations", response.has("station_list"));
+        }
         catch (Exception error) { errors.put("stations", message(error)); }
         try {
             JSONObject response = command("lan_station_list");
             snapshot.put("cableStations", list(response, response.has("lan_station_list") ? "lan_station_list" : "station_list"));
+            clientAvailability.put("cableStations", response.has("lan_station_list") || response.has("station_list"));
         } catch (Exception error) { errors.put("cableStations", message(error)); }
+        snapshot.put("clientAvailability", clientAvailability);
         snapshot.put("timestamp", System.currentTimeMillis());
+        BatteryGaugeReading.refreshStatus(status, snapshot.getLong("timestamp"));
         snapshot.put("login", new JSONObject().put("loggedIn", true).put("message", "后台采集已连接"));
         if (errors.length() > 0) snapshot.put("errors", errors);
         return snapshot;
@@ -66,6 +85,32 @@ final class MonitorRouterClient {
         }
         return new JSONObject().put("timestamp", System.currentTimeMillis()).put("ready", ready)
             .put("messages", messages).put("capacity", command("sms_capacity_info"));
+    }
+
+    private JSONObject gauge() throws Exception {
+        String endpoint = batteryConfig.endpoint(routerUrl);
+        HttpURLConnection connection = null;
+        try {
+            URL target = new URL(endpoint);
+            if (!RouterBridge.isLocalRouterHost(target.getHost())) throw new SecurityException("只允许访问局域网路由器地址");
+            connection = RouterNetwork.open(context, target);
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(2000);
+            connection.setReadTimeout(2000);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept", "application/json");
+            // Gauge requests never consume or update the factory session cookie jar.
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) throw new Exception("Gauge HTTP " + code);
+            String age = connection.getHeaderField("X-Gauge-Age");
+            try (InputStream input = connection.getInputStream()) {
+                return BatteryGaugeReading.read(new JSONObject(read(input)), age, endpoint, System.currentTimeMillis());
+            }
+        } catch (Exception error) {
+            return new JSONObject().put("percent", JSONObject.NULL).put("state", "unavailable")
+                .put("url", endpoint).put("raw", JSONObject.NULL).put("error", message(error));
+        } finally { if (connection != null) connection.disconnect(); }
     }
 
     private JSONObject group(String name) throws Exception {

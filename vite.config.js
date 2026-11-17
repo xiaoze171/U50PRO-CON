@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import uniModule from '@dcloudio/vite-plugin-uni';
+import { batteryProxyMiddleware } from './dev/battery-proxy.js';
 
 const uni = uniModule.default || uniModule;
 
@@ -7,7 +8,10 @@ const routerOrigin = process.env.ROUTER_ORIGIN || 'http://192.168.0.1';
 
 export default defineConfig({
   base: './',
-  plugins: [uni()],
+  plugins: [uni(), {
+    name: 'battery-endpoint-proxy',
+    configureServer(server) { server.middlewares.use('/battery-api', batteryProxyMiddleware); }
+  }],
   server: {
     host: '0.0.0.0',
     port: 5120,

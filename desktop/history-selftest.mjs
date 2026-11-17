@@ -77,13 +77,13 @@ check('重叠桶后写覆盖', (() => {
 console.log('== mergeChartHistory ==');
 
 check('图表各序列独立并集 + 温度子序列合并', (() => {
-  const left = { rsrp: [[t0, -100]], sinr: [[t0, 10]], rsrq: [], down: [[t0, 500]], up: [], temperatures: { cpu: [[t0, 40]] } };
-  const right = { rsrp: [[t0 + M, -95]], sinr: [], rsrq: [[t0, 8]], down: [], up: [[t0, 100]], temperatures: { cpu: [[t0 + M, 42]], modem: [[t0, 55]] } };
+  const left = { rsrp: [[t0, -100]], sinr: [[t0, 10]], rsrq: [], down: [[t0, 500]], up: [], temperatures: { cpu_temp: [[t0, 40]] } };
+  const right = { rsrp: [[t0 + M, -95]], sinr: [], rsrq: [[t0, 8]], down: [], up: [[t0, 100]], temperatures: { cpu_temp: [[t0 + M, 42]], modem_temp: [[t0, 55]] } };
   const out = mergeChartHistory(left, right);
   return out.rsrp.length === 2 && out.rsrp[1][1] === -95
     && out.sinr.length === 1 && out.rsrq.length === 1
     && out.down.length === 1 && out.up.length === 1
-    && out.temperatures.cpu.length === 2 && out.temperatures.modem.length === 1;
+    && out.temperatures.cpu_temp.length === 2 && out.temperatures.modem_temp.length === 1;
 })());
 
 check('空历史结构安全（不抛异常，返回空骨架）', (() => {

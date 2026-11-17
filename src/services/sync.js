@@ -17,6 +17,8 @@
 import { routerApi } from './router-client.js';
 import { mergeChartHistory, mergeBatterySamples, emptyChartHistory, MINUTE_MS } from '../utils/history.js';
 import { electCollector } from '../utils/election.js';
+import { sanitizeBatteryMeasurement } from '../utils/battery-gauge.js';
+import { normalizeBatteryCurrentStats, batteryMeasurementIdentity, sameBatteryIdentity } from '../utils/battery-current-window.js';
 
 const SYNC_HTTP_PORT = 51200;
 const SETTINGS_KEY = 'mu5120-sync-settings-v1';
@@ -149,6 +151,65 @@ function pushAdvertise(nextRole, collecting) {
   try { bridge.syncSetAdvertise(nextRole, collecting); } catch {}
 }
 
+const finite = value => typeof value === 'number' && Number.isFinite(value);
+const timeStates = new Set(['estimated', 'not-applicable', 'collecting', 'low-current', 'tapering', 'confirming', 'full', 'external', 'low-battery', 'unknown', 'unavailable']);
+
+function unavailableTime(targetPercent) {
+  return { targetPercent, minutes: null, method: null, state: 'unavailable', reason: '待刷新' };
+}
+
+function normalizeTimeResult(value, targetPercent) {
+  if (!value || !timeStates.has(value.state) || !finite(value.targetPercent)
+      || value.targetPercent < 0 || value.targetPercent > 100
+      || targetPercent === 100 && value.targetPercent !== 100
+      || typeof value.reason !== 'string' || value.reason.length > 64) return unavailableTime(targetPercent);
+  if (value.state === 'estimated'
+    ? !finite(value.minutes) || value.minutes < 0 || !['net-current', 'soc-slope'].includes(value.method)
+    : value.minutes !== null || value.method !== null) return unavailableTime(targetPercent);
+  return { targetPercent: value.targetPercent, minutes: value.minutes, method: value.method, state: value.state, reason: value.reason };
+}
+
+function normalizeCurrentStats(value, identity) {
+  if (!Array.isArray(value)) return null;
+  const blocks = value.map(normalizeBatteryCurrentStats);
+  return blocks.every(block => block && identity && sameBatteryIdentity(block.identity, identity)) ? blocks : null;
+}
+
+function normalizeCurrentWindow(value, identity) {
+  if (!value || !identity || !sameBatteryIdentity(value.identity, identity)
+      || !(value.meanCurrentMa === null || finite(value.meanCurrentMa))
+      || !finite(value.observedDurationMs) || value.observedDurationMs < 0
+      || !Number.isSafeInteger(value.sampleCount) || value.sampleCount < 0
+      || !(value.windowStart === null || finite(value.windowStart) && value.windowStart >= 0)
+      || !(value.windowEnd === null || finite(value.windowEnd) && value.windowEnd >= 0)) return null;
+  return {
+    meanCurrentMa: value.meanCurrentMa, observedDurationMs: value.observedDurationMs, sampleCount: value.sampleCount,
+    windowStart: value.windowStart, windowEnd: value.windowEnd, identity,
+    currentStats: normalizeCurrentStats(value.currentStats, identity)
+  };
+}
+
+// A viewer validates the collector's compact summary, but never recomputes it
+// from its own endpoint, clock or archive. Missing legacy fields are atomic nulls.
+function normalizeLiveBattery(value) {
+  const battery = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const measurement = sanitizeBatteryMeasurement(battery.measurement);
+  const identity = measurement ? batteryMeasurementIdentity({ measurement, endpoint: measurement.endpoint }) : null;
+  const calculatedAt = finite(battery.calculatedAt) && battery.calculatedAt >= 0 ? battery.calculatedAt : null;
+  const hasResult = !!measurement && calculatedAt !== null;
+  // Archive ownership belongs only to the local acquisition that produced it.
+  const { samples, currentStatsUpdates, ...summary } = battery;
+  return {
+    ...summary, measurement, mode: measurement?.mode ?? 'unknown',
+    currentStats: normalizeCurrentStats(battery.currentStats, identity),
+    currentWindow: normalizeCurrentWindow(battery.currentWindow, identity),
+    timeToFull: hasResult ? normalizeTimeResult(battery.timeToFull, 100) : unavailableTime(100),
+    runtime: hasResult ? normalizeTimeResult(battery.runtime, 0) : unavailableTime(0),
+    calculatedAt,
+    windowSeconds: finite(battery.windowSeconds) && battery.windowSeconds >= 0 ? battery.windowSeconds : 0
+  };
+}
+
 function publishStore(store) {
   const bridge = syncBridge();
   if (!bridge || typeof bridge.syncPublish !== 'function') return false;
@@ -157,8 +218,7 @@ function publishStore(store) {
     // values small; the archive travels separately at the history cadence.
     const live = store.live ? { ...store.live } : null;
     if (live?.battery) {
-      const { samples, ...summary } = live.battery;
-      live.battery = summary;
+      live.battery = normalizeLiveBattery(live.battery);
     }
     const payload = { live };
     if (store.chart) payload.chart = store.chart;
@@ -308,10 +368,13 @@ async function dashboard() {
     const live = await fetchHubLive();
     if (live) {
       lastError = '';
-      // New collectors keep history out of /sync/live. Reuse the local archive
-      // populated by /sync/history; older collectors can still send samples.
-      if (live.battery && !Array.isArray(live.battery.samples)) {
-        live.battery = { ...live.battery, samples: routerApi.getBatteryHistory() };
+      // Older collectors embed raw samples here; merge through the same validation
+      // as /sync/history before exposing them. Compact ticks only reuse the archive.
+      if (live.battery) {
+        const samples = Array.isArray(live.battery.samples)
+          ? routerApi.mergeExternalBattery(live.battery.samples)
+          : routerApi.getBatteryHistory();
+        live.battery = { ...normalizeLiveBattery(live.battery), samples };
       }
       return live;
     }

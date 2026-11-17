@@ -5,7 +5,7 @@
         <view class="brand-mark"><RouterIcon :size="22" :stroke-width="1.8" /></view>
         <view>
           <text class="brand-title">U50 PRO</text>
-          <text class="brand-subtitle">移动网络控制台</text>
+          <text class="brand-subtitle">随时掌握网络状态</text>
         </view>
       </view>
 
@@ -26,7 +26,7 @@
           @click="switchTab(item.id)"
         >
           <component :is="item.icon" :size="19" :stroke-width="1.9" />
-          <text>{{ item.label }}</text>
+          <text class="nav-label">{{ item.label }}</text>
           <text v-if="item.badge" class="nav-badge">{{ item.badge }}</text>
         </button>
       </view>
@@ -41,87 +41,82 @@
 
     <main class="main-area">
       <header class="topbar">
+        <button v-if="secondaryPage" class="icon-button back-button" aria-label="返回" @click="handleNavigationBack"><ChevronLeft :size="20" /></button>
         <view class="page-heading">
-          <text class="eyebrow">U50 PRO ROUTER</text>
-          <text class="page-title">{{ activeTabInfo.label }}</text>
+          <view v-if="activeTab === 'overview'" class="mobile-brand"><view class="brand-mark"><RouterIcon :size="18" /></view><text class="page-title">U50 Pro</text></view>
+          <text v-else class="page-title">{{ pageTitle }}</text>
         </view>
         <view class="top-actions">
           <text class="last-update">{{ collectionSourceLabel(data.source) }} · 更新于 {{ lastUpdate }}</text>
-          <button class="icon-button" aria-label="立即刷新" @click="refresh(true)">
-            <RefreshCw :size="19" />
+          <button class="icon-button" :aria-label="manualRefreshing ? '正在刷新' : '立即刷新'" :aria-busy="manualRefreshing" :disabled="manualRefreshing || actionBusy" @click="refresh(true)">
+            <RefreshCw :size="19" :class="{ spinning: manualRefreshing }" />
           </button>
         </view>
       </header>
 
-      <scroll-view :key="`${activeTab}-${managementTab}`" class="content-scroll" scroll-y>
-        <view class="content-wrap">
+      <view class="freshness-strip" :class="freshness.state" role="status">
+        <view class="freshness-state"><view class="freshness-dot" :class="freshness.state"></view><text>{{ freshness.label }}</text></view>
+        <text class="freshness-source">{{ collectionSourceLabel(data.telemetrySource) }} · {{ syncRoleText }}</text>
+        <text class="freshness-time">{{ freshness.time }}</text>
+      </view>
+      <scroll-view :key="`${activeTab}-${managementTab}-${trendDetail}-${settingsSection}`" class="content-scroll" scroll-y>
+        <view class="content-wrap" :class="{ 'home-content': activeTab === 'overview' }">
           <view v-if="errorMessage" class="error-banner">
             <CircleAlert :size="18" />
             <text>{{ errorMessage }}</text>
           </view>
 
           <template v-if="activeTab === 'overview'">
-            <view class="hero-grid">
-              <section class="hero-panel network-hero">
-                <view class="hero-top">
-                  <view>
-                    <text class="hero-kicker">当前蜂窝网络</text>
-                    <text class="network-name">{{ networkType }}</text>
-                    <text class="operator-name">{{ operator }}</text>
-                  </view>
-                  <view class="signal-bars" aria-label="信号强度">
-                    <view v-for="index in 5" :key="index" :class="{ on: index <= signalBars }" :style="{ height: `${6 + index * 5}px` }"></view>
-                  </view>
-                </view>
-                <view class="hero-metrics">
-                  <view><text>RSRP</text><b>{{ withUnit(currentRsrp, ' dBm') }}</b></view>
-                  <view><text>SINR</text><b>{{ withUnit(currentSinr, ' dB') }}</b></view>
-                  <view><text>CA</text><b class="ca-state" :class="{ on: caState !== 'OFF' }">{{ caState }}</b></view>
-                </view>
-              </section>
-
-              <section class="hero-panel speed-hero">
-                <view class="speed-column download">
-                  <ArrowDown :size="15" />
-                  <text>实时下载</text>
-                  <b>{{ bytesPerSecond(status.realtime_rx_thrpt) }}</b>
-                </view>
-                <view class="speed-column upload">
-                  <ArrowUp :size="15" />
-                  <text>实时上传</text>
-                  <b>{{ bytesPerSecond(status.realtime_tx_thrpt) }}</b>
-                </view>
-              </section>
-            </view>
-
-            <section class="panel temperature-overview">
-              <view class="panel-header compact">
-                <view>
-                  <text class="panel-title">设备温度</text>
-                  <text class="panel-subtitle">最近 2 小时温度记录，本地自动保存</text>
-                </view>
-                <Thermometer :size="20" />
-              </view>
-              <view class="temperature-overview-grid">
-                <MetricGrid :items="temperatureMetrics" centered />
-                <AppChart :option="temperatureChartOption" height="230px" />
-                <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
-              </view>
-            </section>
-
-            <section class="panel">
-              <view class="panel-header compact">
-                <view>
-                  <text class="panel-title">设备信息</text>
-                  <text class="panel-subtitle">设备标识与开机时间</text>
-                </view>
-                <RouterIcon :size="20" />
-              </view>
-              <DataList :items="deviceIdentityDetails" />
-            </section>
+            <DashboardHome
+              :network="networkType" :operator="operator"
+              :download="freshness.state === 'live' ? bytesPerSecond(status.realtime_rx_thrpt) : '—'" :upload="freshness.state === 'live' ? bytesPerSecond(status.realtime_tx_thrpt) : '—'"
+              :battery-percent="batteryPercentText"
+              :signal-panels="homeSignalPanels" :signal-subtitle="homeSignalSubtitle"
+              :temperature-metrics="homeTemperatureMetrics" :temperature-subtitle="homeTemperatureSubtitle"
+              :battery-state="batteryStateText" :time-to-full="batteryTimeToFullText" :runtime="batteryRuntimeText"
+              :time-to-full-reason="batteryTimeToFullReason" :runtime-reason="batteryRuntimeReason"
+              :monthly-usage="formatBytes(monthlyUsedBytes)"
+              :temperature-alert="homeTemperatureAlert" :client-count="clientSummaryText" :sms-count="smsSummaryText"
+              @navigate="switchTab"
+            />
           </template>
 
-          <template v-else-if="activeTab === 'radio'">
+          <template v-else-if="activeTab === 'trends'">
+            <view class="trend-controls">
+              <view class="trend-metrics" role="tablist" aria-label="趋势指标">
+                <button v-for="item in trendMetrics" :key="item.id" class="manage-tab-button" :class="{ active: trendMetric === item.id }" :aria-selected="trendMetric === item.id" @click="selectTrend(item.id)">{{ item.label }}</button>
+              </view>
+              <view class="trend-range" role="group" aria-label="时间范围">
+                <button v-for="hours in [2, 24]" :key="hours" class="manage-tab-button" :class="{ active: trendHours === hours }" :aria-pressed="trendHours === hours" @click="trendHours = hours">{{ hours }} 小时</button>
+              </view>
+            </view>
+            <section class="panel">
+              <view class="panel-header">
+                <view><text class="panel-title">{{ trendTitle }}</text></view>
+                <view v-if="trendMetric === 'signal'" class="trend-range" role="group" aria-label="信号指标">
+                  <button v-for="metric in ['rsrp', 'sinr', 'rsrq']" :key="metric" class="manage-tab-button" :class="{ active: signalMetric === metric }" @click="signalMetric = metric">{{ metric.toUpperCase() }}</button>
+                </view>
+              </view>
+              <AppChart :option="trendChartOption" height="var(--trend-chart-height, 280px)" />
+              <text class="source-hint">点按查看数值与来源 · 点击图例显示或隐藏曲线 · 缺口表示未采集</text>
+            </section>
+            <MetricGrid v-if="trendMetric === 'temperature'" :items="temperatureMetrics" />
+            <template v-if="trendMetric === 'battery'">
+              <MetricGrid :items="batteryMetrics" />
+              <section class="panel">
+                <view class="panel-header"><view><text class="panel-title">电池测量与估算依据</text><text class="panel-subtitle">剩余可用按放电到 0% 估算；软件可用容量与标称容量分开，USB 总输入包含整机用电。</text></view></view>
+                <DataList :items="batteryDiagnostics" />
+              </section>
+              <section class="panel battery-history-panel">
+                <view class="panel-header"><view><text class="panel-title">续航记录</text><text class="panel-subtitle">最近 {{ batterySamples.length }} 条 · 保留采集来源</text></view></view>
+                <BatteryHistory :samples="batterySamples" />
+              </section>
+            </template>
+            <view v-if="trendMetric === 'throughput'" class="action-row"><button class="secondary-button" @click="trendDetail = trendDetail === 'usage' ? '' : 'usage'">{{ trendDetail === 'usage' ? '收起流量管理' : '本月流量、套餐与校准' }}</button><text class="action-result">本月已用 {{ formatBytes(monthlyUsedBytes) }}</text></view>
+            <view v-if="trendMetric === 'temperature'" class="action-row"><button class="secondary-button" @click="openDiagnostics">查看原始温度与采集详情</button></view>
+          </template>
+
+          <template v-if="activeTab === 'devices' && managementTab === 'radio'">
             <view class="radio-overview-grid">
               <section class="panel compact-panel radio-info-panel">
                 <view class="panel-header compact"><text class="panel-title">当前网络信息</text><RadioTower :size="17" /></view>
@@ -161,10 +156,11 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">无线质量趋势</text>
-                  <text class="panel-subtitle">最近 2 小时 RSRP、SINR 与 RSRQ，仅保存在本机</text>
+                  <text class="panel-subtitle">当前指标 {{ signalMetric.toUpperCase() }} · 最近 2 小时</text>
                 </view>
               </view>
               <AppChart :option="signalChartOption" height="260px" />
+              <button class="secondary-button" @click="switchTab('signal')">查看其他信号指标与 24 小时趋势</button>
               <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
             </section>
 
@@ -213,9 +209,9 @@
               <view class="panel-header">
                 <view>
                   <text class="panel-title">锁小区联动</text>
-                  <text class="panel-subtitle">默认使用最强候选值，只改变小区锁定，不修改当前频段</text>
+                  <text class="panel-subtitle">初始选择信号最强候选，可手动改选；仅改变小区锁定</text>
                 </view>
-                <text class="panel-tag accent">{{ selectedCandidate ? `最强 ${selectedCandidate.rsrp ?? '—'} dBm` : '暂无候选' }}</text>
+                <text class="panel-tag accent">{{ selectedCandidate ? `所选 ${selectedCandidate.rsrp ?? '—'} dBm` : '暂无候选' }}</text>
               </view>
               <view class="lock-form-grid">
                 <label><text>制式</text><input :value="selectedCandidate?.rat || ''" disabled /></label>
@@ -297,16 +293,16 @@
             </section>
           </template>
 
-          <template v-else-if="activeTab === 'usage'">
+          <template v-else-if="activeTab === 'trends' && trendDetail === 'usage'">
             <MetricGrid class="usage-summary-grid" :items="usageSummaryMetrics" centered />
             <section class="panel traffic-plan-panel">
               <view class="panel-header"><view><text class="panel-title">流量管理</text><text class="panel-subtitle">默认使用 GB，显示套餐、已用和剩余流量</text></view><Gauge :size="20" /></view>
               <MetricGrid :items="trafficPlanMetrics" />
               <view class="settings-form feature-form">
-                <label><text>启用套餐</text><switch :checked="trafficPlanForm.enabled" color="#2563eb" @change="trafficPlanForm.enabled = Boolean($event.detail.value)" /></label>
+                <label><text>启用套餐</text><switch :checked="trafficPlanForm.enabled" color="#4267ed" @change="trafficPlanForm.enabled = Boolean($event.detail.value)" /></label>
                 <label><text>每月套餐（GB）</text><input v-model="trafficPlanForm.sizeGb" type="number" min="0" step="0.1" placeholder="例如 100" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
                 <label><text>提醒百分比</text><input v-model="trafficPlanForm.alertPercent" type="number" placeholder="例如 80" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
-                <label><text>自动清零</text><switch :checked="trafficPlanForm.autoClear" color="#2563eb" @change="trafficPlanForm.autoClear = Boolean($event.detail.value)" /></label>
+                <label><text>自动清零</text><switch :checked="trafficPlanForm.autoClear" color="#4267ed" @change="trafficPlanForm.autoClear = Boolean($event.detail.value)" /></label>
                 <label><text>清零日期</text><input v-model="trafficPlanForm.clearDate" placeholder="例如 1" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
                 <label><text>校准已用（GB）</text><input v-model="trafficPlanForm.usedGb" type="number" min="0" step="0.1" placeholder="可选" @focus="beginFeatureEdit" @blur="endFeatureEdit" /></label>
               </view>
@@ -318,56 +314,30 @@
             </section>
           </template>
 
-          <template v-else-if="activeTab === 'battery'">
-            <MetricGrid :items="batteryMetrics" />
-            <section class="panel section-gap">
-              <view class="panel-header"><view><text class="panel-title">续航趋势</text><text class="panel-subtitle">最近 24 小时电量记录</text></view></view>
-              <AppChart :option="batteryChartOption" height="280px" />
-              <text class="source-hint">点按曲线查看来源：前台 / 后台 / 悬浮窗 / 息屏</text>
-            </section>
-            <section class="panel battery-history-panel">
-              <view class="panel-header"><view><text class="panel-title">续航记录</text><text class="panel-subtitle">最近 {{ batterySamples.length }} 条</text></view></view>
-              <BatteryHistory :samples="batterySamples" />
-            </section>
-          </template>
-
-          <template v-else-if="activeTab === 'manage'">
-            <view class="management-tabs" role="tablist" aria-label="管理功能">
-              <button
-                v-for="item in managementTabs"
-                :key="item.id"
-                class="management-tab"
-                :class="{ active: managementTab === item.id }"
-                :aria-selected="managementTab === item.id"
-                @click="switchManagementTab(item.id)"
-              >
-                <view class="management-tab-icon"><component :is="item.icon" :size="20" :stroke-width="managementTab === item.id ? 2.2 : 1.8" /></view>
-                <view class="management-tab-copy"><b>{{ item.label }}</b><text>{{ managementTabSummary(item.id) }}</text></view>
-              </button>
-            </view>
-
-            <template v-if="managementTab === 'sms'">
-            <section class="panel management-primary-panel">
-              <view class="panel-header">
-                <view><text class="panel-title">发送短信</text><text class="panel-subtitle">通过路由器 SIM 卡发送</text></view>
-                <button class="secondary-button" @click="loadSms"><RefreshCw :size="17" />刷新收件箱</button>
-              </view>
-              <view class="sms-compose">
-                <input v-model="smsNumber" placeholder="手机号码" />
-                <textarea v-model="smsMessage" maxlength="670" placeholder="短信内容"></textarea>
-                <view class="compose-footer"><text>{{ smsMessage.length }} / 670</text><button class="primary-button" :disabled="actionBusy" @click="sendSms"><Send :size="17" />发送</button></view>
-              </view>
-            </section>
-            <section class="panel">
+          <template v-else-if="activeTab === 'devices' || activeTab === 'settings'">
+            <template v-if="activeTab === 'devices' && managementTab === 'sms'">
+            <section class="panel sms-inbox-panel">
               <view class="panel-header sms-list-header">
-                <view><text class="panel-title">短信列表</text><text class="panel-subtitle">{{ smsCapacity }} · 验证码 {{ smsCodeCount }}</text></view>
+                <view><text class="panel-title">收件箱</text><text class="panel-subtitle">{{ smsCapacity }} · 验证码 {{ smsCodeCount }}</text></view>
+                <view class="sms-header-actions">
+                  <button class="icon-button sms-refresh-button" :disabled="smsRefreshing" aria-label="刷新收件箱" title="刷新收件箱" @click="loadSms"><RefreshCw :size="16" :class="{ spinning: smsRefreshing }" /></button>
+                  <button class="primary-button" :aria-expanded="smsComposeOpen" @click="smsComposeOpen = !smsComposeOpen"><Send :size="14" />{{ smsComposeOpen ? '收起' : '写短信' }}</button>
+                </view>
                 <view v-if="messages.length" class="sms-bulk-actions">
                   <button class="sms-select-all" role="checkbox" :aria-checked="allSmsSelected" :disabled="!selectableSmsIds.length || actionBusy" @click="toggleAllSms">
                     <view class="sms-checkbox-mark" :class="{ checked: allSmsSelected }"><Check v-if="allSmsSelected" :size="13" /></view>
                     <text>{{ allSmsSelected ? '取消全选' : '全选' }}</text>
                   </button>
                   <text class="sms-selection-count">已选 {{ selectedSmsCount }} 条</text>
-                  <button class="danger-button sms-delete-button" :disabled="!selectedSmsCount || actionBusy" @click="deleteSelectedSms"><Trash :size="16" />删除</button>
+                  <button class="danger-button sms-delete-button" :disabled="!selectedSmsCount || actionBusy" @click="deleteSelectedSms"><Trash :size="14" />删除</button>
+                </view>
+              </view>
+              <view v-if="smsComposeOpen" class="sms-compose-panel">
+                <text class="sms-compose-hint">通过路由器 SIM 卡发送</text>
+                <view class="sms-compose">
+                  <label><text>收件人</text><input v-model="smsNumber" type="tel" aria-label="收件人手机号码" placeholder="手机号码" /></label>
+                  <label class="sms-message-field"><text>短信内容</text><textarea v-model="smsMessage" maxlength="670" aria-label="短信内容" placeholder="短信内容"></textarea></label>
+                  <view class="compose-footer"><text>{{ smsMessage.length }} / 670</text><button class="primary-button" :disabled="actionBusy" @click="sendSms"><Send :size="14" />发送</button></view>
                 </view>
               </view>
               <view class="sms-list">
@@ -379,10 +349,10 @@
                     <view class="sms-meta"><b>{{ message.number || '未知号码' }}</b><text>{{ formatSmsDate(message.date) }}</text></view>
                   </view>
                   <text class="sms-body">{{ message.content || '—' }}</text>
-                  <view class="sms-code-row" :class="{ empty: !message.verificationCode }">
-                    <view class="sms-code-value"><text>验证码</text><b>{{ message.verificationCode || '未识别' }}</b></view>
-                    <button class="sms-copy-button" :disabled="!message.verificationCode" :aria-label="message.verificationCode ? `复制验证码 ${message.verificationCode}` : '未识别到验证码'" :title="message.verificationCode ? `复制验证码 ${message.verificationCode}` : '未识别到验证码'" @click.stop="copyVerificationCode(message.verificationCode)">
-                      <Copy :size="16" /><text>复制</text>
+                  <view v-if="message.verificationCode" class="sms-code-row">
+                    <view class="sms-code-value"><text>验证码</text><b>{{ message.verificationCode }}</b></view>
+                    <button class="sms-copy-button" :aria-label="`复制验证码 ${message.verificationCode}`" :title="`复制验证码 ${message.verificationCode}`" @click.stop="copyVerificationCode(message.verificationCode)">
+                      <Copy :size="14" /><text>复制</text>
                     </button>
                   </view>
                 </view>
@@ -391,20 +361,27 @@
             </section>
             </template>
 
-            <template v-else-if="managementTab === 'clients'">
+            <template v-else-if="activeTab === 'devices' && managementTab === 'clients'">
+            <section class="panel device-summary"><view class="panel-header"><view><text class="panel-title">{{ networkType }} · {{ operator }}</text><text class="panel-subtitle">{{ clientSummaryText }}</text></view><button class="secondary-button" @click="switchManagementTab('radio')">网络调优</button></view><view class="locked-status-values"><text class="locked-tag" v-for="tag in lockedStatusTags" :key="tag">{{ tag }}</text><text v-if="!lockedStatusTags.length" class="source-hint">{{ connected ? '当前没有频段或小区锁定' : '锁定状态待连接后确认' }}</text></view></section>
             <view class="two-column">
               <section class="panel">
-                <view class="panel-header"><view><text class="panel-title">无线设备</text><text class="panel-subtitle">{{ stations.length }} 台</text></view><Wifi :size="20" /></view>
-                <view class="client-list"><view v-for="client in stations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!stations.length" class="empty-state">当前没有无线设备。</view></view>
+                <view class="panel-header"><view><text class="panel-title">无线设备</text><text class="panel-subtitle">{{ clientListCountText('stations') }}</text></view><Wifi :size="20" /></view>
+                <view class="client-list"><view v-for="client in stations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!stations.length" class="empty-state">{{ clientEmptyText('stations') }}</view></view>
               </section>
               <section class="panel">
-                <view class="panel-header"><view><text class="panel-title">有线设备</text><text class="panel-subtitle">{{ cableStations.length }} 台</text></view><Cable :size="20" /></view>
-                <view class="client-list"><view v-for="client in cableStations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!cableStations.length" class="empty-state">当前没有有线设备。</view></view>
+                <view class="panel-header"><view><text class="panel-title">有线设备</text><text class="panel-subtitle">{{ clientListCountText('cableStations') }}</text></view><Cable :size="20" /></view>
+                <view class="client-list"><view v-for="client in cableStations" :key="client.mac_addr || client.macAddress || client.ip_addr" class="client-card"><view><b>{{ client.hostname || client.hostName || '未知设备' }}</b><text>{{ client.ip_addr || client.ipAddress || '—' }}</text></view><code>{{ client.mac_addr || client.macAddress || '—' }}</code></view><view v-if="!cableStations.length" class="empty-state">{{ clientEmptyText('cableStations') }}</view></view>
               </section>
             </view>
+            <text class="section-label">常用功能</text>
+            <section class="panel entry-group">
+              <button v-for="item in managementTabs.filter(item => item.id !== 'clients')" :key="item.id" class="entry-row" @click="switchManagementTab(item.id)">
+                <component :is="item.icon" :size="18" /><view class="entry-copy"><b>{{ item.label }}</b><text>{{ item.description }}</text></view><ChevronRight :size="16" />
+              </button>
+            </section>
             </template>
 
-            <template v-else-if="managementTab === 'stock'">
+            <template v-else-if="activeTab === 'devices' && managementTab === 'stock'">
             <section class="panel stock-panel">
               <view class="panel-header">
                 <view><text class="panel-title">原厂后台</text><text class="panel-subtitle">{{ stockConsole.message }}</text></view>
@@ -432,20 +409,43 @@
             </section>
             </template>
 
-            <template v-else>
+            <template v-else-if="activeTab === 'devices' && managementTab === 'detail'">
+              <section class="panel"><view class="panel-header"><view><text class="panel-title">设备详情</text><text class="panel-subtitle">标识、开机时间与当前网络</text></view><RouterIcon :size="20" /></view><DataList :items="deviceIdentityDetails" /></section>
+              <section class="panel"><view class="panel-header"><text class="panel-title">网络概况</text></view><DataList :items="networkDetails" /></section>
+              <view class="action-row"><button class="secondary-button" @click="switchTab('radio')">网络调优与锁定</button><button class="secondary-button" @click="switchTab('usage')">流量套餐与校准</button><button class="secondary-button" @click="switchTab('battery')">电池与续航</button></view>
             <section class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">软件更新</text><text class="panel-subtitle">当前版本 v{{ APP_VERSION }}</text></view><RefreshCw :size="20" /></view>
-              <view class="action-row">
-                <button class="primary-button" :disabled="softwareUpdate.busy" @click="checkSoftwareUpdate(true)">{{ softwareUpdate.busy ? '正在检查…' : '检查更新' }}</button>
-                <button v-if="nativeUpdate && softwareUpdate.result?.isNewer" class="secondary-button" :disabled="apkDownload.state === 'downloading' || !softwareUpdate.result.apk" @click="downloadSoftwareUpdate">{{ apkDownload.state === 'downloading' ? '下载中…' : apkDownload.state === 'ready' ? '安装更新' : '下载并安装更新' }}</button>
-                <button v-if="!nativeUpdate" class="secondary-button" @click="openSoftwareRelease">查看发布页</button>
-                <text class="action-result">{{ softwareUpdate.message }}</text>
+              <view class="panel-header"><view><text class="panel-title">设备控制</text><text class="panel-subtitle">Wi-Fi 关闭后当前连接会立即中断，需要手动重新连接设备</text></view><Power :size="20" /></view>
+              <view class="device-control-grid">
+                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('wifi-on')"><Wifi :size="17" />开启 Wi-Fi</button>
+                <button class="secondary-button danger-outline" :disabled="actionBusy" @click="runDeviceAction('wifi-off')"><WifiOff :size="17" />关闭 Wi-Fi</button>
+                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('reboot')"><RotateCw :size="17" />重启设备</button>
+                <button class="danger-button" :disabled="actionBusy" @click="runDeviceAction('shutdown')"><PowerOff :size="17" />关闭设备</button>
               </view>
-              <view v-if="nativeUpdate && apkDownload.message" class="action-result">{{ apkDownload.message }}</view>
-              <progress v-if="apkDownload.state === 'downloading'" :percent="Math.max(0, apkDownload.progress)" :show-info="apkDownload.progress >= 0" stroke-width="4" />
-              <text v-if="softwareUpdate.result?.isNewer && softwareUpdate.result.body" class="update-notes">{{ softwareUpdate.result.body }}</text>
+              <text class="action-result control-result">{{ deviceActionResult }}</text>
             </section>
-            <section class="panel settings-panel">
+            </template>
+
+            <template v-else>
+            <template v-if="!settingsSection">
+              <text class="section-label">连接</text>
+              <section class="panel entry-group">
+                <button class="entry-row" @click="openSettingsSection('connection')"><Wifi :size="18" /><view class="entry-copy"><b>路由器连接</b></view><text class="entry-tail">{{ connectionAddress }}</text><ChevronRight :size="16" /></button>
+              </section>
+              <text class="section-label">监控</text>
+              <section class="panel entry-group">
+                <button class="entry-row" @click="openSettingsSection('battery')"><BatteryCharging :size="18" /><view class="entry-copy"><b>电量来源</b></view><text class="entry-tail">{{ batterySourceText }}</text><ChevronRight :size="16" /></button>
+                <button class="entry-row" @click="openSettingsSection('background')"><BatteryCharging :size="18" /><view class="entry-copy"><b>后台采集与权限</b><text>{{ backgroundStateText }}</text></view><ChevronRight :size="16" /></button>
+                <view class="entry-row"><Layers3 :size="18" /><view class="entry-copy"><b>悬浮监测</b><text>{{ overlayStateText }}</text></view><switch :checked="overlayState.enabled" :disabled="!overlayState.available" color="#4267ed" @change="toggleOverlay" /></view>
+                <button class="entry-row" @click="openSettingsSection('sync')"><Smartphone :size="18" /><view class="entry-copy"><b>局域网互通</b><text>{{ syncStateText }}</text></view><text class="entry-tail">{{ syncState.enabled ? '已启用' : '已关闭' }}</text><ChevronRight :size="16" /></button>
+              </section>
+              <text class="section-label">应用</text>
+              <section class="panel entry-group">
+                <button class="entry-row" @click="openSettingsSection('update')"><RefreshCw :size="18" /><view class="entry-copy"><b>软件更新</b></view><text class="entry-tail">v{{ APP_VERSION }}</text><ChevronRight :size="16" /></button>
+                <button class="entry-row" @click="openDiagnostics"><CircleAlert :size="18" /><view class="entry-copy"><b>采集诊断与原始读数</b></view><ChevronRight :size="16" /></button>
+              </section>
+              <text class="app-credit">U50 Pro 控制台 · 开发者 晓泽</text>
+            </template>
+            <section v-if="settingsSection === 'connection'" class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">路由器连接</text><text class="panel-subtitle">手机连接 U50 Pro Wi-Fi 后直接访问 192.168.0.1</text></view><Settings :size="20" /></view>
               <view class="settings-form">
                 <label><text>路由器地址</text><input v-model="settingsForm.routerUrl" placeholder="http://192.168.0.1" /></label>
@@ -457,14 +457,35 @@
                 <text class="action-result">{{ settingsResult }}</text>
               </view>
             </section>
-            <section class="panel settings-panel">
+            <section v-if="settingsSection === 'battery'" class="panel settings-panel battery-settings-panel">
+              <view class="panel-header"><text class="panel-title">电量来源</text></view>
+              <view class="battery-source-options" role="group" aria-label="电量来源">
+                <button class="battery-source-option" :class="{ selected: batterySettingsForm.batterySource === 'factory' }" :aria-pressed="batterySettingsForm.batterySource === 'factory'" :disabled="batterySettingsSaving" @click="batterySettingsForm.batterySource = 'factory'">原厂电量接口</button>
+                <button class="battery-source-option" :class="{ selected: batterySettingsForm.batterySource === 'gauge' }" :aria-pressed="batterySettingsForm.batterySource === 'gauge'" :disabled="batterySettingsSaving" @click="batterySettingsForm.batterySource = 'gauge'">自定义接口</button>
+              </view>
+              <template v-if="batterySettingsForm.batterySource === 'gauge'">
+                <view class="settings-form battery-source-fields">
+                  <label><text>IP 地址</text><input v-model="batterySettingsForm.batteryHost" :disabled="batterySettingsSaving" placeholder="留空跟随路由器" /></label>
+                  <label><text>端口</text><input v-model="batterySettingsForm.batteryPort" :disabled="batterySettingsSaving" type="number" placeholder="88" /></label>
+                </view>
+                <text class="battery-endpoint-preview">{{ batteryEndpointPreview }}</text>
+                <text class="battery-source-hint">读取 state.json 中的 soc；接口不可用时显示“—”。</text>
+              </template>
+              <text v-else class="battery-source-hint">使用路由器原厂返回的电池百分比。</text>
+              <text v-if="syncState.role === 'viewer'" class="battery-source-hint">当前跟随采集器显示；此设置用于本机采集。</text>
+              <view class="action-row battery-source-actions">
+                <button class="primary-button battery-source-save" :disabled="batterySettingsSaving" @click="saveBatterySettings"><Save :size="15" />{{ batterySettingsSaving ? '保存中…' : '保存' }}</button>
+                <text class="action-result" :class="{ 'battery-source-error': batterySettingsError }" role="status">{{ batterySettingsResult }}</text>
+              </view>
+            </section>
+            <section v-if="settingsSection === 'sync'" class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">局域网互通</text><text class="panel-subtitle">同一 Wi-Fi 下多设备共享历史，避免各自抢占路由器登录导致数据断层</text></view><Wifi :size="20" /></view>
               <view class="overlay-setting-row">
                 <view class="overlay-setting-copy">
                   <b>启用局域网互通</b>
                   <text>{{ syncStateText }}</text>
                 </view>
-                <switch :checked="syncState.enabled" :disabled="!syncState.supported" color="#2563eb" @change="toggleSync" />
+                <switch :checked="syncState.enabled" :disabled="!syncState.supported" color="#4267ed" @change="toggleSync" />
               </view>
               <template v-if="syncState.supported && syncState.enabled">
                 <view class="sync-role-line">
@@ -483,17 +504,17 @@
                 <view v-else class="sync-empty">局域网内暂无其他节点，正在直连路由器</view>
               </template>
             </section>
-            <section class="panel settings-panel">
+            <section v-if="settingsSection === 'overlay'" class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">悬浮监测</text><text class="panel-subtitle">在其他应用上层显示实时速率、电量与电池温度</text></view><Layers3 :size="20" /></view>
               <view class="overlay-setting-row">
                 <view class="overlay-setting-copy">
                   <b>显示悬浮窗</b>
                   <text>{{ overlayStateText }}</text>
                 </view>
-                <switch :checked="overlayState.enabled" :disabled="!overlayState.available" color="#2563eb" @change="toggleOverlay" />
+                <switch :checked="overlayState.enabled" :disabled="!overlayState.available" color="#4267ed" @change="toggleOverlay" />
               </view>
             </section>
-            <section class="panel settings-panel">
+            <section v-if="settingsSection === 'background'" class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">息屏后台采集</text><text class="panel-subtitle">息屏或切到后台时由原生服务继续采集全部数据并保存 24 小时，回到页面自动补齐曲线</text></view><BatteryCharging :size="20" /></view>
               <view class="overlay-setting-row">
                 <view class="overlay-setting-copy">
@@ -502,13 +523,6 @@
                   <text v-if="backgroundBackfill">{{ backgroundBackfill }}</text>
                   <text v-if="backgroundState.source">当前：{{ collectionSourceLabel(backgroundState.source) }}采集</text>
                 </view>
-              </view>
-              <view class="collection-source-summary">
-                <b>最近 24 小时归档来源</b>
-                <view class="collection-source-counts">
-                  <text v-for="(label, source) in collectionSourceLabels" :key="source" class="source-badge">{{ label }} {{ backgroundSourceCounts[source] || 0 }} 条</text>
-                </view>
-                <text class="source-hint">每分钟保留首条有效记录。悬浮窗指亮屏后台且悬浮窗显示；息屏优先。旧记录保留为未标记。</text>
               </view>
               <view v-if="backgroundState.available" class="overlay-setting-row">
                 <view class="overlay-setting-copy">
@@ -519,19 +533,34 @@
               </view>
               <text v-if="backgroundState.available" class="panel-subtitle">vivo 手机还需在「设置 › 应用 › U50 Pro 控制台」中允许自启动、后台高耗电，并在最近任务中锁定应用。</text>
             </section>
-            <section class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">设备控制</text><text class="panel-subtitle">Wi-Fi 关闭后当前连接会立即中断，需要手动重新连接设备</text></view><Power :size="20" /></view>
-              <view class="device-control-grid">
-                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('wifi-on')"><Wifi :size="17" />开启 Wi-Fi</button>
-                <button class="secondary-button danger-outline" :disabled="actionBusy" @click="runDeviceAction('wifi-off')"><WifiOff :size="17" />关闭 Wi-Fi</button>
-                <button class="secondary-button" :disabled="actionBusy" @click="runDeviceAction('reboot')"><RotateCw :size="17" />重启设备</button>
-                <button class="danger-button" :disabled="actionBusy" @click="runDeviceAction('shutdown')"><PowerOff :size="17" />关闭设备</button>
+            <section v-if="settingsSection === 'update'" class="panel settings-panel">
+              <view class="panel-header"><view><text class="panel-title">软件更新</text><text class="panel-subtitle">当前版本 v{{ APP_VERSION }}</text></view><RefreshCw :size="20" /></view>
+              <view class="action-row">
+                <button class="primary-button" :disabled="softwareUpdate.busy" @click="checkSoftwareUpdate(true)">{{ softwareUpdate.busy ? '正在检查…' : '检查更新' }}</button>
+                <button v-if="nativeUpdate && softwareUpdate.result?.isNewer" class="secondary-button" :disabled="apkDownload.state === 'downloading' || !softwareUpdate.result.apk" @click="downloadSoftwareUpdate">{{ apkDownload.state === 'downloading' ? '下载中…' : apkDownload.state === 'ready' ? '安装更新' : '下载并安装更新' }}</button>
+                <button v-if="!nativeUpdate" class="secondary-button" @click="openSoftwareRelease">查看发布页</button>
+                <text class="action-result">{{ softwareUpdate.message }}</text>
               </view>
-              <text class="action-result control-result">{{ deviceActionResult }}</text>
+              <view v-if="nativeUpdate && apkDownload.message" class="action-result">{{ apkDownload.message }}</view>
+              <progress v-if="apkDownload.state === 'downloading'" :percent="Math.max(0, apkDownload.progress)" :show-info="apkDownload.progress >= 0" stroke-width="4" />
+              <text v-if="softwareUpdate.result?.isNewer && softwareUpdate.result.body" class="update-notes">{{ softwareUpdate.result.body }}</text>
             </section>
-            <section class="panel">
-              <view class="panel-header"><view><text class="panel-title">运行方式</text><text class="panel-subtitle">同一套功能用于浏览器预览、Android App 与 Windows 桌面端</text></view></view>
-              <DataList :items="runtimeDetails" />
+            <section v-if="settingsSection === 'diagnostics'" class="panel diagnostic-details">
+              <button class="details-toggle" :aria-expanded="diagnosticsOpen" @click="diagnosticsOpen = !diagnosticsOpen"><text>采集诊断与原始读数</text><text>{{ diagnosticsOpen ? '收起 −' : '展开 +' }}</text></button>
+              <template v-if="diagnosticsOpen">
+              <view class="collection-source-summary">
+                <b>最近 24 小时归档来源</b>
+                <view class="collection-source-counts">
+                  <text v-for="(label, source) in collectionSourceLabels" :key="source" class="source-badge">{{ label }} {{ backgroundSourceCounts[source] || 0 }} 条</text>
+                </view>
+                <text class="source-hint">每分钟保留首条有效记录。悬浮窗指亮屏后台且悬浮窗显示；息屏优先。旧记录保留为未标记。</text>
+              </view>
+                <view class="panel-header compact"><text class="panel-title">温度原始返回</text></view>
+                <DataList :items="temperatureDiagnostics" empty-text="尚未收到温度字段" />
+                <text class="source-hint">疑似异常读数不进入温度曲线。原始字段保留，便于核对设备兼容性。</text>
+                <view class="panel-header compact"><text class="panel-title">采集与运行方式</text></view>
+                <DataList :items="runtimeDetails" />
+              </template>
             </section>
             </template>
           </template>
@@ -547,8 +576,8 @@
         :class="{ active: activeTab === item.id }"
         @click="switchTab(item.id)"
       >
-        <component :is="item.icon" :size="21" :stroke-width="activeTab === item.id ? 2.2 : 1.8" />
-        <text>{{ item.label }}</text>
+        <component :is="item.icon" :size="18" :stroke-width="activeTab === item.id ? 2.2 : 1.8" />
+        <text class="nav-label">{{ item.label }}</text>
       </button>
     </view>
   </view>
@@ -556,7 +585,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue';
-import { onLoad } from '@dcloudio/uni-app';
+import { onLoad, onHide } from '@dcloudio/uni-app';
 import {
   IconAlertCircle as CircleAlert, IconApps as Apps, IconAntennaBars5 as RadioTower, IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp, IconBatteryCharging as BatteryCharging, IconPlugConnected as Cable,
@@ -568,19 +597,25 @@ import {
   IconPower as Power, IconCircleOff as PowerOff, IconRadar as Radar, IconRefresh as RefreshCw,
   IconRotateClockwise as RotateCw, IconRouter as RouterIcon, IconSearch as Search, IconSend as Send,
   IconSettings as Settings, IconTemperature as Thermometer, IconTrash as Trash, IconWifi as Wifi,
-  IconWifiOff as WifiOff, IconWorld as World
+  IconWifiOff as WifiOff, IconWorld as World, IconChevronLeft as ChevronLeft, IconChevronRight as ChevronRight
 } from '@tabler/icons-vue';
 import AppChart from '../../components/AppChart.vue';
+import DashboardHome from '../../components/DashboardHome.vue';
 import BatteryHistory from '../../components/BatteryHistory.vue';
 import DataList from '../../components/DataList.vue';
 import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
+import { batteryGaugeUrl } from '../../utils/battery-gauge.js';
+import { buildHomeSignalPanels, buildHomeTemperatureMetrics } from '../../utils/home-telemetry.js';
+import { formatBatteryTime, batteryTimeReason, batteryModeText } from '../../utils/battery-presentation.js';
 import { syncClient } from '../../services/sync.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import { mergeChartHistory, normalizePoints } from '../../utils/history.js';
-import { collectionSourceLabels, collectionSourceLabel, historyTooltip } from '../../utils/collection-source.js';
+import { TEMPERATURE_LABELS, isTemperatureField, temperatureReading, normalizeTemperaturePoints } from '../../utils/temperature.js';
+import { collectionSourceLabels, collectionSourceLabel } from '../../utils/collection-source.js';
+import { lineOption, temperatureSeries, throughputSeries, batterySeries } from '../../utils/chart-options.js';
 import {
-  bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration, formatHours,
+  bytesPerSecond, compactEntries, displayPci, extractVerificationCode, firstValue, formatBytes, formatGigabytes, formatDate, formatDuration,
   formatMonth, numeric, operatorName, withUnit
 } from '../../utils/format.js';
 
@@ -648,29 +683,33 @@ const CELL_DISPLAY_REFRESH_MS = 3000;
 const SMS_REFRESH_MS = 5000;
 
 const tabs = [
-  { id: 'overview', label: '总览', icon: LayoutDashboard },
-  { id: 'radio', label: '基站、CA 与锁定', icon: RadioTower },
-  { id: 'usage', label: '流量与速率', icon: ChartNoAxesCombined },
-  { id: 'battery', label: '电池与续航', icon: BatteryCharging },
-  { id: 'manage', label: '设备管理', icon: Apps }
+  { id: 'overview', label: '首页', icon: LayoutDashboard },
+  { id: 'trends', label: '趋势', icon: ChartNoAxesCombined },
+  { id: 'devices', label: '设备', icon: RouterIcon },
+  { id: 'settings', label: '设置', icon: Settings }
 ];
-
-const mobileTabs = [
-  { id: 'overview', label: '总览', icon: LayoutDashboard },
-  { id: 'radio', label: '基站', icon: RadioTower },
-  { id: 'usage', label: '流量', icon: ChartNoAxesCombined },
-  { id: 'battery', label: '电池', icon: BatteryCharging },
-  { id: 'manage', label: '管理', icon: Apps }
-];
+const mobileTabs = tabs;
 const managementTabs = [
-  { id: 'sms', label: '短信', icon: MessageSquareText },
   { id: 'clients', label: '连接设备', icon: Smartphone },
-  { id: 'stock', label: '原厂后台', icon: World },
-  { id: 'settings', label: '设置与控制', icon: Settings }
+  { id: 'sms', label: '短信', description: '查看消息与复制验证码', icon: MessageSquareText },
+  { id: 'radio', label: '网络调优', description: '信号、基站与频段锁定', icon: RadioTower },
+  { id: 'stock', label: '原厂后台', description: '更多路由器设置', icon: World },
+  { id: 'detail', label: '设备详情与控制', description: '固件、运行信息与重启', icon: RouterIcon }
 ];
-
+const trendMetrics = [
+  { id: 'throughput', label: '网速' }, { id: 'temperature', label: '温度' },
+  { id: 'battery', label: '电池' }, { id: 'signal', label: '信号' }
+];
 const activeTab = ref('overview');
-const managementTab = ref('sms');
+const managementTab = ref('clients');
+const trendMetric = ref('throughput');
+const trendHours = ref(2);
+const signalMetric = ref('rsrp');
+const trendDetail = ref('');
+const diagnosticsOpen = ref(false);
+const settingsSection = ref('');
+const smsComposeOpen = ref(false);
+const freshnessNow = ref(Date.now());
 // 原厂后台内嵌状态：与 App 共享同一会话 Cookie，打开时自动登录管理员 + 开发者会话。
 const stockConsole = reactive({ url: '', busy: false, loggedIn: false, message: '未打开' });
 // 打开方式：浏览器/安卓壳内嵌 iframe（安卓经 127.0.0.1 本地反代，POST 完整），
@@ -714,9 +753,10 @@ function resetStockScale() {
 }
 const menuOpen = ref(false);
 const refreshing = ref(false);
+const manualRefreshing = ref(false);
 const actionBusy = ref(false);
 const errorMessage = ref('');
-const lastUpdate = ref('—');
+const lastUpdate = computed(() => data.value.timestamp ? new Date(data.value.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '—');
 const clock = ref('');
 const data = ref({ status: {}, signal: {}, temperature: {}, resources: {}, locks: {}, stations: [], cableStations: [], neighbors: {}, features: {}, battery: {}, login: {} });
 const cellDisplay = ref({ signal: {}, neighbors: {} });
@@ -775,6 +815,15 @@ const settingsResult = ref('');
 const deviceActionResult = ref('');
 const config = reactive(routerApi.getConfig());
 const settingsForm = reactive({ ...config });
+const batterySettingsForm = reactive({ batterySource: config.batterySource, batteryHost: config.batteryHost, batteryPort: String(config.batteryPort) });
+const batterySettingsSaving = ref(false);
+const batterySettingsResult = ref('');
+const batterySettingsError = ref(false);
+const batterySourceText = computed(() => config.batterySource === 'factory' ? '原厂电量接口' : '自定义接口');
+const batteryEndpointPreview = computed(() => {
+  try { return batteryGaugeUrl(config.routerUrl, batterySettingsForm.batteryHost, batterySettingsForm.batteryPort); }
+  catch { return '请输入有效的 IP 地址和端口'; }
+});
 const overlayState = reactive(routerApi.getOverlayState());
 // 安卓后台采集状态与电池优化授权（仅 Android App 可用；息屏期间由原生服务持续采集落盘）。
 const backgroundState = reactive({ ...routerApi.getBackgroundMonitorState(), ...routerApi.getBatteryOptimizationState() });
@@ -790,6 +839,7 @@ let lastCellDisplayUpdate = 0;
 let lastCellDisplaySignature = '';
 let lastSyncedCandidateKey = '';
 let pendingRefresh = false;
+let pendingManualRefresh = false;
 
 const status = computed(() => data.value.status || {});
 const signal = computed(() => data.value.signal || {});
@@ -807,6 +857,13 @@ const featureFormEditing = ref(false);
 const featureFormsInitialized = ref(false);
 const trafficPlanForm = reactive({ enabled: false, sizeGb: '', alertPercent: '', autoClear: false, clearDate: '', usedGb: '' });
 const activeTabInfo = computed(() => tabs.find(tab => tab.id === activeTab.value) || tabs[0]);
+const secondaryPage = computed(() => (activeTab.value === 'devices' && managementTab.value !== 'clients') || (activeTab.value === 'settings' && Boolean(settingsSection.value)));
+const settingsTitles = { connection: '路由器连接', battery: '电量来源', sync: '局域网互通', overlay: '悬浮监测', background: '后台采集与权限', update: '软件更新', diagnostics: '采集诊断' };
+const pageTitle = computed(() => {
+  if (activeTab.value === 'devices' && managementTab.value !== 'clients') return managementTabs.find(item => item.id === managementTab.value)?.label || '设备';
+  if (activeTab.value === 'settings' && settingsSection.value) return settingsTitles[settingsSection.value] || '设置';
+  return activeTabInfo.value.label;
+});
 const connected = computed(() => !data.value.stale && (login.value.loggedIn || status.value.loginfo === 'ok'));
 const overlayStateText = computed(() => {
   if (!overlayState.available) return '仅 Android App 支持悬浮窗';
@@ -824,7 +881,7 @@ const backgroundStateText = computed(() => {
 });
 const batteryOptimizationText = computed(() => {
   if (!backgroundState.available) return '';
-  return backgroundState.ignoring ? '已豁免电池优化，息屏后系统不会限制采集' : '未豁免电池优化，息屏后可能被系统暂停';
+  return backgroundState.ignoring ? '已豁免 Android 电池优化，厂商后台权限需单独设置' : '未豁免电池优化，息屏后可能被系统暂停';
 });
 const syncStateText = computed(() => {
   if (!syncState.supported) return '当前环境不支持（仅 EXE 桌面端与 Android App 可作服务节点，浏览器预览始终直连）';
@@ -845,13 +902,17 @@ const operator = computed(() => operatorName(
   firstValue(signal.value.rmcc, signal.value.mdm_mcc, ''),
   firstValue(signal.value.rmnc, signal.value.mdm_mnc, '')
 ));
-const currentRsrp = computed(() => numeric(firstValue(signal.value.Z5g_rsrp, signal.value.lte_rsrp, signal.value.rssi)));
-const currentSinr = computed(() => numeric(firstValue(signal.value.Z5g_SINR, signal.value.Z5g_snr, signal.value.lte_snr)));
-const caState = computed(() => {
-  if (signal.value.nr_ca_dl_state || signal.value.nr_multi_ca_scell_info) return 'NR CA';
-  return signal.value.wan_lte_ca === 'ca_activated' ? 'LTE CA ON' : 'OFF';
-});
-const signalBars = computed(() => currentRsrp.value == null ? 0 : currentRsrp.value >= -80 ? 5 : currentRsrp.value >= -90 ? 4 : currentRsrp.value >= -100 ? 3 : currentRsrp.value >= -110 ? 2 : 1);
+function carrierAggregationText(fields = {}) {
+  const nrPayload = String(fields.nr_multi_ca_scell_info ?? '').trim();
+  if (nrPayload && !['0', '1', '—'].includes(nrPayload)) return 'NR CA';
+  if (fields.wan_lte_ca === 'ca_activated') return 'LTE CA';
+  if (fields.wan_lte_ca === 'ca_deactivated') return '未启用';
+  return '待获取';
+}
+const homeSignalPanels = computed(() => buildHomeSignalPanels(signal.value, {
+  network: networkType.value, live: freshness.value.state === 'live'
+}));
+const homeSignalSubtitle = computed(() => freshness.value.state === 'live' ? '当前驻留小区' : '等待最新信号');
 const candidates = computed(() => buildCellCandidates(cellDisplay.value));
 const displayedCandidates = computed(() => {
   const query = neighborQuery.value.trim().toLowerCase();
@@ -860,8 +921,101 @@ const displayedCandidates = computed(() => {
 });
 const selectedCandidate = computed(() => candidates.value.find(item => item.key === selectedCellKey.value) || candidates.value[0]);
 
-const temperatureNames = { battery_temp: '电池温度', wifi_chip_temp: 'Wi-Fi 芯片', wifi_temp_level_1: 'Wi-Fi 传感器 1', wifi_temp_level_2: 'Wi-Fi 传感器 2', pm_sensor_pa1: '射频 PA', pm_sensor_mdm: 'Modem', pm_modem_5g: '5G Modem', cpu_temp: 'CPU 温度', cpu_temperature: 'CPU 温度', soc_temp: 'SoC 温度', board_temp: '主板温度', modem_temp: 'Modem 温度' };
-const temperatureMetrics = computed(() => Object.entries(temperature.value).filter(([key, value]) => /temp|sensor|temperature/i.test(key) && !/level|oom_temp_pro/i.test(key) && value !== '' && value != null).map(([key, value]) => ({ label: temperatureNames[key] || key, value: withUnit(value, '°C') })));
+const temperatureNames = TEMPERATURE_LABELS;
+const temperatureMetrics = computed(() => Object.entries(temperature.value)
+  .filter(([key]) => isTemperatureField(key))
+  .map(([key, raw]) => {
+    const reading = temperatureReading(key, raw);
+    return { key, label: temperatureNames[key] || key, value: withUnit(reading.value, '°C'), state: reading.state,
+      note: reading.state === 'invalid' ? '读数异常' : reading.state === 'missing' ? '暂无读数' : '',
+      className: reading.state === 'invalid' ? 'reading-invalid' : '' };
+  }));
+const homeTemperatureAlert = computed(() => {
+  const count = homeTemperatureMetrics.value.filter(item => item.state === 'invalid').length;
+  return count ? `${count} 项读数异常` : '';
+});
+const homeTemperatureMetrics = computed(() => buildHomeTemperatureMetrics(
+  freshness.value.state === 'live' ? temperature.value : {},
+  { batteryReading: batteryTemperatureReading.value }
+));
+const homeTemperatureSubtitle = computed(() => freshness.value.state === 'live'
+  ? (homeTemperatureAlert.value || '设备实时读数')
+  : (homeTemperatureMetrics.value.length ? '电池已更新 · 其他传感器待刷新' : '等待最新温度'));
+
+const temperatureDiagnostics = computed(() => Object.entries(temperature.value).map(([key, raw]) => ({
+  label: key, value: `${raw == null || raw === '' ? '（空）' : String(raw)}${isTemperatureField(key) && temperatureReading(key, raw).state === 'invalid' ? ' · 读数异常' : ''}`
+})));
+const monthlyUsedBytes = computed(() => totalBytes(status.value.monthly_rx_bytes, status.value.monthly_tx_bytes));
+const batteryPercentText = computed(() => {
+  const gauge = status.value.battery_gauge;
+  const percent = Object.hasOwn(status.value, 'battery_gauge')
+    ? (gauge?.state === 'valid' ? numeric(gauge.percent) : null)
+    : numeric(firstValue(battery.value.percent, status.value.battery_vol_percent, status.value.battery_value));
+  return percent != null && percent >= 0 && percent <= 100 ? `${percent.toFixed(2)}%` : '—';
+});
+const batteryStateText = computed(() => batteryModeText(battery.value.measurement));
+function batteryTimeResult(key) {
+  const now = freshnessNow.value;
+  const expired = [data.value.timestamp, battery.value.calculatedAt].some(at =>
+    typeof at !== 'number' || !Number.isFinite(at) || at <= 0 || now - at > 5000);
+  const validUntil = data.value.status?.battery_gauge?.validUntil;
+  const gaugeExpired = typeof validUntil === 'number' && Number.isFinite(validUntil) && now > validUntil;
+  return data.value.stale === true || expired || gaugeExpired || !battery.value[key]
+    ? { state: 'unavailable', minutes: null, reason: '待刷新', targetPercent: key === 'timeToFull' ? 100 : 0 }
+    : battery.value[key];
+}
+const batteryTimeToFullText = computed(() => formatBatteryTime(batteryTimeResult('timeToFull')));
+const batteryRuntimeText = computed(() => formatBatteryTime(batteryTimeResult('runtime')));
+const batteryTimeToFullReason = computed(() => batteryTimeReason(batteryTimeResult('timeToFull')));
+const batteryRuntimeReason = computed(() => batteryTimeReason(batteryTimeResult('runtime')));
+function clientListAvailability(group) {
+  const available = data.value.clientAvailability?.[group];
+  if (available === true || available === false) return available;
+  return data.value.errors?.[group] ? false : null;
+}
+function clientListCountText(group) {
+  const count = (group === 'stations' ? stations.value : cableStations.value).length;
+  const cached = data.value.stale ? ' · 缓存' : '';
+  if (clientListAvailability(group) === true) return `${count} 台${cached}`;
+  return count ? `${count} 条记录${cached}` : '数量待获取';
+}
+function clientEmptyText(group) {
+  const label = group === 'stations' ? '无线' : '有线';
+  const available = clientListAvailability(group);
+  if (available === false) return `${label}设备列表获取失败，请稍后重试。`;
+  if (!data.value.timestamp || available !== true) return `${label}设备列表待获取。`;
+  return data.value.stale ? `缓存中没有${label}设备记录。` : `当前没有${label}设备。`;
+}
+const clientSummaryText = computed(() => {
+  if (!data.value.timestamp) return '待获取';
+  const count = stations.value.length + cableStations.value.length;
+  const cached = data.value.stale ? ' · 缓存' : '';
+  const availability = ['stations', 'cableStations'].map(clientListAvailability);
+  if (availability.every(value => value === true)) return `${count} 台${data.value.stale ? ' · 缓存' : '已连接'}`;
+  if (count) return `${count} 条设备记录 · 连接数量未知${cached}`;
+  return `${availability.includes(false) ? '列表获取失败 · 连接数量未知' : '连接数量待获取'}${cached}`;
+});
+const smsSummaryText = computed(() => {
+  const unread = numeric(status.value.sms_unread_num);
+  return unread == null ? '查看收件箱与验证码' : unread > 0 ? `${unread} 条未读` : '暂无未读短信';
+});
+const freshness = computed(() => describeFreshness({ connected: connected.value, stale: data.value.telemetryStale, timestamp: data.value.telemetryTimestamp, now: freshnessNow.value }));
+
+function totalBytes(received, sent) {
+  const rx = numeric(received);
+  const tx = numeric(sent);
+  return rx == null || tx == null || rx < 0 || tx < 0 ? null : rx + tx;
+}
+
+function describeFreshness({ connected, stale = false, timestamp, now = Date.now() }) {
+  const acquired = Number(timestamp);
+  if (!Number.isFinite(acquired) || acquired <= 0) return { state: 'offline', label: '尚未连接', time: '等待首次有效数据' };
+  const ageSeconds = Math.max(0, Math.floor((now - acquired) / 1000));
+  const old = stale || !connected || ageSeconds > 15;
+  const time = new Date(acquired).toLocaleTimeString('zh-CN', { hour12: false });
+  return { state: old ? 'stale' : 'live', label: old ? '数据未更新 · 显示缓存' : '已连接 · 实时', time: `${old ? '最后采集' : '更新于'} ${time}` };
+}
+
 const deviceIdentityDetails = computed(() => toItems({
   'IMEI': firstValue(status.value.imei),
   '当前手机号': firstValue(status.value.msisdn, status.value.sim_msisdn, status.value.phone_number),
@@ -974,14 +1128,14 @@ const secondaryCellDetails = computed(() => {
 });
 
 const usageSummaryMetrics = computed(() => [
-  { label: '当前会话', value: formatBytes((numeric(status.value.realtime_rx_bytes) || 0) + (numeric(status.value.realtime_tx_bytes) || 0)) },
-  { label: '本月合计', value: formatBytes((numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0)) }
+  { label: '当前会话', value: formatBytes(totalBytes(status.value.realtime_rx_bytes, status.value.realtime_tx_bytes)) },
+  { label: '本月合计', value: formatBytes(monthlyUsedBytes.value) }
 ]);
 const trafficPlanMetrics = computed(() => {
   const enabled = features.value.data_volume_limit_switch === '1';
-  const usedBytes = (numeric(status.value.monthly_rx_bytes) || 0) + (numeric(status.value.monthly_tx_bytes) || 0);
+  const usedBytes = monthlyUsedBytes.value;
   const planGb = trafficPlanGb(features.value.data_volume_limit_size);
-  const remainingGb = planGb == null ? null : Math.max(0, planGb - usedBytes / (1024 ** 3));
+  const remainingGb = !enabled || planGb == null || planGb <= 0 || usedBytes == null ? null : Math.max(0, planGb - usedBytes / (1024 ** 3));
   return [
     { label: '状态', value: enabled ? '已启用' : '未启用' },
     { label: '套餐', value: planGb == null ? '未设置' : `${planGb} GB` },
@@ -990,10 +1144,11 @@ const trafficPlanMetrics = computed(() => {
   ];
 });
 function trafficPlanGb(raw) {
-  const [amount, multiplier = '1024'] = String(raw ?? '').split('_');
+  if (raw == null || String(raw).trim() === '') return null;
+  const [amount, multiplier = '1024'] = String(raw).split('_');
   const value = Number(amount);
   const unit = Number(multiplier);
-  return Number.isFinite(value) && Number.isFinite(unit) ? value * unit / 1024 : null;
+  return Number.isFinite(value) && value > 0 && Number.isFinite(unit) && unit > 0 ? value * unit / 1024 : null;
 }
 const usageDetails = computed(() => toItems({
   '会话下载': formatBytes(status.value.realtime_rx_bytes),
@@ -1003,14 +1158,74 @@ const usageDetails = computed(() => toItems({
   '本月上传': formatBytes(status.value.monthly_tx_bytes),
   '累计联网': formatDuration(status.value.monthly_time)
 }));
+const batterySourceNote = computed(() => {
+  const gauge = status.value.battery_gauge;
+  if (!gauge && battery.value.percentSource !== 'gauge88') return '原厂电量接口';
+  try { const endpoint = new URL(gauge?.url || battery.value.percentEndpoint); return `${endpoint.host} · 软件估算`; }
+  catch { return '自定义接口 · 软件估算'; }
+});
+const batteryTemperatureReading = computed(() => {
+  const now = freshnessNow.value;
+  const at = data.value.timestamp;
+  const fresh = data.value.stale !== true && typeof at === 'number' && Number.isFinite(at)
+    && at > 0 && now - at <= 5000;
+  const gauge = status.value.battery_gauge;
+  const custom = Object.hasOwn(status.value, 'battery_gauge') || battery.value.percentSource === 'gauge88';
+  const validGauge = gauge?.state === 'valid' && typeof gauge.validUntil === 'number'
+    && Number.isFinite(gauge.validUntil) && now <= gauge.validUntil;
+  return temperatureReading('battery_temp', fresh && (!custom || validGauge)
+    ? (custom ? gauge.raw?.temp_c : temperature.value.battery_temp) : undefined);
+});
 const batteryMetrics = computed(() => [
-  { label: '电池电量', value: withUnit(firstValue(battery.value.percent, status.value.battery_vol_percent, status.value.battery_value), '%') },
-  { label: '充电状态', value: battery.value.charging ? '正在充电' : '电池供电' },
-  { label: '电池温度', value: withUnit(firstValue(temperature.value.battery_temp), '°C') },
-  { label: '预计时间', value: battery.value.remainingHours == null ? '数据不足' : formatHours(battery.value.remainingHours) },
-  { label: '变化速率', value: battery.value.ratePerHour == null ? '数据不足' : `${battery.value.ratePerHour.toFixed(2)}%/小时` },
-  { label: '记录样本', value: `${batterySamples.value.length} 条` }
+  { label: '电池电量', value: batteryPercentText.value, note: batterySourceNote.value },
+  { label: '电池状态', value: batteryStateText.value },
+  { label: '电池温度', value: withUnit(batteryTemperatureReading.value.value, '°C'), note: batteryTemperatureReading.value.state === 'invalid' ? '读数异常' : '' },
+  { label: '预计充满', value: batteryTimeToFullText.value, note: batteryTimeToFullReason.value },
+  { label: '剩余可用', value: batteryRuntimeText.value, note: batteryRuntimeReason.value },
+  { label: '估算口径', value: '放电到 0%', note: '软件可用容量估算' }
 ]);
+const batteryDiagnostics = computed(() => buildBatteryDiagnostics(battery.value.measurement, status.value.battery_gauge?.raw, battery.value));
+
+function buildBatteryDiagnostics(measurement = {}, raw = {}, summary = {}) {
+  const measured = measurement || {}, gauge = raw || {};
+  const format = (value, divisor = 1, digits = 2, unit = '') => typeof value === 'number' && Number.isFinite(value)
+    ? `${(value / divisor).toFixed(digits)}${unit}` : '—';
+  const flag = (value, yes, no) => value === true || value === 1 ? yes : value === false || value === 0 ? no : '—';
+  const inputQuality = gauge.input_data_quality === 'disconnected' ? '已断开'
+    : gauge.input_data_quality === 'ok' ? '有效' : '不可读';
+  const basis = typeof measured.capacityBasis === 'string' && measured.capacityBasis ? measured.capacityBasis : '—';
+  const observation = typeof measured.fullStableSeconds === 'number' && Number.isFinite(measured.fullStableSeconds)
+    ? `${(Math.max(0, measured.fullStableSeconds) / 60).toFixed(1)} / 20 分钟` : '—';
+  return [
+    { label: '电池净电流', value: format(measured.netCurrentMa, 1, 2, ' mA') },
+    { label: '电池净功率', value: format(measured.netPowerW, 1, 3, ' W') },
+    { label: '电池电压', value: format(measured.voltageMv, 1000, 3, ' V') },
+    { label: '软件可用容量', value: format(measured.usableCapacityMah, 1, 0, ' mAh') },
+    { label: '容量依据', value: basis },
+    { label: '标称容量', value: format(gauge.capacity_mah_nominal, 1, 0, ' mAh') },
+    { label: 'USB 连接', value: flag(gauge.usb_online, '已连接', '已断开') },
+    { label: 'USB 总输入电压', value: format(gauge.input_voltage_mv, 1000, 3, ' V') },
+    { label: 'USB 总输入电流', value: format(gauge.input_current_ma, 1, 2, ' mA') },
+    { label: 'USB 总输入功率', value: format(gauge.input_power_w, 1, 3, ' W') },
+    { label: 'USB 输入质量', value: inputQuality },
+    { label: '系统轨电压', value: format(gauge.system_voltage_mv, 1000, 3, ' V') },
+    { label: '系统轨电流', value: format(gauge.system_current_ma, 1, 2, ' mA') },
+    { label: '累计充入', value: format(gauge.charge_uah, 1000, 2, ' mAh') },
+    { label: '累计放出', value: format(gauge.discharge_uah, 1000, 2, ' mAh') },
+    { label: '本次满充确认', value: flag(measured.fullConfirmed, '已确认', '未确认') },
+    { label: '历史满充基准', value: flag(measured.fullAnchorValid, '存在', '未建立') },
+    { label: '满充观察', value: observation },
+    { label: '满充观察剩余', value: typeof measured.fullStableSeconds === 'number' && Number.isFinite(measured.fullStableSeconds)
+      ? `条件不变时约 ${Math.max(0, (1200 - measured.fullStableSeconds) / 60).toFixed(1)} 分钟` : '—' },
+    { label: '容量校准', value: flag(gauge.capacity_calibrated, '已校准', '未校准') },
+    { label: 'SOC 校准', value: flag(gauge.soc_calibrated, '已校准', '未校准') },
+    { label: '采样质量', value: gauge.data_quality === 'ok' ? '有效' : '不可用' },
+    { label: '采样缺失', value: format(gauge.missing_s, 1, 0, ' 秒') },
+    { label: '缺口次数', value: format(gauge.gap_events, 1, 0) },
+    { label: '最近缺口原因', value: typeof gauge.last_gap_reason === 'string' && gauge.last_gap_reason ? gauge.last_gap_reason : '—' },
+    { label: '有效估算覆盖', value: format(summary.windowSeconds, 1, 0, ' 秒') }
+  ];
+}
 const runtimeDetails = computed(() => toItems({
   '当前数据通道': syncState.role === 'viewer'
     ? `局域网互通 · 读取采集器「${syncState.hub?.name || '未知'}」`
@@ -1019,40 +1234,30 @@ const runtimeDetails = computed(() => toItems({
   'Android App': '原生 HTTP 直连路由器，原厂后台走本机反向代理',
   'Windows 桌面端': '主进程代理会话直连路由器',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
-  '图表窗口': '温度/信号最近 2 小时，电池最近 24 小时',
-  '历史保存': '本机 24 小时（电池 12 小时），启用互通后随局域网共享',
+  '图表窗口': '可查看最近 2 小时 / 24 小时',
+  '历史保存': '本机 24 小时，启用互通后随局域网共享',
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
 }));
 
+const trendWindowMs = computed(() => trendHours.value * 60 * 60 * 1000);
+const trendTitle = computed(() => ({ throughput: '上传与下载', temperature: '设备温度 · °C', battery: '电池电量 · %', signal: `${signalMetric.value.toUpperCase()} · ${signalMetric.value === 'rsrp' ? 'dBm' : 'dB'}` }[trendMetric.value]));
+function throughputOption(windowMs) {
+  const cutoff = Math.ceil(Date.now() / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS - windowMs;
+  return lineOption(throughputSeries(histories, cutoff), false, { min: 0 }, { windowMs, context: 'throughput' });
+}
 const signalChartOption = computed(() => lineOption([
-  { name: 'RSRP', data: histories.rsrp, color: '#ffb020' },
-  { name: 'SINR', data: histories.sinr, color: '#36c963' },
-  { name: 'RSRQ', data: histories.rsrq, color: '#6d5bd0' }
-], false, { min: -140, max: 50 }, {
-  animation: false,
-  axisWindowStepMs: CHART_HISTORY_SAMPLE_MS,
-  windowMs: CHART_RECENT_WINDOW_MS,
-  zoom: false,
-  xAxisLabels: false
-}));
-
-const temperatureChartOption = computed(() => {
-  const colors = ['#ffb020', '#36c963', '#6d5bd0', '#d94848', '#f472b6', '#2dd4bf'];
-  const cutoff = Math.ceil(Date.now() / CHART_HISTORY_SAMPLE_MS) * CHART_HISTORY_SAMPLE_MS - CHART_RECENT_WINDOW_MS;
-  const series = Object.entries(histories.temperatures || {})
-    .filter(([, values]) => Array.isArray(values) && values.length)
-    .map(([key, values], index) => ({ name: temperatureNames[key] || key, data: smoothSeries(chartWindowPoints(values, cutoff), 3), color: colors[index % colors.length] }));
-  return lineOption(series, false, {}, { windowMs: CHART_RECENT_WINDOW_MS, zoom: false, xAxisLabels: false });
-});
-const batteryChartOption = computed(() => {
-  const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
-  const points = batterySamples.value
-    .filter(item => Number(item.timestamp) >= cutoff)
-    .map(item => [Number(item.timestamp), numeric(item.percent), item.source || 'unknown']);
-  return lineOption([{ name: '电量', data: points, color: '#34d399', area: true }], false, { min: 0, max: 100 }, { windowMs: BATTERY_HISTORY_WINDOW_MS, xAxisLabels: false, zoom: false });
-});
+  { id: signalMetric.value, name: signalMetric.value.toUpperCase(), unit: signalMetric.value === 'rsrp' ? 'dBm' : 'dB', data: histories[signalMetric.value], color: '#4267ed' }
+], false, {}, { windowMs: activeTab.value === 'trends' ? trendWindowMs.value : CHART_RECENT_WINDOW_MS, context: `signal-${signalMetric.value}` }));
+const temperatureChartOption = computed(() => lineOption(temperatureSeries(histories.temperatures), false, {},
+  { windowMs: trendWindowMs.value, context: 'temperature', unit: '°C' }));
+const batteryChartOption = computed(() => lineOption(batterySeries(batterySamples.value), false, { min: 0, max: 100 },
+  { windowMs: trendWindowMs.value, context: 'battery' }));
+const trendChartOption = computed(() => ({
+  throughput: () => throughputOption(trendWindowMs.value), temperature: () => temperatureChartOption.value,
+  battery: () => batteryChartOption.value, signal: () => signalChartOption.value
+}[trendMetric.value]()));
 
 function toItems(object) {
   return Object.entries(object).map(([label, value]) => ({ label, value: firstValue(value) }));
@@ -1075,7 +1280,7 @@ function loadChartHistory() {
     ? stored.temperatures
     : {};
   Object.entries(storedTemperatures).forEach(([key, values]) => {
-    const normalized = normalizePointList(values, cutoff);
+    const normalized = normalizePointList(normalizeTemperaturePoints(key, values), cutoff);
     if (normalized.length) temperatures[key] = normalized;
   });
   return {
@@ -1101,7 +1306,7 @@ function persistChartHistory(force = false) {
       down: normalizePointList(raw.down, now - METRIC_HISTORY_WINDOW_MS),
       up: normalizePointList(raw.up, now - METRIC_HISTORY_WINDOW_MS),
       temperatures: Object.fromEntries(Object.entries(raw.temperatures || {})
-        .map(([key, values]) => [key, normalizePointList(values, now - METRIC_HISTORY_WINDOW_MS)])
+        .map(([key, values]) => [key, normalizePointList(normalizeTemperaturePoints(key, values), now - METRIC_HISTORY_WINDOW_MS)])
         .filter(([, values]) => values.length))
     });
   } catch {}
@@ -1118,7 +1323,7 @@ function chartSnapshot() {
     rsrq: raw.rsrq.slice(),
     down: raw.down.slice(),
     up: raw.up.slice(),
-    temperatures: Object.fromEntries(Object.entries(raw.temperatures || {}).map(([key, values]) => [key, values.slice()]))
+    temperatures: Object.fromEntries(Object.entries(raw.temperatures || {}).map(([key, values]) => [key, normalizeTemperaturePoints(key, values)]))
   };
 }
 
@@ -1130,7 +1335,7 @@ function applyChartUpdater(updater) {
   ['rsrp', 'sinr', 'rsrq', 'down', 'up'].forEach(key => {
     if (Array.isArray(merged[key])) histories[key] = merged[key];
   });
-  if (merged.temperatures && typeof merged.temperatures === 'object') histories.temperatures = merged.temperatures;
+  if (merged.temperatures && typeof merged.temperatures === 'object') histories.temperatures = Object.fromEntries(Object.entries(merged.temperatures).map(([key, values]) => [key, normalizeTemperaturePoints(key, values)]).filter(([, values]) => values.length));
   persistChartHistory(true);
 }
 
@@ -1186,242 +1391,14 @@ function captureHistory(payload) {
   pushHistory(histories.down, timestamp, numeric(nextStatus.realtime_rx_thrpt), source);
   pushHistory(histories.up, timestamp, numeric(nextStatus.realtime_tx_thrpt), source);
   Object.entries(nextTemperature).forEach(([key, value]) => {
-    if (!/temp|sensor|temperature/i.test(key) || /level|oom_temp_pro/i.test(key)) return;
-    const number = numeric(value);
+    if (!isTemperatureField(key)) return;
+    const number = temperatureReading(key, value).value;
     if (number == null) return;
     if (!Array.isArray(histories.temperatures[key])) histories.temperatures[key] = [];
     pushHistory(histories.temperatures[key], timestamp, number, source);
   });
   Object.values(histories.temperatures).forEach(values => pruneHistory(values, timestamp));
   persistChartHistory();
-}
-
-function smoothSeries(values, windowSize = 3) {
-  if (!Array.isArray(values) || values.length < 2 || windowSize < 2) return values;
-  const half = Math.floor(windowSize / 2);
-  return values.map((point, i) => {
-    const t = point[0];
-    let sum = 0;
-    let count = 0;
-    const start = Math.max(0, i - half);
-    const end = Math.min(values.length - 1, i + half);
-    for (let j = start; j <= end; j++) {
-      if (values[j][2] !== point[2]) continue;
-      const v = numeric(values[j][1]);
-      if (Number.isFinite(v)) {
-        sum += v;
-        count++;
-      }
-    }
-    return count ? [t, Number((sum / count).toFixed(2)), point[2] || 'unknown'] : point;
-  });
-}
-
-function lineOption(series, dualAxis = false, range = {}, behavior = {}) {
-  const axisWindowStepMs = Math.max(1000, Number(behavior.axisWindowStepMs) || CHART_HISTORY_SAMPLE_MS);
-  const chartNow = Math.ceil(Date.now() / axisWindowStepMs) * axisWindowStepMs;
-  const windowMs = Number(behavior.windowMs) || METRIC_HISTORY_WINDOW_MS;
-  const animate = behavior.animation === true;
-  series = series.map(item => ({ ...item, data: chartWindowPoints(item.data, chartNow - windowMs) }));
-  // 隐藏 x 轴时刻标签（如电池图：底部只保留拖动条，界面更干净）。
-  const hideAxisLabels = behavior.xAxisLabels === false;
-  const yAxisRange = index => behavior.yAxisRanges?.[index] || {};
-  const timestamps = series.flatMap(item => (Array.isArray(item.data) ? item.data : []))
-    .map(point => Number(point?.[0]))
-    .filter(Number.isFinite)
-    .sort((left, right) => left - right);
-  const dataStart = timestamps[0] || chartNow;
-  const dataEnd = timestamps.at(-1) || chartNow;
-  const dataSpan = Math.max(CHART_HISTORY_SAMPLE_MS, dataEnd - dataStart);
-  const minimumVisibleWindow = Number(behavior.minimumVisibleWindow) || 30 * 60 * 1000;
-  const visibleWindow = Math.min(windowMs, Math.max(minimumVisibleWindow, dataSpan * 1.25));
-  const visibleEnd = chartNow;
-  const visibleStart = Math.max(chartNow - windowMs, visibleEnd - visibleWindow);
-  const zoomEnabled = behavior.zoom !== false;
-  return {
-    animation: animate,
-    animationDuration: 0,
-    animationDurationUpdate: animate ? 480 : 0,
-    animationEasingUpdate: 'cubicOut',
-    color: series.map(item => item.color),
-    grid: { left: 12, right: dualAxis ? 12 : 8, top: 40, bottom: zoomEnabled ? (hideAxisLabels ? 28 : 46) : (hideAxisLabels ? 14 : 22), containLabel: true },
-    tooltip: {
-      trigger: 'axis',
-      formatter: historyTooltip,
-      // 玻璃材质 tooltip：半透明白 + backdrop 模糊（ECharts tooltip 是 DOM，Chromium 支持）。
-      backgroundColor: 'rgba(255,255,255,0.72)',
-      borderColor: 'rgba(255,255,255,0.65)',
-      borderWidth: 1,
-      padding: [8, 12],
-      textStyle: { color: '#1f2937', fontSize: 11 },
-      extraCssText: 'border-radius:12px;backdrop-filter:blur(14px) saturate(1.6);-webkit-backdrop-filter:blur(14px) saturate(1.6);box-shadow:0 12px 32px rgba(24,39,75,0.18),inset 0 1px 0 rgba(255,255,255,0.85);',
-      axisPointer: { type: 'line', lineStyle: { color: 'rgba(100,116,139,.45)', width: 1, type: 'dashed' } }
-    },
-    legend: { top: 0, right: 4, icon: 'roundRect', itemWidth: 18, itemHeight: 4, itemGap: 14, textStyle: { color: '#64748b', fontSize: 10 } },
-    xAxis: {
-      type: 'time',
-      min: chartNow - windowMs,
-      max: chartNow,
-      boundaryGap: false,
-      splitNumber: 4,
-      axisLabel: {
-        show: !hideAxisLabels,
-        color: '#94a3b8',
-        fontSize: 9,
-        hideOverlap: true,
-        showMinLabel: true,
-        showMaxLabel: true,
-        margin: 10,
-        formatter: value => {
-          const date = new Date(value);
-          if (Number.isNaN(date.getTime())) return '';
-          return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-        }
-      },
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.14)' } },
-      splitLine: { show: false }
-    },
-    dataZoom: zoomEnabled ? [
-      {
-        id: 'history-inside',
-        type: 'inside',
-        xAxisIndex: 0,
-        filterMode: 'none',
-        startValue: visibleStart,
-        endValue: visibleEnd,
-        minValueSpan: 5 * 60 * 1000,
-        maxValueSpan: windowMs,
-        zoomOnMouseWheel: true,
-        moveOnMouseMove: true,
-        moveOnMouseWheel: true,
-        preventDefaultMouseMove: true
-      },
-      {
-        id: 'history-slider',
-        type: 'slider',
-        xAxisIndex: 0,
-        filterMode: 'none',
-        startValue: visibleStart,
-        endValue: visibleEnd,
-        minValueSpan: 5 * 60 * 1000,
-        maxValueSpan: windowMs,
-        height: 14,
-        bottom: 4,
-        borderColor: 'transparent',
-        backgroundColor: 'rgba(255, 255, 255, 0.38)',
-        fillerColor: 'rgba(109,91,208,0.16)',
-        dataBackground: { lineStyle: { color: '#94a3b8', opacity: .45 }, areaStyle: { color: '#cbd5e1', opacity: .18 } },
-        selectedDataBackground: { lineStyle: { color: '#6d5bd0' }, areaStyle: { color: '#c8bef2', opacity: .22 } },
-        handleSize: 12,
-        handleStyle: { color: '#ffffff', borderColor: '#6d5bd0', borderWidth: 1 },
-        moveHandleSize: 4,
-        moveHandleStyle: { color: '#6d5bd0', opacity: .55 },
-        showDetail: false,
-        brushSelect: false
-      }
-    ] : [],
-    yAxis: dualAxis ? [
-      { type: 'value', scale: true, ...yAxisRange(0), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.08)', width: 1 } } },
-      { type: 'value', scale: true, ...yAxisRange(1), axisLabel: { color: '#d97706', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { show: false } }
-    ] : [{ type: 'value', scale: range.min == null, min: range.min, max: range.max, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisTick: { show: false }, axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(23, 32, 51, 0.08)', width: 1 } } }],
-    series: series.map(item => buildLineSeries(item, windowMs, chartNow))
-  };
-}
-
-function chartWindowPoints(points, cutoff) {
-  if (!Array.isArray(points) || !points.length || Number(points.at(-1)?.[0]) < cutoff) return [];
-  let low = 0;
-  let high = points.length;
-  while (low < high) {
-    const middle = (low + high) >>> 1;
-    if (Number(points[middle]?.[0]) < cutoff) low = middle + 1;
-    else high = middle;
-  }
-  // Keep one preceding point for a continuous line at the visible left edge.
-  return points.slice(Math.max(0, low - 1));
-}
-
-function lineGradient(color) {
-  return {
-    type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
-    colorStops: [
-      { offset: 0, color: `${color}4d` },
-      { offset: 0.55, color: `${color}b3` },
-      { offset: 1, color }
-    ]
-  };
-}
-
-function areaGradient(color) {
-  return {
-    opacity: 1,
-    color: {
-      type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-      colorStops: [
-        { offset: 0, color: `${color}33` },
-        { offset: 0.65, color: `${color}12` },
-        { offset: 1, color: `${color}00` }
-      ]
-    }
-  };
-}
-
-function markLivePoint(data, color) {
-  if (!Array.isArray(data) || !data.length) return data;
-  const lastIndex = data.length - 1;
-  return data.map((point, index) => {
-    if (index !== lastIndex) return point;
-    return {
-      value: point,
-      symbol: 'circle',
-      symbolSize: 7,
-      itemStyle: {
-        color,
-        borderColor: '#ffffff',
-        borderWidth: 1.6,
-        shadowColor: `${color}cc`,
-        shadowBlur: 10
-      }
-    };
-  });
-}
-
-function ensureVisibleSeries(data, chartNow, windowMs, emptyValue) {
-  if (Array.isArray(data) && data.length > 1) return data;
-  if (Array.isArray(data) && data.length === 1) {
-    const point = data[0];
-    const timestamp = Number(point?.[0]);
-    const value = numeric(point?.[1]);
-    if (Number.isFinite(timestamp) && value != null) {
-      return [[Math.max(chartNow - windowMs, timestamp - CHART_HISTORY_SAMPLE_MS), value, point[2] || 'unknown'], point];
-    }
-  }
-  if (emptyValue == null) return [];
-  return [[chartNow - windowMs, emptyValue], [chartNow, emptyValue]];
-}
-
-function buildLineSeries(item, windowMs, chartNow) {
-  const color = item.color;
-  // History is already sampled per minute. Keep each value and its source together.
-  const bucketed = item.data;
-  const data = markLivePoint(ensureVisibleSeries(bucketed, chartNow, windowMs, item.emptyValue), color);
-  return {
-    id: item.name,
-    name: item.name,
-    type: 'line',
-    data,
-    encode: { x: 0, y: 1 },
-    yAxisIndex: item.axis || 0,
-    showSymbol: false,
-    symbol: 'circle',
-    symbolSize: 7,
-    smooth: 0.3,
-    connectNulls: true,
-    lineStyle: { width: 2.2, cap: 'round', color: lineGradient(color), shadowColor: `${color}59`, shadowBlur: 8 },
-    emphasis: { focus: 'series', lineStyle: { width: 3 } },
-    areaStyle: item.area ? areaGradient(color) : undefined
-  };
 }
 
 function applyInitialBands() {
@@ -1480,13 +1457,21 @@ function syncCandidate() {
 async function refresh(manual = false) {
   if (actionBusy.value) {
     pendingRefresh = true;
+    if (manual) pendingManualRefresh = true;
     return;
   }
   if (refreshing.value) {
     pendingRefresh = true;
+    if (manual) {
+      pendingManualRefresh = true;
+      manualRefreshing.value = true;
+    }
     return;
   }
   refreshing.value = true;
+  manual = manual || pendingManualRefresh;
+  pendingManualRefresh = false;
+  manualRefreshing.value = manual;
   try {
     // 数据来源被 syncClient 透明代理：查看端读采集器 /sync/live，其余（采集器/直连）走真正的路由器轮询。
     const payload = await syncClient.dashboard();
@@ -1498,7 +1483,7 @@ async function refresh(manual = false) {
     applyInitialBands();
     syncCandidate();
     errorMessage.value = merged.stale ? `当前显示缓存数据：${merged.serverMessage || '路由器暂时离线'}` : '';
-    lastUpdate.value = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    freshnessNow.value = Date.now();
     // 本地历史更新完毕后按角色发布/回补/拉取；图表合并经 applyChartUpdater 写回本地并持久化。
     try {
       await syncClient.afterTick({
@@ -1509,13 +1494,18 @@ async function refresh(manual = false) {
     } catch {}
     refreshSyncState();
   } catch (error) {
+    data.value.stale = true;
+    data.value.telemetryStale = true;
     errorMessage.value = error.message;
     if (manual) uni.showToast({ title: error.message, icon: 'none', duration: 2600 });
   } finally {
     refreshing.value = false;
+    manualRefreshing.value = false;
     if (pendingRefresh && !actionBusy.value) {
+      const nextManual = pendingManualRefresh;
+      pendingManualRefresh = false;
       pendingRefresh = false;
-      setTimeout(() => refresh(), 0);
+      setTimeout(() => refresh(nextManual), 0);
     }
   }
 }
@@ -1572,7 +1562,16 @@ function mergeDashboard(previous, incoming) {
   return {
     ...previous,
     ...incoming,
+    stale,
+    clientAvailability: record('clientAvailability'),
+    errors: record('errors'),
     source: (stale ? previous?.source : incoming?.source) || 'unknown',
+    timestamp: stale ? previous?.timestamp : incoming?.timestamp,
+    // Only a complete dashboard capture advances radio / non-battery temperature
+    // freshness. Native battery recovery can update the general timestamp alone.
+    telemetryTimestamp: stale ? previous?.telemetryTimestamp : incoming?.timestamp,
+    telemetrySource: (stale ? previous?.telemetrySource : incoming?.source) || 'unknown',
+    telemetryStale: stale,
     login: record('login'),
     status: record('status'),
     signal: record('signal'),
@@ -1587,23 +1586,66 @@ function mergeDashboard(previous, incoming) {
   };
 }
 
-function switchTab(id) {
-  if (managementTabs.some(tab => tab.id === id)) {
-    managementTab.value = id;
-    activeTab.value = 'manage';
-  } else {
-    activeTab.value = id;
-  }
+function resolveNavigation(id, section = '') {
+  const route = { tab: 'overview', device: 'clients', metric: 'throughput', detail: '' };
+  const devices = ['clients', 'radio', 'sms', 'stock', 'detail'];
+  if (id === 'settings' || (id === 'manage' && section === 'settings')) route.tab = 'settings';
+  else if (devices.includes(id)) { route.tab = 'devices'; route.device = id; }
+  else if (id === 'devices' || id === 'manage') { route.tab = 'devices'; if (devices.includes(section)) route.device = section; }
+  else if (id === 'usage') { route.tab = 'trends'; route.detail = 'usage'; }
+  else if (['battery', 'temperature', 'signal'].includes(id)) { route.tab = 'trends'; route.metric = id; }
+  else if (id === 'trends') { route.tab = 'trends'; if (['throughput', 'temperature', 'battery', 'signal'].includes(section)) route.metric = section; }
+  return route;
+}
+
+function switchTab(id, section = '') {
+  const route = resolveNavigation(id, section);
+  activeTab.value = route.tab;
+  managementTab.value = route.device;
+  trendMetric.value = route.metric;
+  trendDetail.value = route.detail;
+  settingsSection.value = '';
+  diagnosticsOpen.value = false;
   menuOpen.value = false;
-  if (activeTab.value === 'manage' && managementTab.value === 'sms') loadSms();
-  if (activeTab.value === 'manage' && managementTab.value === 'stock') openStockConsole();
+  if (route.tab === 'devices' && route.device === 'sms') loadSms();
+  if (route.tab === 'devices' && route.device === 'stock') openStockConsole();
+}
+
+function selectTrend(id) {
+  trendMetric.value = id;
+  trendDetail.value = '';
+}
+
+function openDiagnostics() {
+  switchTab('settings');
+  openSettingsSection('diagnostics');
+}
+
+function openSettingsSection(id) {
+  if (!['connection', 'battery', 'sync', 'overlay', 'background', 'update', 'diagnostics'].includes(id)) return;
+  if (id === 'battery') resetBatterySettings();
+  settingsSection.value = id;
+  diagnosticsOpen.value = id === 'diagnostics';
+}
+
+function handleNavigationBack() {
+  if (menuOpen.value) { menuOpen.value = false; return true; }
+  if (activeTab.value === 'devices') {
+    if (managementTab.value === 'sms' && smsComposeOpen.value) { smsComposeOpen.value = false; return true; }
+    if (managementTab.value !== 'clients') { switchTab('devices'); return true; }
+  }
+  if (activeTab.value === 'trends') {
+    if (trendDetail.value) { trendDetail.value = ''; return true; }
+    if (trendMetric.value !== 'throughput') { trendMetric.value = 'throughput'; return true; }
+  }
+  if (activeTab.value === 'settings' && settingsSection.value) { settingsSection.value = ''; diagnosticsOpen.value = false; return true; }
+  if (activeTab.value !== 'overview') { switchTab('overview'); return true; }
+  return false;
 }
 
 function switchManagementTab(id) {
   if (!managementTabs.some(tab => tab.id === id)) return;
-  managementTab.value = id;
-  if (id === 'sms') loadSms();
-  if (id === 'stock') openStockConsole();
+  switchTab(id);
 }
 
 async function openStockConsole(force = false) {
@@ -1647,7 +1689,7 @@ async function openStockConsole(force = false) {
     stockConsole.busy = false;
     // 看守接管后续会话抢占的自愈（也覆盖 3 次重试后仍停在登录页的情况）；
     // 仅内嵌模式有意义——全屏直连模式下原厂页面是另一个文档，读不到 hash。
-    if (stockConsole.url && stockOpenMode === 'embed' && activeTab.value === 'manage' && managementTab.value === 'stock') {
+    if (stockConsole.url && stockOpenMode === 'embed' && activeTab.value === 'devices' && managementTab.value === 'stock') {
       startStockConsoleWatcher();
     }
   }
@@ -1759,7 +1801,7 @@ function stopStockConsoleWatcher() {
 }
 
 watch([activeTab, managementTab], () => {
-  if (activeTab.value === 'manage' && managementTab.value === 'stock' && stockConsole.url && stockOpenMode === 'embed') {
+  if (activeTab.value === 'devices' && managementTab.value === 'stock' && stockConsole.url && stockOpenMode === 'embed') {
     startStockConsoleWatcher();
   } else {
     stopStockConsoleWatcher();
@@ -1945,8 +1987,10 @@ async function saveBands(group) {
   } finally {
     actionBusy.value = false;
     if (pendingRefresh) {
+      const nextManual = pendingManualRefresh;
+      pendingManualRefresh = false;
       pendingRefresh = false;
-      setTimeout(() => refresh(), 0);
+      setTimeout(() => refresh(nextManual), 0);
     }
   }
 }
@@ -2048,7 +2092,7 @@ function formatSmsDate(raw) {
 }
 
 async function saveSettings() {
-  Object.assign(config, routerApi.updateConfig({ ...settingsForm, pollIntervalMs: 1000 }));
+  Object.assign(config, routerApi.updateConfig({ routerUrl: settingsForm.routerUrl, password: settingsForm.password, pollIntervalMs: 1000 }));
   Object.assign(settingsForm, config);
   settingsResult.value = '正在保存并重新登录…';
   try {
@@ -2060,12 +2104,42 @@ async function saveSettings() {
   }
 }
 
+function resetBatterySettings() {
+  Object.assign(batterySettingsForm, { batterySource: config.batterySource, batteryHost: config.batteryHost, batteryPort: String(config.batteryPort) });
+  batterySettingsResult.value = '';
+  batterySettingsError.value = false;
+}
+
+async function saveBatterySettings() {
+  if (batterySettingsSaving.value) return;
+  batterySettingsSaving.value = true;
+  batterySettingsError.value = false;
+  try {
+    const custom = batterySettingsForm.batterySource === 'gauge';
+    Object.assign(config, routerApi.updateConfig({
+      batterySource: batterySettingsForm.batterySource,
+      batteryHost: custom ? batterySettingsForm.batteryHost : config.batteryHost,
+      batteryPort: custom ? batterySettingsForm.batteryPort : config.batteryPort
+    }));
+    resetBatterySettings();
+    batterySettingsResult.value = '已保存';
+    await refresh();
+  } catch (error) {
+    batterySettingsError.value = true;
+    batterySettingsResult.value = error.message;
+  } finally {
+    batterySettingsSaving.value = false;
+  }
+}
+
 function syncOverlayState() {
   Object.assign(overlayState, routerApi.getOverlayState());
 }
 
 function syncBackgroundState() {
-  Object.assign(backgroundState, routerApi.getBackgroundMonitorState(), routerApi.getBatteryOptimizationState());
+  const next = routerApi.getBackgroundMonitorState();
+  if (Boolean(next.background) !== Boolean(backgroundState.background) && syncState.role !== 'viewer') routerApi.resetBatteryCollection();
+  Object.assign(backgroundState, next, routerApi.getBatteryOptimizationState());
 }
 
 function requestBatteryOptimization() {
@@ -2080,12 +2154,39 @@ async function backfillBackgroundHistory() {
   if (backfillingBackground || !backgroundState.available) return;
   backfillingBackground = true;
   try {
+    // Detect the ownership boundary before importing its completed current blocks.
+    syncBackgroundState();
     const history = await routerApi.getBackgroundHistory();
     if (!history || typeof history !== 'object') return;
     if (history.chart) applyChartUpdater(current => mergeChartHistory(current, history.chart, { cutoff: Date.now() - METRIC_HISTORY_WINDOW_MS, sampleMs: CHART_HISTORY_SAMPLE_MS, maxPoints: CHART_HISTORY_MAX_POINTS }));
-    if (Array.isArray(history.battery) && history.battery.length) {
-      const merged = routerApi.mergeExternalBattery(history.battery);
-      if (data.value.battery) data.value.battery = { ...data.value.battery, samples: merged };
+    const merged = Array.isArray(history.battery) && history.battery.length
+      ? routerApi.mergeExternalBattery(history.battery) : null;
+    if (syncState.role === 'viewer') {
+      if (merged && data.value.battery) data.value.battery = { ...data.value.battery, samples: merged };
+    } else {
+      const native = history.live;
+      const currentAt = typeof data.value.timestamp === 'number' && Number.isFinite(data.value.timestamp) ? data.value.timestamp : 0;
+      const nativeAt = typeof native?.timestamp === 'number' && Number.isFinite(native.timestamp) ? native.timestamp : 0;
+      const snapshot = nativeAt > currentAt ? native : data.value;
+      const stats = Array.isArray(native?.battery?.currentStats) ? native.battery.currentStats : [];
+      const restored = routerApi.restoreBatterySummary(snapshot, stats);
+      data.value.battery = restored;
+      if (snapshot === native && restored.measurement) {
+        // Restore only battery-source fields after the collector validates the
+        // newer capture; unrelated foreground modules keep their own values.
+        const sourceStatus = { ...data.value.status };
+        for (const key of ['battery_gauge', 'battery_vol_percent', 'battery_value', 'battery_charging', 'external_charging_flag', 'battery_charg_type', 'battery_health', 'percentEndpoint']) {
+          if (Object.hasOwn(snapshot.status || {}, key)) sourceStatus[key] = snapshot.status[key];
+          else delete sourceStatus[key];
+        }
+        data.value.status = sourceStatus;
+        data.value.timestamp = snapshot.timestamp;
+        data.value.stale = false;
+        data.value.source = snapshot.source || 'unknown';
+        if (restored.measurement.percentageSource === 'router') {
+          data.value.temperature = { ...data.value.temperature, battery_temp: snapshot.temperature?.battery_temp };
+        }
+      }
     }
     if (history.sms?.messages?.length && !messages.value.length) applySmsSnapshot(history.sms);
     const count = Number(history.snapshotCount) || 0;
@@ -2111,9 +2212,19 @@ function toggleOverlay(event) {
 }
 
 function handlePageShow() {
+  if (syncState.role !== 'viewer') routerApi.resetBatteryCollection();
   setTimeout(syncOverlayState, 250);
   // 从后台/息屏回到页面：先回补原生落盘的历史，再由轮询接续。
   setTimeout(backfillBackgroundHistory, 300);
+}
+
+function handlePageHide() {
+  if (syncState.role !== 'viewer') routerApi.resetBatteryCollection();
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') handlePageHide();
+  else handlePageShow();
 }
 
 function confirmAction(title, content, confirmText = '继续') {
@@ -2161,6 +2272,7 @@ async function initialize() {
 }
 
 onMounted(() => {
+  if (typeof window !== 'undefined') window.u50HandleBack = handleNavigationBack;
   void checkSoftwareUpdate();
   if (nativeUpdate) {
     pollApkDownload();
@@ -2178,30 +2290,25 @@ onMounted(() => {
   syncOverlayState();
   syncBackgroundState();
   if (typeof window !== 'undefined') window.addEventListener('pageshow', handlePageShow);
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibilityChange);
   pollTimer = setInterval(refresh, 1000);
   backgroundStateTimer = setInterval(syncBackgroundState, 5000);
   smsPollTimer = setInterval(() => {
-    if (activeTab.value === 'manage' && managementTab.value === 'sms' && !actionBusy.value) loadSms();
+    if (activeTab.value === 'devices' && managementTab.value === 'sms' && !actionBusy.value) loadSms();
   }, SMS_REFRESH_MS);
-  const updateClock = () => { clock.value = new Date().toLocaleString('zh-CN', { hour12: false }); };
+  const updateClock = () => { freshnessNow.value = Date.now(); clock.value = new Date().toLocaleString('zh-CN', { hour12: false }); };
   updateClock();
   clockTimer = setInterval(updateClock, 1000);
 });
 
 onLoad(options => {
-  const requestedTab = options?.tab;
-  const requestedSection = options?.section;
-  if (managementTabs.some(tab => tab.id === requestedTab)) {
-    activeTab.value = 'manage';
-    managementTab.value = requestedTab;
-  } else if (tabs.some(tab => tab.id === requestedTab)) {
-    activeTab.value = requestedTab;
-    if (requestedTab === 'manage' && managementTabs.some(tab => tab.id === requestedSection)) managementTab.value = requestedSection;
-  }
-  if (activeTab.value === 'manage' && managementTab.value === 'sms') setTimeout(loadSms, 0);
+  switchTab(options?.tab || 'overview', options?.section || '');
 });
 
+onHide(handlePageHide);
+
 onBeforeUnmount(() => {
+  if (typeof window !== 'undefined' && window.u50HandleBack === handleNavigationBack) delete window.u50HandleBack;
   clearInterval(updatePollTimer);
   persistChartHistory(true);
   clearInterval(pollTimer);
@@ -2209,6 +2316,7 @@ onBeforeUnmount(() => {
   clearInterval(clockTimer);
   clearInterval(backgroundStateTimer);
   if (typeof window !== 'undefined') window.removeEventListener('pageshow', handlePageShow);
+  if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 

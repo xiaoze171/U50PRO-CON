@@ -27,6 +27,7 @@ export default {
   mounted() {
     this.lastOption = this.option;
     this.zoomState = null;
+    this.legendState = null;
     this.resizeHandler = () => this.scheduleRender(true);
     this.visibilityHandler = () => {
       if (!document.hidden) this.recoverChart();
@@ -75,6 +76,9 @@ export default {
       }
     },
     handleTouchStart(event) {
+      this.pageTouch = null;
+      // Enterable tooltips own their vertical scroll when many sensors are shown.
+      if (event.target?.closest?.('.history-tooltip')) return;
       const touch = event.touches?.[0];
       if (!touch || !this.instance) return;
       this.pageTouch = { x: touch.clientX, y: touch.clientY };
@@ -108,7 +112,13 @@ export default {
         if (!initial) return;
         const dx = touch.clientX - initial.x;
         const dy = touch.clientY - initial.y;
-        if (Math.abs(dy) > 4 && Math.abs(dy) >= Math.abs(dx)) event.stopPropagation();
+        if (Math.abs(dy) > 4 && Math.abs(dy) >= Math.abs(dx)) {
+          if (!initial.scrolling) {
+            initial.scrolling = true;
+            this.instance.dispatchAction({ type: 'hideTip' });
+          }
+          event.stopPropagation();
+        }
         return;
       }
       const delta = ((touch.clientX - state.x) / state.width) * 100;
@@ -151,6 +161,12 @@ export default {
     },
     update(value) {
       if (!value) return;
+      if (this.lastOption && this.lastOption.chartContext !== value.chartContext) {
+        this.zoomState = null;
+        this.legendState = null;
+        this.forceFullRender = true;
+        this.instance?.dispatchAction({ type: 'hideTip' });
+      }
       this.lastOption = value;
       this.pendingOption = value;
       this.syncTouchListeners();
@@ -158,6 +174,18 @@ export default {
       this.scheduleRender(false);
     },
     ensureInstance() {
+      // uni's H5 wx shim can make zrender mistake a real WebView for a mini-program.
+      // Correct that detection before init so HTML tooltips and browser events work.
+      const environment = echarts.env;
+      if (environment?.wxa && typeof window !== 'undefined' && typeof document !== 'undefined'
+          && window.document === document && document.nodeType === 9
+          && document.documentElement?.nodeType === 1 && typeof document.createElement === 'function') {
+        environment.wxa = false;
+        environment.domSupported = true;
+        environment.touchEventsSupported = 'ontouchstart' in window;
+        // zrender uses mouse/touch events in Chromium, reserving pointers for old IE/Edge.
+        environment.pointerEventsSupported = false;
+      }
       const width = this.$el.clientWidth;
       const height = this.$el.clientHeight;
       if (width < 2 || height < 2) return false;
@@ -167,6 +195,12 @@ export default {
           useDirtyRect: false,
           devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
         });
+        this.hasRendered = false;
+        this.renderWidth = width;
+        this.renderHeight = height;
+      }
+      if (this.boundInstance !== this.instance && this.instance.on) {
+        this.boundInstance = this.instance;
         this.instance.on('datazoom', event => {
           const batch = event?.batch?.[0] || event || {};
           const current = this.instance?.getOption()?.dataZoom?.[0] || {};
@@ -176,9 +210,18 @@ export default {
             ? { start, end }
             : null;
         });
-        this.hasRendered = false;
-        this.renderWidth = width;
-        this.renderHeight = height;
+        for (const eventName of ['legendselectchanged', 'legendselected', 'legendunselected', 'legendselectall', 'legendinverseselect']) {
+          this.instance.on(eventName, event => {
+            this.legendState = { ...this.legendState,
+              selected: { ...this.legendState?.selected, ...event.selected } };
+          });
+        }
+        this.instance.on('legendscroll', event => {
+          const scrollDataIndex = Number(event.scrollDataIndex);
+          if (Number.isInteger(scrollDataIndex) && scrollDataIndex >= 0) {
+            this.legendState = { ...this.legendState, scrollDataIndex };
+          }
+        });
       }
       return true;
     },
@@ -204,17 +247,31 @@ export default {
           this.renderWidth = width;
           this.renderHeight = height;
         }
-        const renderOption = this.zoomState && Array.isArray(option.dataZoom)
-          ? {
-              ...option,
-              dataZoom: option.dataZoom.map(item => {
-                if (item.type !== 'inside' && item.type !== 'slider') return item;
-                const { startValue, endValue, ...rest } = item;
-                return { ...rest, start: this.zoomState.start, end: this.zoomState.end };
-              })
+        // Cache only interaction events, avoiding a full getOption clone on every update.
+        const { chartContext, ...renderOption } = option;
+        if (this.zoomState && Array.isArray(option.dataZoom)) {
+          renderOption.dataZoom = option.dataZoom.map(item => {
+            if (item.type !== 'inside' && item.type !== 'slider') return item;
+            const { startValue, endValue, ...rest } = item;
+            return { ...rest, start: this.zoomState.start, end: this.zoomState.end };
+          });
+        }
+        if (this.legendState && option.legend) {
+          const legends = Array.isArray(option.legend) ? option.legend : [option.legend];
+          renderOption.legend = legends.map(legend => {
+            const names = (legend.data || option.series?.map(item => item.name) || [])
+              .map(item => typeof item === 'string' ? item : item.name);
+            const selected = { ...legend.selected };
+            for (const name of names) {
+              if (Object.hasOwn(this.legendState.selected || {}, name)) selected[name] = this.legendState.selected[name];
             }
-          : option;
-        this.instance.setOption(renderOption, { notMerge: force, lazyUpdate: false, silent: true });
+            return { ...legend, selected,
+              scrollDataIndex: Math.min(this.legendState.scrollDataIndex || 0, Math.max(0, names.length - 1)) };
+          });
+        }
+        // A reused trend view may change metric IDs; remove departed series
+        // while retaining the instance, other components and the saved zoom.
+        this.instance.setOption(renderOption, { notMerge: force, replaceMerge: ['series'], lazyUpdate: false, silent: true });
         this.hasRendered = true;
       });
     },

@@ -31,7 +31,7 @@ function decodeBody(buffer, contentType) {
   return buffer.toString(charset).trim();
 }
 
-function doRequest(payload, redirectsLeft) {
+function doRequest(payload, redirectsLeft, gaugeRedirectChain = false) {
   return new Promise((resolve) => {
     let target;
     try { target = new URL(payload.url); }
@@ -61,7 +61,9 @@ function doRequest(payload, redirectsLeft) {
       if (lower === 'cookie' || lower === 'origin' || lower === 'referer') continue;
       headers[name] = String(provided[name]);
     }
-    const cookie = session.header();
+    // 电量请求重定向到其他路径后仍保持会话隔离。
+    const gaugeRequest = gaugeRedirectChain || target.pathname === '/state.json';
+    const cookie = gaugeRequest ? '' : session.header();
     if (cookie) headers.Cookie = cookie;
 
     const body = payload.body == null ? '' : String(payload.body);
@@ -80,7 +82,7 @@ function doRequest(payload, redirectsLeft) {
     }, (response) => {
       const status = response.statusCode || 0;
       const setCookie = response.headers['set-cookie'];
-      if (setCookie) session.remember(setCookie);
+      if (setCookie && !gaugeRequest) session.remember(setCookie);
 
       // 手动跟随重定向（对应安卓 setInstanceFollowRedirects(true)）。
       if ([301, 302, 303, 307, 308].includes(status) && response.headers.location && redirectsLeft > 0) {
@@ -91,7 +93,8 @@ function doRequest(payload, redirectsLeft) {
           const nextMethod = (status === 307 || status === 308) ? method : 'GET';
           return resolve(doRequest(
             { ...payload, url: nextUrl, method: nextMethod, body: nextMethod === 'GET' ? '' : body },
-            redirectsLeft - 1
+            redirectsLeft - 1,
+            gaugeRequest
           ));
         }
       }
@@ -102,6 +105,7 @@ function doRequest(payload, redirectsLeft) {
         const text = decodeBody(Buffer.concat(chunks), response.headers['content-type']);
         const ok = status >= 200 && status < 300;
         const out = { ok, status, body: text };
+        if (response.headers['x-gauge-age'] !== undefined) out.headers = { 'X-Gauge-Age': response.headers['x-gauge-age'] };
         if (!ok) out.error = `路由器返回 HTTP ${status}`;
         resolve(out);
       });

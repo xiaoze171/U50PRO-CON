@@ -1,16 +1,22 @@
 import CryptoJS from 'crypto-js';
-import { mergeBatterySamples as mergeBatterySamplesShared } from '../utils/history.js';
+import { mergeBatterySamples as mergeBatterySamplesShared, mergeChartHistory } from '../utils/history.js';
+import { temperatureReading } from '../utils/temperature.js';
+import { batteryGaugeUrl, batteryGaugeReading, batteryPercent, normalizeBatteryConfig, normalizeBatteryMeasurement, normalizeBatteryEndpoint, freshBatteryGaugeReading } from '../utils/battery-gauge.js';
+import { createBatteryCurrentWindow, batteryMeasurementIdentity, sameBatteryIdentity } from '../utils/battery-current-window.js';
+import { estimateBatteryTimes } from '../utils/battery-estimate.js';
 import routerFields from './router-fields.json' with { type: 'json' };
 
 const DEFAULT_CONFIG = {
   routerUrl: 'http://192.168.0.1',
   password: '111111',
   developerPassword: '111111',
-  pollIntervalMs: 1000
+  pollIntervalMs: 1000,
+  batterySource: 'gauge',
+  batteryHost: '',
+  batteryPort: 88
 };
 
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const BATTERY_HISTORY_MAX_POINTS = 1445;
 const NATIVE_BATTERY_MERGE_MS = 30000;
 
 // 与 Android 后台共享字段清单，新增字段会同时进入前后台采集。
@@ -26,6 +32,15 @@ let cookies = new Map();
 let accessIdSeed = '';
 let loginState = { loggedIn: false, lastAttempt: 0, message: '尚未连接', method: 'sha256' };
 let batteryHistory = loadBatteryHistory();
+const batteryCurrentWindow = createBatteryCurrentWindow();
+let lastBatteryReading = null;
+let lastBatteryMinute = null;
+let batteryRestorePending = true;
+let batteryRestoreFloor = 0;
+let batteryEstimateHistory = { source: null, floor: 0, samples: [] };
+const archivedBatteryRevisions = new Map(batteryHistory.filter(item => item.currentStats)
+  .map(item => [item.currentStats.blockId, item.currentStats.revision]));
+const localBatteryBlockReadings = new Map();
 let lastNativeBatteryMerge = 0;
 let isH5 = false;
 let nativeRequestSequence = 0;
@@ -56,7 +71,9 @@ function nativeBridgeRequest(bridge, path, options, headers) {
         const response = JSON.parse(rawResponse);
         if (!response.ok) throw new Error(response.error || `路由器返回 HTTP ${response.status || '未知'}`);
         const body = response.body || '';
-        try { pending.resolve(JSON.parse(body)); } catch { pending.resolve(body); }
+        let data;
+        try { data = JSON.parse(body); } catch { data = body; }
+        pending.resolve(pending.fullResponse ? { data, header: response.headers || {} } : data);
       } catch (error) {
         pending.reject(error);
       }
@@ -68,15 +85,15 @@ function nativeBridgeRequest(bridge, path, options, headers) {
     const timer = setTimeout(() => {
       nativeRequests.delete(id);
       reject(new Error('路由器请求超时'));
-    }, 13000);
-    nativeRequests.set(id, { resolve, reject, timer });
+    }, (options.timeoutMs || 12000) + 1000);
+    nativeRequests.set(id, { resolve, reject, timer, fullResponse: options.fullResponse });
     try {
       bridge.request(id, JSON.stringify({
-        url: `${config.routerUrl.replace(/\/$/, '')}${path}`,
+        url: options.url || `${config.routerUrl.replace(/\/$/, '')}${path}`,
         method: options.method || 'GET',
         headers,
         body: options.data == null ? '' : String(options.data),
-        timeoutMs: 12000
+        timeoutMs: options.timeoutMs || 12000
       }));
     } catch (error) {
       clearTimeout(timer);
@@ -92,8 +109,11 @@ function loadConfig() {
     const value = uni.getStorageSync('mu5120-config');
     if (value && typeof value === 'object' && !Array.isArray(value)) stored = value;
   } catch {}
+  let batterySettings;
+  try { batterySettings = normalizeBatteryConfig(stored); } catch { batterySettings = normalizeBatteryConfig(); }
   return {
     ...DEFAULT_CONFIG,
+    ...batterySettings,
     routerUrl: stored?.routerUrl || DEFAULT_CONFIG.routerUrl,
     password: stored?.password || DEFAULT_CONFIG.password,
     developerPassword: stored?.password || stored?.developerPassword || DEFAULT_CONFIG.password,
@@ -130,7 +150,7 @@ function readNativeBatteryHistory() {
 
 function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS) {
   // 委托给共享工具（services/sync.js、desktop 主进程复用同一份分钟桶合并逻辑）。
-  return mergeBatterySamplesShared([local, native], { cutoff, maxPoints: BATTERY_HISTORY_MAX_POINTS });
+  return mergeBatterySamplesShared([local, native], { cutoff });
 }
 
 async function mergeNativeBatteryHistory(force = false) {
@@ -142,13 +162,16 @@ async function mergeNativeBatteryHistory(force = false) {
     ? await requestBackgroundHistory('getBackgroundBatteryHistoryAsync').catch(() => [])
     : readNativeBatteryHistory();
   const merged = mergeBatterySamples(batteryHistory, Array.isArray(native) ? native : []);
-  if (merged.length) batteryHistory = merged;
+  if (merged.length) {
+    batteryHistory = merged;
+    if (Array.isArray(native) && native.length) batteryRestorePending = true;
+  }
 }
 
 function syncBackgroundConfig() {
   const bridge = nativeBridge();
   if (bridge && typeof bridge.configureBackground === 'function') {
-    bridge.configureBackground(config.routerUrl, config.password);
+    bridge.configureBackground(config.routerUrl, config.password, JSON.stringify(normalizeBatteryConfig(config)));
   }
 }
 
@@ -156,8 +179,8 @@ function updateBackgroundSnapshot(snapshot) {
   const bridge = nativeBridge();
   if (!bridge || typeof bridge.updateBackgroundSnapshot !== 'function') return;
   try {
-    const { battery, ...payload } = snapshot;
-    bridge.updateBackgroundSnapshot(JSON.stringify(payload));
+    const { samples, ...battery } = snapshot.battery || {};
+    bridge.updateBackgroundSnapshot(JSON.stringify({ ...snapshot, battery }));
   } catch {}
 }
 
@@ -224,8 +247,14 @@ function requestBackgroundHistory(method) {
   });
 }
 
-function getBackgroundHistory() {
-  return requestBackgroundHistory('getBackgroundHistory');
+async function getBackgroundHistory() {
+  const history = await requestBackgroundHistory('getBackgroundHistory');
+  if (!history || typeof history !== 'object') return history;
+  return {
+    ...history,
+    chart: mergeChartHistory({}, history.chart),
+    battery: mergeBatterySamples([], history.battery)
+  };
 }
 
 function getBackgroundMonitorState() {
@@ -333,25 +362,35 @@ function requestRouter(path, options = {}) {
   if (bridge) return nativeBridgeRequest(bridge, path, options, headers);
   return new Promise((resolve, reject) => {
     uni.request({
-      url: `${baseUrl()}${path}`,
+      url: options.url ? (isH5 ? `/battery-api?url=${encodeURIComponent(options.url)}` : options.url) : `${baseUrl()}${path}`,
       method: options.method || 'GET',
       data: options.data,
       header: headers,
-      timeout: 12000,
-      withCredentials: true,
+      timeout: options.timeoutMs || 12000,
+      withCredentials: !options.url,
       success(response) {
-        rememberCookies(response);
+        if (!options.url) rememberCookies(response);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           reject(new Error(`路由器返回 HTTP ${response.statusCode}`));
           return;
         }
-        resolve(response.data);
+        resolve(options.fullResponse ? { data: response.data, header: response.header || {} } : response.data);
       },
       fail(error) {
         reject(new Error(error.errMsg || '无法连接路由器'));
       }
     });
   });
+}
+
+async function getBatteryGauge(settings) {
+  const url = batteryGaugeUrl(settings.routerUrl, settings.batteryHost, settings.batteryPort);
+  try {
+    const response = await requestRouter(`/state.json?t=${Date.now()}`, { url: `${url}?t=${Date.now()}`, timeoutMs: 2000, fullResponse: true });
+    return batteryGaugeReading(response.data, response.header, url);
+  } catch (error) {
+    return { percent: null, state: 'unavailable', url, raw: null, error: error.message };
+  }
 }
 
 async function getFields(fields, extra = {}) {
@@ -468,30 +507,56 @@ async function stockUiSession() {
 
 async function dashboard() {
   await ensureLogin();
-  const [status, signal, temperature, resources, locks, stations, cable, neighbors, features] = await Promise.all([
+  const batterySettings = { ...config };
+  const assertCurrentSettings = () => {
+    if (['routerUrl', 'password', 'batterySource', 'batteryHost', 'batteryPort'].some(key => batterySettings[key] !== config[key])) {
+      throw new Error('电量来源或连接已更新，正在重新采集');
+    }
+  };
+  const clientAvailability = { stations: true, cableStations: true };
+  const clientErrors = {};
+  const [status, signal, temperature, resources, locks, stations, cable, neighbors, features, gauge] = await Promise.all([
     getFields(statusFields),
     getFields(signalFields),
     getFields(temperatureFields),
     getFields(resourceFields),
     getFields(lockFields),
-    getCommand('station_list').catch(() => ({ station_list: [] })),
-    getCommand('lan_station_list').catch(() => ({ lan_station_list: [] })),
+    getCommand('station_list').catch(error => {
+      clientAvailability.stations = false;
+      clientErrors.stations = error.message || '无线设备列表获取失败';
+      return {};
+    }),
+    getCommand('lan_station_list').catch(error => {
+      clientAvailability.cableStations = false;
+      clientErrors.cableStations = error.message || '有线设备列表获取失败';
+      return {};
+    }),
     getFields(routerFields.neighbors).catch(() => ({})),
-    getFields(featureFields).catch(() => ({}))
+    getFields(featureFields).catch(() => ({})),
+    batterySettings.batterySource === 'gauge' ? getBatteryGauge(batterySettings) : null
   ]);
+  if (gauge) status.battery_gauge = gauge;
+  // Discard a poll that started with a different source while settings were saved.
+  assertCurrentSettings();
+  if (!Object.prototype.hasOwnProperty.call(stations || {}, 'station_list')) {
+    clientAvailability.stations = false;
+    clientErrors.stations ||= '无线设备列表未返回';
+  }
+  if (!['lan_station_list', 'station_list'].some(key => Object.prototype.hasOwnProperty.call(cable || {}, key))) {
+    clientAvailability.cableStations = false;
+    clientErrors.cableStations ||= '有线设备列表未返回';
+  }
   await mergeNativeBatteryHistory();
-  const sample = recordBattery(status, temperature);
-  const battery = batterySummary(status);
-  if (sample) {
-    Object.assign(sample, {
-      ratePerHour: battery.ratePerHour,
-      remainingMinutes: battery.remainingHours == null ? null : Math.round(battery.remainingHours * 60)
-    });
+  assertCurrentSettings();
+  const receivedAt = Date.now();
+  const { measurement, changed, currentStatsUpdates } = recordBattery(status, temperature, receivedAt);
+  const battery = batterySummary(measurement, receivedAt, measurement ? batteryPercent(status) : null, currentStatsUpdates);
+  if (changed) {
     saveBatteryHistory();
     battery.samples = batteryHistory;
   }
   const snapshot = {
-    timestamp: Date.now(),
+    timestamp: receivedAt,
     source: 'foreground',
     login: { ...loginState },
     status,
@@ -499,8 +564,10 @@ async function dashboard() {
     temperature,
     resources,
     locks,
-    stations: normalizeList(stations.station_list),
-    cableStations: normalizeList(cable.lan_station_list || cable.station_list),
+    stations: normalizeList(stations?.station_list),
+    cableStations: normalizeList(cable?.lan_station_list || cable?.station_list),
+    clientAvailability,
+    ...(Object.keys(clientErrors).length ? { errors: clientErrors } : {}),
     neighbors,
     features,
     battery
@@ -557,59 +624,158 @@ function normalizeList(value) {
   return Object.values(value).filter(item => item && typeof item === 'object');
 }
 
-function recordBattery(status, temperature) {
-  const percent = numeric(status.battery_vol_percent || status.battery_value);
-  if (percent == null) return null;
-  const timestamp = Date.now();
-  const charging = status.battery_charging === '1' || status.external_charging_flag === '1';
-  const last = batteryHistory.at(-1);
-  if (last && timestamp - last.timestamp < 60000 && last.charging === charging) return null;
-  const sample = {
-    timestamp,
-    source: 'foreground',
-    percent,
-    charging,
-    temperature: numeric(temperature.battery_temp),
-    chargeType: status.battery_charg_type || '',
-    externalPower: status.external_charging_flag === '1',
-    voltage: status.battery_voltage || '',
-    current: status.battery_current || '',
-    capacity: status.battery_capacity || '',
-    health: status.battery_health || ''
-  };
-  const cutoff = timestamp - BATTERY_HISTORY_WINDOW_MS;
-  batteryHistory = [...batteryHistory.filter(item => item.timestamp >= cutoff), sample].slice(-BATTERY_HISTORY_MAX_POINTS);
-  return sample;
+function currentBatteryMeasurement(status) {
+  if (status?.battery_gauge) status.battery_gauge = freshBatteryGaugeReading(status.battery_gauge);
+  const measurement = normalizeBatteryMeasurement(status);
+  if (measurement?.percentageSource === 'router') measurement.endpoint = normalizeBatteryEndpoint(config.routerUrl);
+  return measurement;
 }
 
-function batterySummary(status) {
-  const percent = numeric(status.battery_vol_percent || status.battery_value);
-  const charging = status.battery_charging === '1' || status.external_charging_flag === '1';
-  const recent = [];
-  const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
-  for (let index = batteryHistory.length - 1; index >= 0; index -= 1) {
-    const item = batteryHistory[index];
-    if (item.timestamp < cutoff || item.charging !== charging) break;
-    recent.unshift(item);
+function chargingState(measurement) {
+  return measurement?.mode === 'charging' ? true : measurement?.mode === 'discharging' ? false : null;
+}
+
+function archivedStatsFor(measurement, receivedAt, extra = []) {
+  const identity = batteryMeasurementIdentity({ measurement });
+  if (!identity) return [];
+  let boundary = Math.max(batteryRestoreFloor, receivedAt - 300000);
+  const recent = batteryHistory.filter(item => item.timestamp >= boundary && item.timestamp <= receivedAt);
+  for (const item of recent) {
+    const other = batteryMeasurementIdentity({ measurement: item.measurement });
+    if (other && other.percentageSource === identity.percentageSource && other.endpoint === identity.endpoint
+        && !sameBatteryIdentity(other, identity)) boundary = Math.max(boundary, item.timestamp);
   }
-  let ratePerHour = null;
-  if (recent.length >= 2) {
-    const first = recent[0];
-    const last = recent.at(-1);
-    const hours = (last.timestamp - first.timestamp) / 3600000;
-    const delta = charging ? last.percent - first.percent : first.percent - last.percent;
-    if (hours >= 0.15 && delta > 0) ratePerHour = delta / hours;
+  return [...recent.map(item => item.currentStats), ...(Array.isArray(extra) ? extra : [])]
+    .filter(block => block && block.startAt >= boundary && block.endAt <= receivedAt);
+}
+
+function archiveBatteryStats(stats, reading) {
+  if (!reading?.measurement) return false;
+  const records = [];
+  for (const block of stats) {
+    const blockReading = localBatteryBlockReadings.get(block.blockId);
+    if (!blockReading) continue;
+    if (!sameBatteryIdentity(block.identity, batteryMeasurementIdentity({ measurement: reading.measurement }))) continue;
+    if ((archivedBatteryRevisions.get(block.blockId) || 0) >= block.revision) continue;
+    records.push({ ...blockReading, currentStats: block });
+    archivedBatteryRevisions.set(block.blockId, block.revision);
   }
-  const remainingHours = ratePerHour && percent != null
-    ? (charging ? Math.max(0, (100 - percent) / ratePerHour) : Math.max(0, percent / ratePerHour))
-    : null;
-  return { percent, charging, ratePerHour, remainingHours, samples: batteryHistory };
+  if (!records.length) return false;
+  batteryHistory = mergeBatterySamples(batteryHistory, records);
+  return true;
+}
+
+function resetBatteryCollection() {
+  const changed = archiveBatteryStats(batteryCurrentWindow.currentStats(), lastBatteryReading);
+  batteryCurrentWindow.reset();
+  lastBatteryReading = null;
+  lastBatteryMinute = null;
+  batteryRestorePending = true;
+  if (changed) saveBatteryHistory();
+}
+
+function recordBattery(status, temperature, timestamp) {
+  const measurement = currentBatteryMeasurement(status);
+  const identity = batteryMeasurementIdentity({ measurement });
+  const previous = batteryCurrentWindow.snapshot();
+  const monoGap = measurement?.sampleMonoSeconds != null && lastBatteryReading?.measurement.sampleMonoSeconds != null
+    ? (measurement.sampleMonoSeconds - lastBatteryReading.measurement.sampleMonoSeconds) * 1000 : null;
+  const changedIdentity = lastBatteryReading && !sameBatteryIdentity(identity, batteryMeasurementIdentity({ measurement: lastBatteryReading.measurement }));
+  const disconnected = previous.latestReceivedAt != null && timestamp - previous.latestReceivedAt > 120000;
+  const reset = !measurement || measurement.netCurrentMa == null || changedIdentity || disconnected || monoGap > 120000;
+  let changed = reset && archiveBatteryStats(previous.currentStats, lastBatteryReading);
+  if (!measurement || changedIdentity || disconnected || monoGap > 120000) batteryRestoreFloor = timestamp;
+  if (reset) batteryCurrentWindow.reset();
+  if (measurement && batteryRestorePending) {
+    batteryCurrentWindow.restore(archivedStatsFor(measurement, timestamp), { receivedAt: timestamp, identity });
+    batteryRestorePending = false;
+  }
+  const previousRevisions = new Map(batteryCurrentWindow.currentStats().map(block => [block.blockId, block.revision]));
+  const updatedWindow = batteryCurrentWindow.ingest({ receivedAt: timestamp, endpoint: measurement?.endpoint, measurement });
+  if (!measurement) { lastBatteryReading = null; lastBatteryMinute = null; return { measurement: null, changed }; }
+  const custom = measurement.percentageSource === 'gauge88';
+  const reading = {
+    timestamp, source: 'foreground', percent: batteryPercent(status),
+    percentSource: measurement.percentageSource, percentEndpoint: measurement.endpoint,
+    charging: chargingState(measurement), measurement, currentStats: null,
+    temperature: temperatureReading('battery_temp', custom ? status.battery_gauge.raw.temp_c : temperature?.battery_temp).value,
+    chargeType: custom ? status.battery_gauge.raw.status : status.battery_charg_type || '',
+    externalPower: measurement.externalPower,
+    voltage: measurement.voltageMv, current: measurement.netCurrentMa, capacity: measurement.usableCapacityMah,
+    health: custom ? '' : status.battery_health || ''
+  };
+  const currentStatsUpdates = [];
+  for (const block of updatedWindow.currentStats) {
+    if (block.revision === previousRevisions.get(block.blockId)) continue;
+    localBatteryBlockReadings.set(block.blockId, reading);
+    currentStatsUpdates.push({ blockId: block.blockId, revision: block.revision });
+  }
+  const minute = JSON.stringify([Math.floor(timestamp / 60000), identity]);
+  if (minute !== lastBatteryMinute) {
+    batteryHistory = mergeBatterySamples(batteryHistory, [reading]);
+    lastBatteryMinute = minute;
+    changed = true;
+  }
+  const minuteStart = Math.floor(timestamp / 60000) * 60000;
+  changed = archiveBatteryStats(batteryCurrentWindow.currentStats().filter(block => block.endAt <= minuteStart), reading) || changed;
+  lastBatteryReading = reading;
+  return { measurement, changed, currentStatsUpdates };
+}
+
+function batterySummary(measurement, calculatedAt = Date.now(), displayPercent = measurement?.rawSoc ?? null, currentStatsUpdates = []) {
+  const currentWindow = measurement ? batteryCurrentWindow.snapshot() : null;
+  let samples = [];
+  if (measurement && (measurement.netCurrentMa == null || measurement.usableCapacityMah == null)) {
+    if (batteryEstimateHistory.source !== batteryHistory || batteryEstimateHistory.floor !== batteryRestoreFloor) {
+      batteryEstimateHistory = { source: batteryHistory, floor: batteryRestoreFloor,
+        samples: batteryHistory.filter(item => item.timestamp >= Math.max(batteryRestoreFloor, calculatedAt - 1800000)) };
+    }
+    samples = batteryEstimateHistory.samples;
+  }
+  const estimates = estimateBatteryTimes({ measurement, currentWindow: currentWindow || {},
+    samples, calculatedAt, runtimeTargetPercent: 0 });
+  const active = measurement?.mode === 'charging' ? estimates.timeToFull : estimates.runtime;
+  const remainingHours = active.state === 'estimated' ? active.minutes / 60 : null;
+  return {
+    percent: displayPercent, percentSource: measurement?.percentageSource ?? null,
+    percentEndpoint: measurement?.endpoint ?? '', charging: chargingState(measurement),
+    measurement, mode: measurement?.mode ?? 'unknown', ...estimates,
+    currentWindow, currentStats: currentWindow?.currentStats || [],
+    // Recovered/relayed blocks retain coverage, but only this acquisition owns a new archive observation.
+    currentStatsUpdates,
+    ratePerHour: null, remainingHours, samples: batteryHistory
+  };
+}
+
+// A saved valid gauge marker is only usable with a current capture timestamp.
+// This API is for the active collector; LAN viewers retain the collector's result.
+function restoreBatterySummary(snapshot, additionalStats = []) {
+  const now = Date.now();
+  const timestamp = snapshot?.timestamp;
+  const measurement = snapshot?.stale !== true && typeof timestamp === 'number' && timestamp <= now && now - timestamp <= 5000
+    ? currentBatteryMeasurement(snapshot.status) : null;
+  const expectedSource = config.batterySource === 'gauge' ? 'gauge88' : 'router';
+  const expectedEndpoint = normalizeBatteryEndpoint(config.batterySource === 'gauge'
+    ? batteryGaugeUrl(config.routerUrl, config.batteryHost, config.batteryPort) : config.routerUrl);
+  if (!measurement || measurement.percentageSource !== expectedSource || measurement.endpoint !== expectedEndpoint) {
+    return batterySummary(null, now);
+  }
+  const extra = [...(Array.isArray(snapshot.battery?.currentStats) ? snapshot.battery.currentStats : []),
+    ...(Array.isArray(additionalStats) ? additionalStats : [])];
+  batteryCurrentWindow.restore(archivedStatsFor(measurement, now, extra), {
+    receivedAt: now, identity: batteryMeasurementIdentity({ measurement })
+  });
+  batteryRestorePending = false;
+  return batterySummary(measurement, now, batteryPercent(snapshot.status));
 }
 
 function saveBatteryHistory() {
   try {
     const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
     batteryHistory = mergeBatterySamples(batteryHistory, [], cutoff);
+    const retained = new Set(batteryHistory.filter(item => item.currentStats).map(item => item.currentStats.blockId));
+    for (const blockId of archivedBatteryRevisions.keys()) if (!retained.has(blockId)) archivedBatteryRevisions.delete(blockId);
+    for (const [blockId, reading] of localBatteryBlockReadings) if (reading.timestamp < cutoff) localBatteryBlockReadings.delete(blockId);
     uni.setStorageSync('mu5120-battery-history', batteryHistory);
   } catch {}
 }
@@ -620,6 +786,7 @@ function saveBatteryHistory() {
 function mergeExternalBattery(samples) {
   if (!Array.isArray(samples) || !samples.length) return batteryHistory;
   batteryHistory = mergeBatterySamples(batteryHistory, samples);
+  batteryRestorePending = true;
   try { uni.setStorageSync('mu5120-battery-history', batteryHistory); } catch {}
   return batteryHistory;
 }
@@ -922,7 +1089,8 @@ function getConfig() {
 
 function updateConfig(next) {
   const password = String(next.password ?? config.password);
-  config = {
+  const previous = config;
+  const updated = {
     ...config,
     ...next,
     password,
@@ -930,9 +1098,15 @@ function updateConfig(next) {
     routerUrl: String(next.routerUrl ?? config.routerUrl).trim().replace(/\/$/, ''),
     pollIntervalMs: 1000
   };
+  Object.assign(updated, normalizeBatteryConfig(updated));
+  if (['routerUrl', 'batterySource', 'batteryHost', 'batteryPort'].some(key => previous[key] !== updated[key])) {
+    resetBatteryCollection();
+    batteryRestoreFloor = Date.now();
+  }
+  config = updated;
   saveConfig();
   syncBackgroundConfig();
-  clearSession();
+  if (previous.routerUrl !== config.routerUrl || previous.password !== config.password) clearSession();
   return getConfig();
 }
 
@@ -976,6 +1150,8 @@ export const routerApi = {
   dashboard,
   getBatteryHistory,
   mergeExternalBattery,
+  resetBatteryCollection,
+  restoreBatterySummary,
   setTrafficPlan,
   calibrateTraffic,
   listSms,

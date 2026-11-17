@@ -7,7 +7,7 @@
           <text class="source-badge">{{ collectionSourceLabel(sample.source) }}</text>
         </view>
         <b>{{ sample.percent }}%</b>
-        <text>{{ sample.charging ? '充电' : '放电' }}</text>
+        <text>{{ sample.charging === true ? '充电' : sample.charging === false ? '放电' : '状态未知' }}</text>
         <text class="history-temperature">{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
       </view>
     </view>
@@ -103,27 +103,28 @@ onBeforeUnmount(() => {
   display: grid;
   height: 56px;
   margin-bottom: 7px;
-  padding: 0 8px;
+  padding: 0 4px;
   grid-template-columns: minmax(150px, 1.6fr) 0.5fr 0.6fr 0.7fr;
   align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid rgba(30, 41, 59, 0.08);
-  font-size: 11px;
+  gap: 10px;
+  border-bottom: 1px solid var(--line, #e6ecf3);
+  color: var(--text-body, #344a65);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
-.history-row b { color: #6d5bd0; }
+.history-row b { color: var(--text-strong, #172b45); font-size: 12px; font-weight: 600; }
 .history-time { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
 .history-time > text:first-child { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .source-badge {
   display: inline-block;
-  padding: 2px 7px;
-  border: 1px solid rgba(109, 91, 208, 0.18);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.45);
-  color: #47536b;
-  font-size: 11px;
-  line-height: 18px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-soft, #f7f9fc);
+  color: var(--text-muted, #61728a);
+  font-size: 10px;
+  line-height: 16px;
 }
-.empty-state { padding: 12px; color: #7a8799; font-size: 12px; text-align: center; }
+.empty-state { padding: 12px; color: var(--text-muted, #61728a); font-size: 12px; text-align: center; }
 @media (max-width: 680px) {
   .history-row { grid-template-columns: minmax(0, 1.5fr) 0.5fr 0.6fr; gap: 7px; }
   .history-temperature { display: none; }

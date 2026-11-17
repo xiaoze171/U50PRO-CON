@@ -39,10 +39,16 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        int systemUi = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) systemUi |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        getWindow().getDecorView().setSystemUiVisibility(systemUi);
         getWindow().setStatusBarColor(getColor(R.color.page_background));
+        // Android 6/7 cannot draw dark navigation icons on a light bar.
+        getWindow().setNavigationBarColor(getColor(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? R.color.page_background : R.color.brand_dark));
 
         webView = new WebView(this);
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         webView.setBackgroundColor(getColor(R.color.page_background));
         webView.getSettings().setJavaScriptEnabled(true);
         // The asset entry point keeps the same URL across APK updates. Avoid
@@ -180,6 +186,17 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (webView == null) { super.onBackPressed(); return; }
+        if (!isAppAssetUrl(Uri.parse(webView.getUrl() == null ? "" : webView.getUrl()))) {
+            finishWebBack();
+            return;
+        }
+        webView.evaluateJavascript("Boolean(window.u50HandleBack && window.u50HandleBack())", handled -> {
+            if (!"true".equals(handled)) finishWebBack();
+        });
+    }
+
+    private void finishWebBack() {
         if (webView != null && webView.canGoBack()) webView.goBack();
         else super.onBackPressed();
     }

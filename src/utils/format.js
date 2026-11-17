@@ -79,8 +79,9 @@ export function formatDuration(raw) {
 
 export function formatHours(hours) {
   if (!Number.isFinite(hours)) return '数据不足';
-  const whole = Math.floor(hours);
-  const minutes = Math.round((hours - whole) * 60);
+  const totalMinutes = Math.round(hours * 60);
+  const whole = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes - whole * 60;
   return `${whole}小时 ${minutes}分钟`;
 }
 
@@ -107,13 +108,24 @@ export function extractVerificationCode(raw) {
   const keywordPattern = /验证码|校验码|动态码|短信码|确认码|安全码|登录码|认证码|授权码|一次性密码|verification\s*code|verify\s*code|security\s*code|one[ -]?time\s*(?:password|code)|\b(?:OTP|PIN|code)\b/gi;
   const contextPattern = /登录|注册|支付|身份|验证|认证|确认|绑定|动态|安全|有效|分钟|勿泄露|请勿告知|不要告诉|login|sign[ -]?in|register|payment|valid|minute|do not share/gi;
   const codePattern = /(^|[^a-z0-9])([a-z0-9]{4,8})(?![a-z0-9])/gi;
+  // A nearby word such as “有效” does not turn a quota, expiry date or URL into a code.
+  const nonCodePatterns = [
+    /(?:https?:\/\/|www\.)[^\s，。；！？【】<>]+/gi,
+    /\b\d+(?:\.\d+)?\s*[kmgt](?:i?b)?(?:\/s)?\b/gi,
+    /\d{4}(?:年(?:\d{1,2}月(?:\d{1,2}日)?)?|[-/.]\d{1,2}(?:[-/.]\d{1,2})?)/g,
+    /(?:业务编号|订单编号|订单号|流水号|交易号|受理号|编号)\s*[:：]?\s*[a-z0-9-]+/gi,
+    /\d+(?:\.\d+)?\s*(?:元|个月|分钟|小时|天)/g,
+  ];
+  const nonCodeRanges = nonCodePatterns.flatMap(pattern => [...content.matchAll(pattern)]
+    .map(match => ({ start: match.index, end: match.index + match[0].length })));
   const candidates = [...content.matchAll(codePattern)]
     .map(match => {
       const code = match[2];
       const start = match.index + match[1].length;
       return { code, start, end: start + code.length };
     })
-    .filter(candidate => /\d/.test(candidate.code));
+    .filter(candidate => /\d/.test(candidate.code)
+      && !nonCodeRanges.some(range => candidate.start < range.end && candidate.end > range.start));
   if (!candidates.length) return '';
 
   const distanceTo = (candidate, markers) => Math.min(...markers.map(marker => (

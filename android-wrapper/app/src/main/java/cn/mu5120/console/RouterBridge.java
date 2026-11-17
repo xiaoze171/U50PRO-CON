@@ -77,8 +77,8 @@ public final class RouterBridge {
     }
 
     @JavascriptInterface
-    public void configureBackground(String routerUrl, String password) {
-        BackgroundMonitorService.configure(webView.getContext(), routerUrl, password);
+    public void configureBackground(String routerUrl, String password, String batterySettings) {
+        BackgroundMonitorService.configure(webView.getContext(), routerUrl, password, batterySettings);
         if (routerUrl != null && !routerUrl.trim().isEmpty()) routerBaseUrl = routerUrl.trim();
         // 路由器密码是唯一的密钥来源：在此派生同步令牌 sha256(密码)，供服务端鉴权与信标 tokenFP。
         synchronized (this) {
@@ -209,6 +209,7 @@ public final class RouterBridge {
             try {
                 JSONObject input = new JSONObject(payload);
                 URL url = new URL(input.getString("url"));
+                boolean gaugeRequest = "/state.json".equals(url.getPath());
                 String protocol = url.getProtocol();
                 if (!"http".equals(protocol) && !"https".equals(protocol)) throw new SecurityException("只允许 HTTP/HTTPS");
                 String host = url.getHost();
@@ -219,7 +220,7 @@ public final class RouterBridge {
                 int timeout = Math.min(Math.max(input.optInt("timeoutMs", 12000), 1000), 20000);
                 connection.setConnectTimeout(timeout);
                 connection.setReadTimeout(timeout);
-                connection.setInstanceFollowRedirects(true);
+                connection.setInstanceFollowRedirects(!gaugeRequest);
                 connection.setUseCaches(false);
                 connection.setRequestProperty("Accept", "application/json, text/javascript, */*; q=0.01");
                 connection.setRequestProperty("X-Requested-With", "XMLHttpRequest");
@@ -236,7 +237,7 @@ public final class RouterBridge {
                         }
                     }
                 }
-                String sessionCookie = RouterSession.header();
+                String sessionCookie = gaugeRequest ? "" : RouterSession.header();
                 if (!sessionCookie.isEmpty()) connection.setRequestProperty("Cookie", sessionCookie);
 
                 String body = input.optString("body", "");
@@ -250,8 +251,14 @@ public final class RouterBridge {
                 }
 
                 int status = connection.getResponseCode();
-                RouterSession.remember(connection.getHeaderFields());
-                shareSessionIfChanged();
+                if (!gaugeRequest) {
+                    RouterSession.remember(connection.getHeaderFields());
+                    shareSessionIfChanged();
+                }
+                JSONObject responseHeaders = new JSONObject();
+                String gaugeAge = connection.getHeaderField("X-Gauge-Age");
+                if (gaugeAge != null) responseHeaders.put("X-Gauge-Age", gaugeAge);
+                result.put("headers", responseHeaders);
                 InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
                 String responseBody = readText(stream, connection.getContentType());
                 result.put("ok", status >= 200 && status < 300);
