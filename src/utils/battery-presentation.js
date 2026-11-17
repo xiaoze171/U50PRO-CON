@@ -27,8 +27,10 @@ export function formatBatteryTime(result) {
 }
 
 /** Home hints accept known user-facing reasons; raw interface errors stay in details. */
-export function batteryTimeReason(result) {
+export function batteryTimeReason(result, csvAnalysis) {
   if (!result) return '读数不可用';
+  if (csvAnalysis && ['collecting', 'unavailable'].includes(result.state)
+    && csvAnalysis.state !== 'ready') return batteryCsvStatusText(csvAnalysis);
   switch (result.state) {
     case 'estimated': return validMinutes(result.minutes) ? '' : '待估算';
     case 'not-applicable': return INACTIVE_REASONS.has(result.reason) ? result.reason : '';
@@ -40,6 +42,15 @@ export function batteryTimeReason(result) {
     case 'unavailable': return result.reason === '待刷新' ? '待刷新' : '读数不可用';
     default: return '';
   }
+}
+
+/** Explain device log availability without displaying raw request errors. */
+export function batteryCsvStatusText(analysis) {
+  if (!analysis) return '等待设备日志';
+  if (analysis.state === 'ready') return '设备日志可用';
+  if (analysis.state === 'collecting') return '设备日志采集中';
+  if (analysis.reason === 'stale') return '设备日志已过期';
+  return '设备日志不可用';
 }
 
 /** The normalized battery mode has priority over the presence of a USB connection. */

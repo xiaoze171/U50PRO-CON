@@ -25,7 +25,8 @@ public final class NativeSyncPublicationTest {
         JSONObject battery = new JSONObject().put("percent", 50).put("measurement", measurement).put("currentStats", new JSONArray().put(block))
             .put("timeToFull", new JSONObject().put("minutes", JSONObject.NULL).put("state", "not-applicable"))
             .put("runtime", new JSONObject().put("minutes", 600).put("state", "estimated").put("method", "net-current"))
-            .put("calculatedAt", time).put("windowSeconds", 60);
+            .put("calculatedAt", time).put("windowSeconds", 60)
+            .put("csvAnalysis", new JSONObject().put("state", "ready").put("source", "device-csv").put("endpoint", "http://fixture.invalid:88/backup/battery-log.csv"));
         JSONObject live = new JSONObject().put("timestamp", time).put("battery", battery);
         server.publish(new JSONObject().put("live", live).put("battery", new JSONArray().put(archived)).toString());
         battery.put("percent", 49.99);
@@ -35,6 +36,7 @@ public final class NativeSyncPublicationTest {
         check(compact.getJSONObject("timeToFull").isNull("minutes") && compact.getJSONObject("runtime").getInt("minutes") == 600,
             "independent time results pass through unchanged");
         check(compact.getLong("calculatedAt") == time && compact.getInt("windowSeconds") == 60, "collector calculation basis preserved");
+        check("device-csv".equals(compact.getJSONObject("csvAnalysis").getString("source")), "LAN viewer receives collector CSV provenance unchanged");
         check(compact.getJSONObject("measurement").getDouble("rawSoc") == 50.001
             && compact.getJSONArray("currentStats").getJSONObject(0).getLong("integralMaMs") == -24000000,
             "raw measurement and current block preserved");

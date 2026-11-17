@@ -11,12 +11,22 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Complete read-only collection using the same field inventory as router-client.js. */
 final class MonitorRouterClient {
+    private static final ScheduledExecutorService DEADLINES = Executors.newScheduledThreadPool(2, task -> {
+        Thread thread = new Thread(task, "battery-request-deadline"); thread.setDaemon(true); return thread;
+    });
     private final Context context;
     private final JSONObject fields;
     private final BatteryGaugeConfig batteryConfig;
+    private final BatteryCsvCache batteryCsvCache;
     private String routerUrl;
     private String password;
 
@@ -33,19 +43,21 @@ final class MonitorRouterClient {
         this.routerUrl = routerUrl;
         this.password = password;
         this.batteryConfig = batteryConfig;
+        this.batteryCsvCache = new BatteryCsvCache(this::readGaugeCsv);
         try (InputStream input = context.getAssets().open("router-fields.json")) {
             fields = new JSONObject(read(input));
         }
     }
 
     JSONObject dashboard() throws Exception {
+        Future<BatteryCsvCache.Result> csvRequest = "gauge".equals(batteryConfig.source)
+            ? batteryCsvCache.request(batteryConfig.csvEndpoint(routerUrl)) : null;
         JSONObject status = group("status");
         if (!"ok".equals(status.optString("loginfo"))) {
             login();
             status = group("status");
         }
         if (!"ok".equals(status.optString("loginfo"))) throw new Exception("路由器登录失败");
-        if ("gauge".equals(batteryConfig.source)) status.put("battery_gauge", gauge());
         JSONObject snapshot = new JSONObject().put("status", status);
         JSONObject errors = new JSONObject();
         for (String name : new String[] { "signal", "temperature", "resources", "locks", "neighbors", "features" }) {
@@ -65,6 +77,29 @@ final class MonitorRouterClient {
             clientAvailability.put("cableStations", response.has("lan_station_list") || response.has("station_list"));
         } catch (Exception error) { errors.put("cableStations", message(error)); }
         snapshot.put("clientAvailability", clientAvailability);
+        // Fetch the live marker last so unrelated factory calls cannot age it before normalization.
+        if (csvRequest != null) {
+            BatteryCsvCache.Result csv;
+            try { csv = csvRequest.get(3, TimeUnit.SECONDS); }
+            catch (Exception error) { csv = new BatteryCsvCache.Result(null, message(error), error instanceof java.util.concurrent.TimeoutException ? "timeout" : "fetch-error"); }
+            status.put("battery_gauge", gauge());
+            JSONObject marker = status.optJSONObject("battery_gauge");
+            JSONObject raw = marker == null ? null : marker.optJSONObject("raw");
+            long calculatedAt = System.currentTimeMillis();
+            JSONObject estimates = BatteryCsv.estimate(csv.csv, BatteryGaugeReading.normalizeBatteryMeasurement(status),
+                raw == null ? null : BatteryGaugeReading.numeric(raw.opt("ts")), calculatedAt);
+            JSONObject analysis = estimates.getJSONObject("csvAnalysis");
+            analysis.put("source", "device-csv").put("endpoint", batteryConfig.csvEndpoint(routerUrl))
+                .put("url", batteryConfig.csvEndpoint(routerUrl)).put("fetchedAt", csv.fetchedAt);
+            if (!csv.error.isEmpty()) {
+                analysis.put("state", "unavailable").put("reason", csv.reason).put("error", csv.error);
+                for (String key : new String[] { "timeToFull", "runtime" }) {
+                    JSONObject time = estimates.getJSONObject(key);
+                    if ("unavailable".equals(time.optString("state"))) time.put("reason", "CSV日志获取失败");
+                }
+            }
+            snapshot.put("battery", estimates);
+        }
         snapshot.put("timestamp", System.currentTimeMillis());
         BatteryGaugeReading.refreshStatus(status, snapshot.getLong("timestamp"));
         snapshot.put("login", new JSONObject().put("loggedIn", true).put("message", "后台采集已连接"));
@@ -88,12 +123,20 @@ final class MonitorRouterClient {
     }
 
     private JSONObject gauge() throws Exception {
-        String endpoint = batteryConfig.endpoint(routerUrl);
+        return fetchGaugeState(context, batteryConfig.endpoint(routerUrl));
+    }
+
+    static JSONObject fetchGaugeState(Context context, String endpoint) throws Exception {
         HttpURLConnection connection = null;
+        ScheduledFuture<?> abort = null;
+        AtomicBoolean timedOut = new AtomicBoolean();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         try {
             URL target = new URL(endpoint);
             if (!RouterBridge.isLocalRouterHost(target.getHost())) throw new SecurityException("只允许访问局域网路由器地址");
             connection = RouterNetwork.open(context, target);
+            HttpURLConnection active = connection;
+            abort = DEADLINES.schedule(() -> { timedOut.set(true); active.disconnect(); }, 3, TimeUnit.SECONDS);
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(2000);
             connection.setReadTimeout(2000);
@@ -105,12 +148,51 @@ final class MonitorRouterClient {
             if (code < 200 || code >= 300) throw new Exception("Gauge HTTP " + code);
             String age = connection.getHeaderField("X-Gauge-Age");
             try (InputStream input = connection.getInputStream()) {
-                return BatteryGaugeReading.read(new JSONObject(read(input)), age, endpoint, System.currentTimeMillis());
+                return BatteryGaugeReading.read(new JSONObject(readBounded(input, 256 * 1024, deadline)), age, endpoint, System.currentTimeMillis());
             }
         } catch (Exception error) {
             return new JSONObject().put("percent", JSONObject.NULL).put("state", "unavailable")
-                .put("url", endpoint).put("raw", JSONObject.NULL).put("error", message(error));
-        } finally { if (connection != null) connection.disconnect(); }
+                .put("url", endpoint).put("raw", JSONObject.NULL).put("error", timedOut.get() ? "Gauge state request timeout" : message(error));
+        } finally { if (abort != null) abort.cancel(false); if (connection != null) connection.disconnect(); }
+    }
+
+    void invalidateBatteryCsv() { batteryCsvCache.invalidate(); }
+
+    private String readGaugeCsv(String endpoint) throws Exception {
+        return fetchGaugeCsv(context, endpoint);
+    }
+
+    static String fetchGaugeCsv(Context context, String endpoint) throws Exception {
+        URL target = new URL(endpoint);
+        if (!RouterBridge.isLocalRouterHost(target.getHost())) throw new SecurityException("只允许访问局域网路由器地址");
+        HttpURLConnection connection = RouterNetwork.open(context, target);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        AtomicBoolean timedOut = new AtomicBoolean();
+        ScheduledFuture<?> abort = DEADLINES.schedule(() -> { timedOut.set(true); connection.disconnect(); }, 3, TimeUnit.SECONDS);
+        try {
+            connection.setRequestMethod("GET"); connection.setConnectTimeout(2000); connection.setReadTimeout(2000);
+            connection.setUseCaches(false); connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept", "text/csv");
+            // Never read or write RouterSession, including Set-Cookie on error/redirect responses.
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) throw new Exception("Gauge CSV HTTP " + code);
+            int length = connection.getContentLength(); if (length > BatteryCsv.MAX_BYTES) throw new Exception("Battery CSV byte limit exceeded");
+            try (InputStream input = connection.getInputStream()) { return readBounded(input, BatteryCsv.MAX_BYTES, deadline); }
+        } catch (Exception error) {
+            if (timedOut.get()) throw new java.net.SocketTimeoutException("Gauge CSV request timeout");
+            throw error;
+        } finally { abort.cancel(false); connection.disconnect(); }
+    }
+
+    static String readBounded(InputStream input, int limit, long deadline) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int length;
+        while ((length = input.read(buffer)) != -1) {
+            if (Thread.currentThread().isInterrupted() || System.nanoTime() > deadline) throw new java.net.SocketTimeoutException("Gauge request timeout");
+            if (output.size() + length > limit) throw new Exception("Battery CSV byte limit exceeded");
+            output.write(buffer, 0, length);
+        }
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() > deadline) throw new java.net.SocketTimeoutException("Gauge request timeout");
+        return new String(output.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private JSONObject group(String name) throws Exception {

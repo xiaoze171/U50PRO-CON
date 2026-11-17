@@ -225,7 +225,7 @@ final class MonitorHistoryStore {
             } catch (Exception ignored) { return JSONObject.NULL; }
         }
         Object value = status == null ? null : status.opt("battery_charging");
-        if ("1".equals(String.valueOf(value)) || Boolean.TRUE.equals(value)) return true;
+        if (BatteryFactory.charging(status)) return true;
         if ("0".equals(String.valueOf(value)) || Boolean.FALSE.equals(value)) return false;
         return JSONObject.NULL;
     }
@@ -233,7 +233,7 @@ final class MonitorHistoryStore {
     static JSONObject compactBattery(JSONObject input) throws Exception {
         JSONObject result = new JSONObject();
         if (input != null) for (String key : new String[] { "percent", "state", "mode", "charging", "externalPower", "percentSource", "percentEndpoint",
-            "timeToFull", "runtime", "calculatedAt", "windowSeconds", "remainingHours", "ratePerHour", "spanMs", "sampleCount" })
+            "timeToFull", "runtime", "calculatedAt", "windowSeconds", "remainingHours", "ratePerHour", "spanMs", "sampleCount", "csvAnalysis" })
             if (input.has(key)) result.put(key, input.get(key));
         JSONObject measurement = input == null ? null : sanitizeMeasurement(input.optJSONObject("measurement"));
         result.put("measurement", BatteryGaugeReading.orNull(measurement));
@@ -300,12 +300,15 @@ final class MonitorHistoryStore {
         JSONObject measurement = summary == null ? null : sanitizeMeasurement(summary.optJSONObject("measurement"));
         Double percent = BatteryGaugeReading.percent(status);
         boolean gauge = "gauge88".equals(BatteryGaugeReading.source(status));
+        // A real factory acquisition uses the original enabled-flag boolean policy.
+        // Generic/legacy missing state and unknown gauge modes remain unknown.
+        Object charging = !gauge && status != null && percent != null ? BatteryFactory.charging(status) : chargingValue(status);
         // The reading was observed at snapshot.timestamp; aggregate coverage has its own start/end.
         JSONObject item = new JSONObject().put("timestamp", snapshot.optLong("timestamp"))
             .put("percent", BatteryGaugeReading.orNull(percent)).put("source", CollectionSource.normalize(snapshot.optString("source")))
             .put("percentSource", BatteryGaugeReading.source(status)).put("percentEndpoint", gauge || measurement == null
                 ? BatteryGaugeReading.endpoint(status) : measurement.optString("endpoint", ""))
-            .put("charging", chargingValue(status)).put("chargeType", gauge ? measurement == null ? "" : measurement.optString("mode") : status.optString("battery_charg_type"))
+            .put("charging", charging).put("chargeType", gauge ? measurement == null ? "" : measurement.optString("mode") : status.optString("battery_charg_type"))
             .put("externalPower", measurement != null ? measurement.optBoolean("externalPower") : "1".equals(status.optString("external_charging_flag")))
             .put("voltage", gauge ? measurement == null ? JSONObject.NULL : measurement.opt("voltageMv") : status.optString("battery_voltage"))
             .put("current", gauge ? measurement == null ? JSONObject.NULL : measurement.opt("netCurrentMa") : status.optString("battery_current"))

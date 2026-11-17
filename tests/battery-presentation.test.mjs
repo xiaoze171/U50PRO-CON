@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatBatteryTime, batteryTimeReason, batteryModeText } from '../src/utils/battery-presentation.js';
+import { formatBatteryTime, batteryTimeReason, batteryModeText, batteryCsvStatusText } from '../src/utils/battery-presentation.js';
 
 test('time text keeps zero distinct from unavailable minutes', () => {
   assert.equal(formatBatteryTime({ state: 'estimated', minutes: 0 }), '0 分钟');
@@ -85,4 +85,15 @@ test('invalid normalized modes do not expose raw device status text', () => {
   assert.equal(batteryModeText(null), '暂无读数');
   assert.equal(batteryModeText({ mode: 'unknown' }), '状态待确认');
   assert.equal(batteryModeText({ mode: 'unsupported', externalPower: true }), '状态待确认');
+});
+
+test('CSV hints distinguish collecting and stale logs without exposing transport errors', () => {
+  assert.equal(batteryCsvStatusText({ state: 'ready' }), '设备日志可用');
+  assert.equal(batteryCsvStatusText({ state: 'collecting' }), '设备日志采集中');
+  assert.equal(batteryCsvStatusText({ state: 'unavailable', reason: 'stale' }), '设备日志已过期');
+  assert.equal(batteryCsvStatusText({ state: 'unavailable', reason: 'HTTP 503 http://private/backup/battery-log.csv' }), '设备日志不可用');
+  assert.equal(batteryCsvStatusText(null), '等待设备日志');
+  assert.equal(batteryTimeReason({ state: 'collecting' }, { state: 'collecting' }), '设备日志采集中');
+  assert.equal(batteryTimeReason({ state: 'unavailable' }, { state: 'unavailable', reason: 'stale' }), '设备日志已过期');
+  assert.equal(batteryTimeReason({ state: 'not-applicable', reason: '未充电' }, { state: 'collecting' }), '未充电');
 });

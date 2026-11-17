@@ -14,16 +14,10 @@ final class BatteryGaugeReading {
             .put("url", url == null ? "" : url).put("raw", raw == null ? JSONObject.NULL : raw)
             .put("capturedAt", nowMs).put("validUntil", JSONObject.NULL);
         if (raw == null) return result;
-        Double age;
-        boolean hasAgeHeader = ageHeader != null && !ageHeader.trim().isEmpty();
-        if (hasAgeHeader) {
-            age = number(ageHeader);
-        } else {
-            Double timestamp = numeric(raw.opt("ts"));
-            age = timestamp == null ? null : nowMs / 1000.0 - timestamp;
-        }
+        // ts belongs to the device clock; only its relative age header can prove live freshness.
+        Double age = ageHeader == null || ageHeader.trim().isEmpty() ? null : number(ageHeader);
         if (age == null || age < 0 || age > 5) return result.put("state", "stale");
-        result.put("validUntil", hasAgeHeader ? nowMs + (5 - age) * 1000 : numeric(raw.opt("ts")) * 1000 + 5000);
+        result.put("validUntil", nowMs + (5 - age) * 1000);
         Double soc = numeric(raw.opt("soc"));
         if (!"ok".equals(raw.optString("data_quality")) || soc == null || soc < 0 || soc > 100) return result;
         String status = raw.optString("status");

@@ -62,7 +62,8 @@ function doRequest(payload, redirectsLeft, gaugeRedirectChain = false) {
       headers[name] = String(provided[name]);
     }
     // 电量请求重定向到其他路径后仍保持会话隔离。
-    const gaugeRequest = gaugeRedirectChain || target.pathname === '/state.json';
+    const gaugeRequest = gaugeRedirectChain || ['/state.json', '/backup/battery-log.csv'].includes(target.pathname);
+    const maxBytes = gaugeRequest ? Math.min(Number(payload.maxBytes) || 4 * 1024 * 1024, 4 * 1024 * 1024) : Infinity;
     const cookie = gaugeRequest ? '' : session.header();
     if (cookie) headers.Cookie = cookie;
 
@@ -100,8 +101,19 @@ function doRequest(payload, redirectsLeft, gaugeRedirectChain = false) {
       }
 
       const chunks = [];
-      response.on('data', (chunk) => chunks.push(chunk));
+      let bytes = 0;
+      response.on('data', (chunk) => {
+        bytes += chunk.length;
+        if (bytes > maxBytes) {
+          resolve({ ok: false, status: 0, error: '电量响应超过 4 MiB，数据过大' });
+          request.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('error', error => resolve({ ok: false, status: 0, error: error.message || '电量响应中断' }));
       response.on('end', () => {
+        if (bytes > maxBytes) return;
         const text = decodeBody(Buffer.concat(chunks), response.headers['content-type']);
         const ok = status >= 200 && status < 300;
         const out = { ok, status, body: text };

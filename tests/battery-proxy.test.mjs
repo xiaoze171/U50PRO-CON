@@ -49,3 +49,43 @@ test('desktop gauge reads do not replace or send the factory login cookie', asyn
     assert.equal(result.headers['X-Gauge-Age'], '0.5');
   } finally { session.clear(); await new Promise(resolve => upstream.close(resolve)); }
 });
+
+test('browser device CSV proxy forwards text without sending or absorbing router cookies', async () => {
+  const { batteryProxyMiddleware } = await import('../dev/battery-proxy.js');
+  let cookie;
+  const upstream = createServer((req, res) => {
+    cookie = req.headers.cookie;
+    res.setHeader('Set-Cookie', 'login=gauge');
+    res.setHeader('Content-Type', 'text/csv');
+    res.end('ts,soc\r\n1,50\r\n');
+  });
+  const proxy = createServer(batteryProxyMiddleware);
+  await Promise.all([new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve)), new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve))]);
+  try {
+    const endpoint = `http://127.0.0.1:${upstream.address().port}/backup/battery-log.csv`;
+    const response = await fetch(`http://127.0.0.1:${proxy.address().port}/?url=${encodeURIComponent(endpoint)}`, { headers: { Cookie: 'router=session' } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/csv/);
+    assert.equal(await response.text(), 'ts,soc\r\n1,50\r\n');
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.equal(cookie, undefined);
+  } finally {
+    proxy.closeAllConnections(); upstream.closeAllConnections();
+    await Promise.all([new Promise(resolve => proxy.close(resolve)), new Promise(resolve => upstream.close(resolve))]);
+  }
+});
+
+test('browser CSV proxy rejects oversized downloads before publishing a successful body', async () => {
+  const { batteryProxyMiddleware } = await import('../dev/battery-proxy.js');
+  const upstream = createServer((req, res) => { res.end('x'.repeat(4 * 1024 * 1024 + 1)); });
+  const proxy = createServer(batteryProxyMiddleware);
+  await Promise.all([new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve)), new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve))]);
+  try {
+    const endpoint = `http://127.0.0.1:${upstream.address().port}/backup/battery-log.csv`;
+    const response = await fetch(`http://127.0.0.1:${proxy.address().port}/?url=${encodeURIComponent(endpoint)}`);
+    assert.equal(response.status, 502);
+  } finally {
+    proxy.closeAllConnections(); upstream.closeAllConnections();
+    await Promise.all([new Promise(resolve => proxy.close(resolve)), new Promise(resolve => upstream.close(resolve))]);
+  }
+});

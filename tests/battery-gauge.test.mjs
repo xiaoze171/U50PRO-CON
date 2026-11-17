@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { parse } from '@babel/parser';
 import * as batteryGauge from '../src/utils/battery-gauge.js';
+import { importBatteryProfileClient } from './helpers/battery-profile-client.mjs';
 
 test('gauge age header fixes expiry at capture and later checks cannot renew it', () => {
   const capturedAt = 1700000000000;
@@ -23,16 +24,20 @@ test('gauge age header fixes expiry at capture and later checks cannot renew it'
   assert.equal(batteryGauge.normalizeBatteryMeasurement({ battery_gauge: stale, battery_vol_percent: 80 }), null);
 });
 
-test('raw gauge timestamp supplies expiry only when the age header is absent', () => {
+test('device timestamps never establish live freshness without a relative age header', () => {
   const capturedAt = 1700000000123;
-  const raw = { soc: 0, data_quality: 'ok', ts: (capturedAt - 4000) / 1000 };
-  const marker = batteryGauge.batteryGaugeReading(raw, {}, '', capturedAt);
-  assert.equal(marker.percent, 0);
-  assert.equal(marker.capturedAt, capturedAt);
-  assert.equal(marker.validUntil, capturedAt + 1000);
-  assert.equal(batteryGauge.freshBatteryGaugeReading(marker, marker.validUntil).state, 'valid');
-  assert.equal(batteryGauge.freshBatteryGaugeReading(marker, marker.validUntil + 1).state, 'stale');
-  assert.equal(batteryGauge.batteryGaugeReading(raw, { 'x-gauge-age': 'broken' }, '', capturedAt).state, 'stale');
+  for (const offset of [0, -28800, 28800]) {
+    const raw = { soc: 0, data_quality: 'ok', ts: capturedAt / 1000 + offset };
+    const marker = batteryGauge.batteryGaugeReading(raw, {}, '', capturedAt);
+    assert.equal(marker.percent, null);
+    assert.equal(marker.state, 'unavailable');
+    assert.equal(marker.validUntil, null);
+    const valid = batteryGauge.batteryGaugeReading(raw, { 'x-gauge-age': '4' }, '', capturedAt);
+    assert.equal(valid.percent, 0);
+    assert.equal(valid.validUntil, capturedAt + 1000);
+    assert.equal(batteryGauge.freshBatteryGaugeReading(valid, capturedAt + 1001).state, 'stale');
+    assert.equal(batteryGauge.batteryGaugeReading(raw, { 'x-gauge-age': 'broken' }, '', capturedAt).state, 'stale');
+  }
 });
 
 test('freshness checks preserve legacy and already invalid markers', () => {
@@ -110,7 +115,7 @@ globalThis.window = { AndroidRouter: {
     queueMicrotask(() => window.__mu5120NativeResponse(id, JSON.stringify(response)));
   }
 } };
-const { routerApi } = await import('../src/services/router-client.js');
+const { routerApi } = await importBatteryProfileClient('gauge88-csv');
 
 test('port 88 SOC replaces the locked factory percentage and never mixes old percentages into runtime estimates', async () => {
   const result = await routerApi.dashboard();
@@ -151,7 +156,7 @@ test('unavailable, old or malformed gauge data never falls back to factory perce
 
 test('fresh gauge zero is a real measurement and unconfirmed full charging remains below 100', async () => {
   failed = false;
-  age = undefined;
+  age = '0';
   gauge = { soc: 0, data_quality: 'ok', ts: Date.now() / 1000, status: 'Discharging' };
   assert.equal((await routerApi.dashboard()).battery.percent, 0);
   age = '0';
@@ -177,57 +182,63 @@ test('battery display uses a native gauge snapshot and does not resurrect the fa
   assert.equal(render({ percent: 50, state: 'valid' }), '50.00%');
 });
 
-test('factory selection skips the gauge, syncs configuration and preserves the router session', async () => {
+test('factory profile skips the gauge and saved settings cannot override the effective source', async () => {
   const before = gaugeUrls.length;
-  const config = routerApi.updateConfig({ batterySource: 'factory' });
+  const factoryApi = (await importBatteryProfileClient('factory')).routerApi;
+  const config = factoryApi.updateConfig({ batterySource: 'gauge' });
   assert.equal(config.batterySource, 'factory');
   assert.equal(clearedSessions, 0);
   assert.equal(backgroundConfigs.at(-1).batterySource, 'factory');
-  const result = await routerApi.dashboard();
+  const result = await factoryApi.dashboard();
   assert.equal(result.battery.percent, 50);
   assert.equal(result.battery.percentSource, 'router');
   assert.equal(Object.hasOwn(result.status, 'battery_gauge'), false);
   assert.equal(gaugeUrls.length, before);
-  assert.equal(result.battery.remainingHours, null);
+  assert.equal(result.battery.measurement.percentageSource, 'router');
+  delete window.__mu5120NativeResponse;
 });
 
-test('custom address and port survive reload and endpoint switches do not combine runtime estimates', async () => {
+test('custom host survives reload while branch source and port override saved settings', async () => {
   gauge = { soc: 24, data_quality: 'ok', status: 'Discharging' };
   age = '0';
   const config = routerApi.updateConfig({ batterySource: 'gauge', batteryHost: ' 192.168.1.2 ', batteryPort: '8088' });
   assert.equal(config.batteryHost, '192.168.1.2');
-  assert.equal(config.batteryPort, 8088);
+  assert.equal(config.batterySource, 'gauge');
+  assert.equal(config.batteryPort, 88);
   const result = await routerApi.dashboard();
-  assert.equal(gaugeUrls.at(-1).origin, 'http://192.168.1.2:8088');
-  assert.equal(result.battery.percentEndpoint, 'http://192.168.1.2:8088/state.json');
-  const reloaded = (await import('../src/services/router-client.js?configuration-reload')).routerApi;
+  assert.equal(gaugeUrls.at(-1).origin, 'http://192.168.1.2:88');
+  assert.equal(result.battery.percentEndpoint, 'http://192.168.1.2:88/state.json');
+  storage.set('mu5120-config', { ...storage.get('mu5120-config'), batteryPort: 188, batterySource: 'factory' });
+  const reloaded = (await importBatteryProfileClient('gauge88-csv')).routerApi;
   assert.equal(reloaded.getConfig().batteryHost, '192.168.1.2');
-  assert.equal(reloaded.getConfig().batteryPort, 8088);
+  assert.equal(reloaded.getConfig().batterySource, 'gauge');
+  assert.equal(reloaded.getConfig().batteryPort, 88);
   const old = Date.now() - 1200000;
   routerApi.mergeExternalBattery([
-    { timestamp: old, percent: 80, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:8088/state.json' },
-    { timestamp: old + 600000, percent: 60, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:8088/state.json' }
+    { timestamp: old, percent: 80, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:88/state.json' },
+    { timestamp: old + 600000, percent: 60, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:88/state.json' }
   ]);
   routerApi.updateConfig({ batteryHost: '' });
   const switched = await routerApi.dashboard();
-  assert.equal(gaugeUrls.at(-1).origin, 'http://192.168.0.1:8088');
+  assert.equal(gaugeUrls.at(-1).origin, 'http://192.168.0.1:88');
   assert.equal(switched.battery.remainingHours, null);
   assert.equal(switched.battery.ratePerHour, null);
-  assert.equal(switched.battery.samples.at(-1).percentEndpoint, 'http://192.168.0.1:8088/state.json');
+  assert.equal(switched.battery.samples.at(-1).percentEndpoint, 'http://192.168.0.1:88/state.json');
 });
 
 test('invalid gauge settings are rejected without changing saved or background configuration', () => {
   const saved = JSON.stringify(storage.get('mu5120-config'));
   const synced = backgroundConfigs.length;
   for (const batteryPort of ['', '0', '-1', '65536', '88.5', '88abc']) {
-    assert.throws(() => routerApi.updateConfig({ batteryPort }), /端口/);
+    assert.throws(() => batteryGauge.normalizeBatteryConfig({ batteryPort }), /端口/);
   }
   for (const batteryHost of ['http://192.168.1.2', '192.168.1.2:88', '192.168.1.2/state.json', 'user@192.168.1.2', '999.999.999.999', 'a b']) {
     assert.throws(() => routerApi.updateConfig({ batteryHost }), /IP|地址/);
   }
-  assert.throws(() => routerApi.updateConfig({ batterySource: 'soc' }), /来源/);
+  assert.throws(() => batteryGauge.normalizeBatteryConfig({ batterySource: 'soc' }), /来源/);
   assert.equal(JSON.stringify(storage.get('mu5120-config')), saved);
   assert.equal(backgroundConfigs.length, synced);
+  assert.equal(routerApi.updateConfig({ batterySource: 'soc', batteryPort: 'broken' }).batteryPort, 88);
 });
 
 test('merging history keeps source transitions inside the same minute', async () => {

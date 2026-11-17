@@ -1,6 +1,12 @@
 package cn.mu5120.console;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import android.content.Context;
+import android.content.ContextWrapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -30,7 +36,49 @@ public final class NativeBatteryHistoryTest {
         check(clean.getJSONObject(0).has("measurement") && clean.getJSONObject(0).isNull("measurement")
             && clean.getJSONObject(0).has("currentStats") && clean.getJSONObject(0).isNull("currentStats"), "legacy record explicitly clears atomic battery fields");
         testCollectionOwnership();
+        testRecordBatteryMinuteDedup(false);
+        testRecordBatteryMinuteDedup(true);
         System.out.println("PASS native legacy sanitation, atomic fields and frontend/native collection ownership");
+    }
+
+    /** Only the Android Context boundary is supplied; actual recordBattery/file persistence runs. */
+    private static final class FileContext extends ContextWrapper {
+        private File directory;
+        private FileContext() { super(null); }
+        @Override public Context getApplicationContext() { return this; }
+        @Override public File getFilesDir() { return directory; }
+    }
+
+    private static void testRecordBatteryMinuteDedup(boolean gaugeUnknown) throws Exception {
+        File directory = Files.createTempDirectory(gaugeUnknown ? "native-record-gauge-" : "native-record-factory-").toFile();
+        File history = new File(directory, "battery_history.json");
+        try {
+            // Android SDK Context constructors are deliberate JVM stubs. Bypass only that
+            // constructor so the real service code can use this temporary files directory.
+            Class<?> allocator = Class.forName("sun.misc.Unsafe");
+            Field field = allocator.getDeclaredField("theUnsafe"); field.setAccessible(true);
+            FileContext context = (FileContext) allocator.getMethod("allocateInstance", Class.class).invoke(field.get(null), FileContext.class);
+            context.directory = directory;
+            Method record = BackgroundMonitorService.class.getDeclaredMethod("recordBattery", Context.class, JSONObject.class,
+                JSONObject.class, String.class, long.class, JSONObject.class); record.setAccessible(true);
+            long start = System.currentTimeMillis();
+            for (long elapsed : new long[] { 0, 1000, 30000, 60000 }) {
+                JSONObject status = new JSONObject().put("loginfo", "ok").put("battery_vol_percent", "50")
+                    .put("battery_charging", "").put("external_charging_flag", "");
+                if (gaugeUnknown) status.put("battery_gauge", BatteryGaugeReading.read(new JSONObject().put("soc", 50)
+                    .put("data_quality", "ok").put("status", "Unknown").put("current_ma", 0), "0", "http://fixture.invalid:88/state.json", start + elapsed));
+                JSONObject snapshot = new JSONObject().put("timestamp", start + elapsed).put("status", status).put("source", "background");
+                BackgroundMonitorService.prepareBatterySnapshot(snapshot, new BatteryCurrentWindow(), true, "http://fixture.invalid");
+                record.invoke(null, context, status, new JSONObject(), "background", start + elapsed, snapshot.getJSONObject("battery"));
+                JSONArray stored = new JSONArray(new String(Files.readAllBytes(history.toPath()), StandardCharsets.UTF_8));
+                check(stored.length() == (elapsed < 60000 ? 1 : 2), (gaugeUnknown ? "unknown gauge" : "empty-flag factory") + " actual recordBattery retains one point per minute");
+                check(gaugeUnknown ? stored.getJSONObject(0).isNull("charging") : Boolean.FALSE.equals(stored.getJSONObject(0).opt("charging")),
+                    "recordBattery dedup compares the actual serialized nullable charging state");
+            }
+        } finally {
+            Files.deleteIfExists(new File(directory, "battery_history.json.tmp").toPath());
+            Files.deleteIfExists(history.toPath()); Files.deleteIfExists(directory.toPath());
+        }
     }
 
     private static void testCollectionOwnership() throws Exception {

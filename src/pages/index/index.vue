@@ -459,17 +459,14 @@
             </section>
             <section v-if="settingsSection === 'battery'" class="panel settings-panel battery-settings-panel">
               <view class="panel-header"><text class="panel-title">电量来源</text></view>
-              <view class="battery-source-options" role="group" aria-label="电量来源">
-                <button class="battery-source-option" :class="{ selected: batterySettingsForm.batterySource === 'factory' }" :aria-pressed="batterySettingsForm.batterySource === 'factory'" :disabled="batterySettingsSaving" @click="batterySettingsForm.batterySource = 'factory'">原厂电量接口</button>
-                <button class="battery-source-option" :class="{ selected: batterySettingsForm.batterySource === 'gauge' }" :aria-pressed="batterySettingsForm.batterySource === 'gauge'" :disabled="batterySettingsSaving" @click="batterySettingsForm.batterySource = 'gauge'">自定义接口</button>
-              </view>
-              <template v-if="batterySettingsForm.batterySource === 'gauge'">
+              <text class="battery-source-hint">当前版本使用{{ batterySourceText }}。</text>
+              <template v-if="config.batterySource === 'gauge'">
                 <view class="settings-form battery-source-fields">
                   <label><text>IP 地址</text><input v-model="batterySettingsForm.batteryHost" :disabled="batterySettingsSaving" placeholder="留空跟随路由器" /></label>
-                  <label><text>端口</text><input v-model="batterySettingsForm.batteryPort" :disabled="batterySettingsSaving" type="number" placeholder="88" /></label>
+                  <label><text>固定端口</text><input value="88" disabled type="number" /></label>
                 </view>
                 <text class="battery-endpoint-preview">{{ batteryEndpointPreview }}</text>
-                <text class="battery-source-hint">读取 state.json 中的 soc；接口不可用时显示“—”。</text>
+                <text class="battery-source-hint">电量来自设备实时读数，续航来自设备 CSV 日志；日志不可用时显示对应原因。</text>
               </template>
               <text v-else class="battery-source-hint">使用路由器原厂返回的电池百分比。</text>
               <text v-if="syncState.role === 'viewer'" class="battery-source-hint">当前跟随采集器显示；此设置用于本机采集。</text>
@@ -607,7 +604,7 @@ import MetricGrid from '../../components/MetricGrid.vue';
 import { routerApi } from '../../services/router-client.js';
 import { batteryGaugeUrl } from '../../utils/battery-gauge.js';
 import { buildHomeSignalPanels, buildHomeTemperatureMetrics } from '../../utils/home-telemetry.js';
-import { formatBatteryTime, batteryTimeReason, batteryModeText } from '../../utils/battery-presentation.js';
+import { formatBatteryTime, batteryTimeReason, batteryModeText, batteryCsvStatusText } from '../../utils/battery-presentation.js';
 import { syncClient } from '../../services/sync.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import { mergeChartHistory, normalizePoints } from '../../utils/history.js';
@@ -819,10 +816,10 @@ const batterySettingsForm = reactive({ batterySource: config.batterySource, batt
 const batterySettingsSaving = ref(false);
 const batterySettingsResult = ref('');
 const batterySettingsError = ref(false);
-const batterySourceText = computed(() => config.batterySource === 'factory' ? '原厂电量接口' : '自定义接口');
+const batterySourceText = computed(() => config.batterySource === 'factory' ? '原厂电量接口' : '88 端口电池接口');
 const batteryEndpointPreview = computed(() => {
-  try { return batteryGaugeUrl(config.routerUrl, batterySettingsForm.batteryHost, batterySettingsForm.batteryPort); }
-  catch { return '请输入有效的 IP 地址和端口'; }
+  try { return batteryGaugeUrl(config.routerUrl, batterySettingsForm.batteryHost, 88); }
+  catch { return '请输入有效的 IP 地址'; }
 });
 const overlayState = reactive(routerApi.getOverlayState());
 // 安卓后台采集状态与电池优化授权（仅 Android App 可用；息屏期间由原生服务持续采集落盘）。
@@ -966,8 +963,8 @@ function batteryTimeResult(key) {
 }
 const batteryTimeToFullText = computed(() => formatBatteryTime(batteryTimeResult('timeToFull')));
 const batteryRuntimeText = computed(() => formatBatteryTime(batteryTimeResult('runtime')));
-const batteryTimeToFullReason = computed(() => batteryTimeReason(batteryTimeResult('timeToFull')));
-const batteryRuntimeReason = computed(() => batteryTimeReason(batteryTimeResult('runtime')));
+const batteryTimeToFullReason = computed(() => batteryTimeReason(batteryTimeResult('timeToFull'), battery.value.csvAnalysis));
+const batteryRuntimeReason = computed(() => batteryTimeReason(batteryTimeResult('runtime'), battery.value.csvAnalysis));
 function clientListAvailability(group) {
   const available = data.value.clientAvailability?.[group];
   if (available === true || available === false) return available;
@@ -1161,8 +1158,8 @@ const usageDetails = computed(() => toItems({
 const batterySourceNote = computed(() => {
   const gauge = status.value.battery_gauge;
   if (!gauge && battery.value.percentSource !== 'gauge88') return '原厂电量接口';
-  try { const endpoint = new URL(gauge?.url || battery.value.percentEndpoint); return `${endpoint.host} · 软件估算`; }
-  catch { return '自定义接口 · 软件估算'; }
+  try { const endpoint = new URL(gauge?.url || battery.value.percentEndpoint); return `${endpoint.host} · 设备电量`; }
+  catch { return '88 端口电池接口'; }
 });
 const batteryTemperatureReading = computed(() => {
   const now = freshnessNow.value;
@@ -1182,7 +1179,7 @@ const batteryMetrics = computed(() => [
   { label: '电池温度', value: withUnit(batteryTemperatureReading.value.value, '°C'), note: batteryTemperatureReading.value.state === 'invalid' ? '读数异常' : '' },
   { label: '预计充满', value: batteryTimeToFullText.value, note: batteryTimeToFullReason.value },
   { label: '剩余可用', value: batteryRuntimeText.value, note: batteryRuntimeReason.value },
-  { label: '估算口径', value: '放电到 0%', note: '软件可用容量估算' }
+  { label: '估算口径', value: '放电到 0%', note: battery.value.percentSource === 'gauge88' ? '设备 CSV 日志分析' : '原厂电量历史分析' }
 ]);
 const batteryDiagnostics = computed(() => buildBatteryDiagnostics(battery.value.measurement, status.value.battery_gauge?.raw, battery.value));
 
@@ -1223,7 +1220,12 @@ function buildBatteryDiagnostics(measurement = {}, raw = {}, summary = {}) {
     { label: '采样缺失', value: format(gauge.missing_s, 1, 0, ' 秒') },
     { label: '缺口次数', value: format(gauge.gap_events, 1, 0) },
     { label: '最近缺口原因', value: typeof gauge.last_gap_reason === 'string' && gauge.last_gap_reason ? gauge.last_gap_reason : '—' },
-    { label: '有效估算覆盖', value: format(summary.windowSeconds, 1, 0, ' 秒') }
+    { label: '有效估算覆盖', value: format(summary.windowSeconds, 1, 0, ' 秒') },
+    ...(summary.percentSource === 'gauge88' ? [
+      { label: '设备日志', value: batteryCsvStatusText(summary.csvAnalysis) },
+      { label: '日志有效点数', value: format(summary.csvAnalysis?.points, 1, 0) },
+      { label: '日志无效记录', value: format(summary.csvAnalysis?.invalidRows, 1, 0) }
+    ] : [])
   ];
 }
 const runtimeDetails = computed(() => toItems({
@@ -2115,11 +2117,11 @@ async function saveBatterySettings() {
   batterySettingsSaving.value = true;
   batterySettingsError.value = false;
   try {
-    const custom = batterySettingsForm.batterySource === 'gauge';
+    const custom = config.batterySource === 'gauge';
     Object.assign(config, routerApi.updateConfig({
-      batterySource: batterySettingsForm.batterySource,
+      batterySource: config.batterySource,
       batteryHost: custom ? batterySettingsForm.batteryHost : config.batteryHost,
-      batteryPort: custom ? batterySettingsForm.batteryPort : config.batteryPort
+      batteryPort: custom ? 88 : config.batteryPort
     }));
     resetBatterySettings();
     batterySettingsResult.value = '已保存';

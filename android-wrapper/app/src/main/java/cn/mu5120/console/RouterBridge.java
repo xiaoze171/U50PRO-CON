@@ -209,7 +209,7 @@ public final class RouterBridge {
             try {
                 JSONObject input = new JSONObject(payload);
                 URL url = new URL(input.getString("url"));
-                boolean gaugeRequest = "/state.json".equals(url.getPath());
+                boolean gaugeRequest = BatteryProfile.isGaugeRoute(url);
                 String protocol = url.getProtocol();
                 if (!"http".equals(protocol) && !"https".equals(protocol)) throw new SecurityException("只允许 HTTP/HTTPS");
                 String host = url.getHost();
@@ -260,7 +260,10 @@ public final class RouterBridge {
                 if (gaugeAge != null) responseHeaders.put("X-Gauge-Age", gaugeAge);
                 result.put("headers", responseHeaders);
                 InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-                String responseBody = readText(stream, connection.getContentType());
+                String responseBody = gaugeRequest && stream != null
+                    ? MonitorRouterClient.readBounded(stream, "/backup/battery-log.csv".equals(url.getPath()) ? BatteryCsv.MAX_BYTES : 256 * 1024,
+                        System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout))
+                    : readText(stream, connection.getContentType());
                 result.put("ok", status >= 200 && status < 300);
                 result.put("status", status);
                 result.put("body", responseBody);

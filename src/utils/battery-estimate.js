@@ -1,8 +1,8 @@
 import { sanitizeBatteryMeasurement, normalizeBatteryEndpoint } from './battery-gauge.js';
 import { batteryMeasurementIdentity, sameBatteryIdentity } from './battery-current-window.js';
+import { batteryTimeResult as result, initializeBatteryTimeResults } from './battery-time-state.js';
 
 const finite = value => typeof value === 'number' && Number.isFinite(value);
-const result = (state, reason, targetPercent, minutes = null, method = null) => ({ minutes, state, method, reason, targetPercent });
 
 function compatibleSocSlope(measurement, currentWindow, samples, calculatedAt) {
   const source = measurement.percentageSource ?? currentWindow?.identity?.percentageSource;
@@ -73,21 +73,9 @@ export function estimateBatteryTimes({ measurement: rawMeasurement, currentWindo
   };
   if (!measurement || !finite(calculatedAt)) return output;
   const mode = measurement.mode;
-  output.timeToFull = result('not-applicable', measurement.externalPower ? '未净充电' : '未充电', 100);
-  output.runtime = result('not-applicable', '充电中', target);
-  if (mode === 'unknown') {
-    output.timeToFull = result('unknown', '状态待确认', 100);
-    output.runtime = result('unknown', '状态待确认', target);
-  } else if (mode === 'full') {
-    output.timeToFull = result(measurement.fullConfirmed ? 'full' : 'confirming', measurement.fullConfirmed ? '已充满' : '满充确认中', 100);
-    output.runtime = result('not-applicable', '外接供电', target);
-  } else if (mode === 'confirming') {
-    output.timeToFull = result('confirming', '满充确认中', 100);
-    output.runtime = result('not-applicable', '满充确认中', target);
-  } else if (mode === 'external') {
-    output.timeToFull = result('external', '外接供电', 100);
-    output.runtime = result('external', '拔电后估算', target);
-  } else {
+  const { canEstimate, ...timeStates } = initializeBatteryTimeResults(measurement, { runtimeTargetPercent: target });
+  Object.assign(output, timeStates);
+  if (canEstimate) {
     const charging = mode === 'charging', key = charging ? 'timeToFull' : 'runtime';
     const resultTarget = charging ? 100 : target;
     const current = measurement.netCurrentMa;

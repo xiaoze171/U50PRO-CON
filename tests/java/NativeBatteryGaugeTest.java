@@ -45,9 +45,9 @@ public final class NativeBatteryGaugeTest {
             check(BatteryGaugeReading.percent(status) == null, "stale gauge never falls back to factory");
         }
         check(BatteryGaugeReading.read(raw(0), "5", URL, NOW).getDouble("percent") == 0, "zero and age boundary retained");
-        check("valid".equals(BatteryGaugeReading.read(raw(21).put("ts", NOW / 1000 - 4), null, URL, NOW).getString("state")), "absent header uses timestamp");
-        check(BatteryGaugeReading.read(raw(21).put("ts", NOW / 1000.0 - 4), "", URL, NOW).getLong("validUntil") == NOW + 1000,
-            "empty header uses timestamp fallback and keeps exact expiry");
+        check("stale".equals(BatteryGaugeReading.read(raw(21).put("ts", NOW / 1000 - 4), null, URL, NOW).getString("state")), "absent age header cannot use device timestamp as phone time");
+        check(BatteryGaugeReading.read(raw(21).put("ts", NOW / 1000.0 - 4), "", URL, NOW).isNull("validUntil"),
+            "empty age header cannot manufacture freshness");
         check("stale".equals(BatteryGaugeReading.read(raw(21), null, URL, NOW).getString("state")), "future timestamp rejected without header");
         check(BatteryGaugeReading.read(raw(99.999), "1", URL, NOW).getDouble("percent") == 99.99, "rounding cannot fabricate full charge");
         check(BatteryGaugeReading.read(raw(100).put("status", "Charging").put("full_confirmed", false), "1", URL, NOW).getDouble("percent") == 99.99, "unconfirmed charging full capped");
@@ -66,10 +66,10 @@ public final class NativeBatteryGaugeTest {
         BatteryGaugeConfig defaults = BatteryGaugeConfig.fromJson(new JSONObject());
         check(URL.equals(defaults.endpoint("http://192.168.0.1:8080/old?query=1")), "default host follows router with independent port/path");
         BatteryGaugeConfig custom = BatteryGaugeConfig.fromJson(new JSONObject().put("batterySource", "gauge").put("batteryHost", "192.168.8.1").put("batteryPort", 188));
-        check("https://192.168.8.1:188/state.json".equals(custom.endpoint("https://192.168.0.1")), "custom endpoint preserves router protocol");
-        check(!custom.matches(status, "http://192.168.0.1"), "factory snapshot cannot enter gauge config");
+        check("https://192.168.8.1:88/state.json".equals(custom.endpoint("https://192.168.0.1")), "custom endpoint preserves router protocol with fixed port");
+        check(custom.matches(status, "http://192.168.0.1") == "factory".equals(BatteryProfile.source()), "factory snapshot follows native build profile");
         status.put("battery_gauge", marker);
-        check(defaults.matches(status, "http://192.168.0.1"), "matching gauge endpoint accepted");
+        check(defaults.matches(status, "http://192.168.0.1") == "gauge".equals(BatteryProfile.source()), "matching gauge endpoint accepted only in gauge profile");
         check(!custom.matches(status, "http://192.168.0.1"), "old gauge endpoint rejected");
         check("http://[::1]:88/state.json".equals(new BatteryGaugeConfig("gauge", "::1", 88).endpoint("http://192.168.0.1")), "IPv6 endpoint is bracketed");
         Method normalize;

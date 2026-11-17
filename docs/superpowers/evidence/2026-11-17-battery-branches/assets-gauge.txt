@@ -1,0 +1,1 @@
+PASS profile=gauge88-csv; BuildConfig matches; APK 6 generated web assets byte-identical; current-profile JS constant present

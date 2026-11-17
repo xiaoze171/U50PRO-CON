@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { parse } from '@babel/parser';
+import { importBatteryProfileClient } from './helpers/battery-profile-client.mjs';
 
 const storage = new Map();
 const snapshots = [];
@@ -45,6 +46,7 @@ globalThis.window = {
       const url = new URL(JSON.parse(raw).url);
       if (url.port === '88') {
         queueMicrotask(() => window.__mu5120NativeResponse(id, JSON.stringify({ ok: true, status: 200,
+          headers: { 'X-Gauge-Age': '0' },
           body: JSON.stringify({ soc: 0, data_quality: 'ok', ts: Date.now() / 1000 }) })));
         return;
       }
@@ -221,24 +223,52 @@ test('background monitor state and battery optimization status are readable from
   assert.equal(power.ignoring, false);
 });
 
-test('unknown charging stays unknown and invalid battery temperature stays out of derived samples while raw snapshots remain diagnostic', async () => {
+test('empty charging flags preserve factory off/gauge unknown semantics while invalid temperatures remain diagnostic only', async () => {
   const previous = { ...fixtures };
   try {
     fixtures.battery_charging = '';
     fixtures.external_charging_flag = '';
     fixtures.battery_temp = '-80';
     fixtures.wifi_chip_temp = '-80';
+    routerApi.resetBatteryCollection();
+    const expectedCharging = routerApi.getConfig().batterySource === 'factory' ? false : null;
     const result = await routerApi.dashboard();
-    assert.equal(result.battery.charging, null);
+    assert.equal(result.battery.charging, expectedCharging);
     assert.equal(result.battery.remainingHours, null);
     assert.equal(result.battery.ratePerHour, null);
     assert.equal(result.battery.samples.at(-1).temperature, null);
-    assert.equal(result.battery.samples.at(-1).charging, null);
+    assert.equal(result.battery.samples.at(-1).charging, expectedCharging);
     assert.equal(result.temperature.wifi_chip_temp, '-80');
     assert.equal(snapshots.at(-1).temperature.battery_temp, '-80');
   } finally {
     Object.keys(fixtures).forEach(key => delete fixtures[key]);
     Object.assign(fixtures, previous);
+  }
+});
+
+test('gauge profile keeps unknown charging when factory flags are empty and never imports invalid factory temperature', async () => {
+  const previous = { ...fixtures };
+  const nativeResponse = window.__mu5120NativeResponse;
+  const historyResponse = window.__mu5120HistoryResponse;
+  try {
+    fixtures.battery_charging = '';
+    fixtures.external_charging_flag = '';
+    fixtures.battery_temp = '-80';
+    fixtures.wifi_chip_temp = '-80';
+    delete window.__mu5120HistoryResponse;
+    const gaugeApi = (await importBatteryProfileClient('gauge88-csv')).routerApi;
+    const result = await gaugeApi.dashboard();
+    assert.equal(result.battery.charging, null);
+    assert.equal(result.battery.samples.at(-1).charging, null);
+    assert.equal(result.battery.samples.at(-1).temperature, null);
+    assert.equal(result.battery.remainingHours, null);
+    assert.equal(result.temperature.wifi_chip_temp, '-80');
+    assert.equal(snapshots.at(-1).temperature.battery_temp, '-80');
+  } finally {
+    Object.keys(fixtures).forEach(key => delete fixtures[key]);
+    Object.assign(fixtures, previous);
+    window.__mu5120NativeResponse = nativeResponse;
+    window.__mu5120HistoryResponse = historyResponse;
   }
 });
 

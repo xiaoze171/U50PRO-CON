@@ -1,9 +1,12 @@
 import CryptoJS from 'crypto-js';
 import { mergeBatterySamples as mergeBatterySamplesShared, mergeChartHistory } from '../utils/history.js';
 import { temperatureReading } from '../utils/temperature.js';
-import { batteryGaugeUrl, batteryGaugeReading, batteryPercent, normalizeBatteryConfig, normalizeBatteryMeasurement, normalizeBatteryEndpoint, freshBatteryGaugeReading } from '../utils/battery-gauge.js';
+import { batteryGaugeUrl, batteryGaugeReading, batteryPercent, normalizeBatteryConfig, normalizeBatteryMeasurement, normalizeBatteryEndpoint, freshBatteryGaugeReading, sanitizeBatteryMeasurement } from '../utils/battery-gauge.js';
 import { createBatteryCurrentWindow, batteryMeasurementIdentity, sameBatteryIdentity } from '../utils/battery-current-window.js';
-import { estimateBatteryTimes } from '../utils/battery-estimate.js';
+import { estimateCsvBatteryTimes } from '../utils/battery-csv.js';
+import { estimateFactoryBatteryTimes, normalizeFactoryBatteryMeasurement } from '../utils/battery-factory.js';
+import { createBatteryCsvClient } from './battery-csv-client.js';
+import batteryProfile from '../../config/battery-profile.json' with { type: 'json' };
 import routerFields from './router-fields.json' with { type: 'json' };
 
 const DEFAULT_CONFIG = {
@@ -11,7 +14,8 @@ const DEFAULT_CONFIG = {
   password: '111111',
   developerPassword: '111111',
   pollIntervalMs: 1000,
-  batterySource: 'gauge',
+  batterySource: batteryProfile.mode === 'factory' ? 'factory' : 'gauge',
+  batteryProfile: batteryProfile.mode,
   batteryHost: '',
   batteryPort: 88
 };
@@ -37,7 +41,10 @@ let lastBatteryReading = null;
 let lastBatteryMinute = null;
 let batteryRestorePending = true;
 let batteryRestoreFloor = 0;
-let batteryEstimateHistory = { source: null, floor: 0, samples: [] };
+let configurationRevision = 0;
+const batteryCsvClient = createBatteryCsvClient({ now: () => Date.now(), request: async (url, options) =>
+  requestRouter('/backup/battery-log.csv', { ...options, url }) });
+let latestBatteryCsv = null;
 const archivedBatteryRevisions = new Map(batteryHistory.filter(item => item.currentStats)
   .map(item => [item.currentStats.blockId, item.currentStats.revision]));
 const localBatteryBlockReadings = new Map();
@@ -72,7 +79,9 @@ function nativeBridgeRequest(bridge, path, options, headers) {
         if (!response.ok) throw new Error(response.error || `路由器返回 HTTP ${response.status || '未知'}`);
         const body = response.body || '';
         let data;
-        try { data = JSON.parse(body); } catch { data = body; }
+        if (pending.responseType === 'text') data = body;
+        else { try { data = JSON.parse(body); } catch { data = body; } }
+        if (pending.maxBytes && new TextEncoder().encode(body).byteLength > pending.maxBytes) throw new Error('CSV 超过 4 MiB');
         pending.resolve(pending.fullResponse ? { data, header: response.headers || {} } : data);
       } catch (error) {
         pending.reject(error);
@@ -86,14 +95,16 @@ function nativeBridgeRequest(bridge, path, options, headers) {
       nativeRequests.delete(id);
       reject(new Error('路由器请求超时'));
     }, (options.timeoutMs || 12000) + 1000);
-    nativeRequests.set(id, { resolve, reject, timer, fullResponse: options.fullResponse });
+    nativeRequests.set(id, { resolve, reject, timer, fullResponse: options.fullResponse,
+      responseType: options.responseType, maxBytes: options.maxBytes });
     try {
       bridge.request(id, JSON.stringify({
         url: options.url || `${config.routerUrl.replace(/\/$/, '')}${path}`,
         method: options.method || 'GET',
         headers,
         body: options.data == null ? '' : String(options.data),
-        timeoutMs: options.timeoutMs || 12000
+        timeoutMs: options.timeoutMs || 12000,
+        ...(options.maxBytes ? { maxBytes: options.maxBytes } : {})
       }));
     } catch (error) {
       clearTimeout(timer);
@@ -103,6 +114,11 @@ function nativeBridgeRequest(bridge, path, options, headers) {
   });
 }
 
+function profileBatteryConfig(value = {}) {
+  return { ...normalizeBatteryConfig({ ...value, batterySource: DEFAULT_CONFIG.batterySource, batteryPort: 88 }),
+    batteryProfile: batteryProfile.mode };
+}
+
 function loadConfig() {
   let stored = {};
   try {
@@ -110,7 +126,7 @@ function loadConfig() {
     if (value && typeof value === 'object' && !Array.isArray(value)) stored = value;
   } catch {}
   let batterySettings;
-  try { batterySettings = normalizeBatteryConfig(stored); } catch { batterySettings = normalizeBatteryConfig(); }
+  try { batterySettings = profileBatteryConfig(stored); } catch { batterySettings = profileBatteryConfig(); }
   return {
     ...DEFAULT_CONFIG,
     ...batterySettings,
@@ -153,7 +169,7 @@ function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTOR
   return mergeBatterySamplesShared([local, native], { cutoff });
 }
 
-async function mergeNativeBatteryHistory(force = false) {
+async function mergeNativeBatteryHistory(force = false, current = () => true) {
   const now = Date.now();
   if (!force && now - lastNativeBatteryMerge < NATIVE_BATTERY_MERGE_MS) return;
   lastNativeBatteryMerge = now;
@@ -161,6 +177,7 @@ async function mergeNativeBatteryHistory(force = false) {
   const native = typeof bridge?.getBackgroundBatteryHistoryAsync === 'function'
     ? await requestBackgroundHistory('getBackgroundBatteryHistoryAsync').catch(() => [])
     : readNativeBatteryHistory();
+  if (!current()) return;
   const merged = mergeBatterySamples(batteryHistory, Array.isArray(native) ? native : []);
   if (merged.length) {
     batteryHistory = merged;
@@ -352,7 +369,7 @@ function requestRouter(path, options = {}) {
     'X-Requested-With': 'XMLHttpRequest',
     ...(options.header || {})
   };
-  if (!isH5) {
+  if (!isH5 && !options.url) {
     headers.Origin = config.routerUrl;
     headers.Referer = `${config.routerUrl.replace(/\/$/, '')}/index.html`;
     if (cookieHeader()) headers.Cookie = cookieHeader();
@@ -367,6 +384,7 @@ function requestRouter(path, options = {}) {
       data: options.data,
       header: headers,
       timeout: options.timeoutMs || 12000,
+      ...(options.responseType === 'text' ? { responseType: 'text', dataType: 'text' } : {}),
       withCredentials: !options.url,
       success(response) {
         if (!options.url) rememberCookies(response);
@@ -506,16 +524,18 @@ async function stockUiSession() {
 }
 
 async function dashboard() {
-  await ensureLogin();
   const batterySettings = { ...config };
+  const revision = configurationRevision;
   const assertCurrentSettings = () => {
-    if (['routerUrl', 'password', 'batterySource', 'batteryHost', 'batteryPort'].some(key => batterySettings[key] !== config[key])) {
+    if (revision !== configurationRevision) {
       throw new Error('电量来源或连接已更新，正在重新采集');
     }
   };
+  await ensureLogin();
+  assertCurrentSettings();
   const clientAvailability = { stations: true, cableStations: true };
   const clientErrors = {};
-  const [status, signal, temperature, resources, locks, stations, cable, neighbors, features, gauge] = await Promise.all([
+  const [status, signal, temperature, resources, locks, stations, cable, neighbors, features, gauge, csv] = await Promise.all([
     getFields(statusFields),
     getFields(signalFields),
     getFields(temperatureFields),
@@ -533,7 +553,8 @@ async function dashboard() {
     }),
     getFields(routerFields.neighbors).catch(() => ({})),
     getFields(featureFields).catch(() => ({})),
-    batterySettings.batterySource === 'gauge' ? getBatteryGauge(batterySettings) : null
+    batterySettings.batterySource === 'gauge' ? getBatteryGauge(batterySettings) : null,
+    batterySettings.batterySource === 'gauge' ? batteryCsvClient.get(batteryGaugeUrl(batterySettings.routerUrl, batterySettings.batteryHost, 88)) : null
   ]);
   if (gauge) status.battery_gauge = gauge;
   // Discard a poll that started with a different source while settings were saved.
@@ -546,11 +567,12 @@ async function dashboard() {
     clientAvailability.cableStations = false;
     clientErrors.cableStations ||= '有线设备列表未返回';
   }
-  await mergeNativeBatteryHistory();
+  await mergeNativeBatteryHistory(false, () => revision === configurationRevision);
   assertCurrentSettings();
+  latestBatteryCsv = csv;
   const receivedAt = Date.now();
   const { measurement, changed, currentStatsUpdates } = recordBattery(status, temperature, receivedAt);
-  const battery = batterySummary(measurement, receivedAt, measurement ? batteryPercent(status) : null, currentStatsUpdates);
+  const battery = batterySummary(measurement, receivedAt, measurement ? batteryPercent(status) : null, currentStatsUpdates, status.battery_gauge);
   if (changed) {
     saveBatteryHistory();
     battery.samples = batteryHistory;
@@ -625,6 +647,10 @@ function normalizeList(value) {
 }
 
 function currentBatteryMeasurement(status) {
+  if (config.batterySource === 'factory') {
+    if (status && Object.hasOwn(status, 'battery_gauge')) return null;
+    return normalizeFactoryBatteryMeasurement(status, config.routerUrl);
+  }
   if (status?.battery_gauge) status.battery_gauge = freshBatteryGaugeReading(status.battery_gauge);
   const measurement = normalizeBatteryMeasurement(status);
   if (measurement?.percentageSource === 'router') measurement.endpoint = normalizeBatteryEndpoint(config.routerUrl);
@@ -701,7 +727,9 @@ function recordBattery(status, temperature, timestamp) {
     temperature: temperatureReading('battery_temp', custom ? status.battery_gauge.raw.temp_c : temperature?.battery_temp).value,
     chargeType: custom ? status.battery_gauge.raw.status : status.battery_charg_type || '',
     externalPower: measurement.externalPower,
-    voltage: measurement.voltageMv, current: measurement.netCurrentMa, capacity: measurement.usableCapacityMah,
+    voltage: custom ? measurement.voltageMv : status.battery_voltage || '',
+    current: custom ? measurement.netCurrentMa : status.battery_current || '',
+    capacity: custom ? measurement.usableCapacityMah : status.battery_capacity || '',
     health: custom ? '' : status.battery_health || ''
   };
   const currentStatsUpdates = [];
@@ -722,18 +750,19 @@ function recordBattery(status, temperature, timestamp) {
   return { measurement, changed, currentStatsUpdates };
 }
 
-function batterySummary(measurement, calculatedAt = Date.now(), displayPercent = measurement?.rawSoc ?? null, currentStatsUpdates = []) {
+function batterySummary(measurement, calculatedAt = Date.now(), displayPercent = measurement?.rawSoc ?? null, currentStatsUpdates = [], marker = null) {
   const currentWindow = measurement ? batteryCurrentWindow.snapshot() : null;
-  let samples = [];
-  if (measurement && (measurement.netCurrentMa == null || measurement.usableCapacityMah == null)) {
-    if (batteryEstimateHistory.source !== batteryHistory || batteryEstimateHistory.floor !== batteryRestoreFloor) {
-      batteryEstimateHistory = { source: batteryHistory, floor: batteryRestoreFloor,
-        samples: batteryHistory.filter(item => item.timestamp >= Math.max(batteryRestoreFloor, calculatedAt - 1800000)) };
-    }
-    samples = batteryEstimateHistory.samples;
+  const factory = config.batterySource === 'factory';
+  const estimates = factory
+    ? estimateFactoryBatteryTimes({ measurement, samples: batteryHistory, calculatedAt })
+    : estimateCsvBatteryTimes({ csv: latestBatteryCsv?.state === 'ready' ? latestBatteryCsv.csv : null,
+      measurement, deviceNowSeconds: marker?.raw?.ts, calculatedAt });
+  if (!factory) {
+    estimates.csvAnalysis = { ...estimates.csvAnalysis, source: 'device-csv',
+      url: latestBatteryCsv?.url || '', fetchedAt: latestBatteryCsv?.fetchedAt ?? null,
+      ...(latestBatteryCsv && latestBatteryCsv.state !== 'ready'
+        ? { state: 'unavailable', reason: latestBatteryCsv.reason, error: latestBatteryCsv.error || '' } : {}) };
   }
-  const estimates = estimateBatteryTimes({ measurement, currentWindow: currentWindow || {},
-    samples, calculatedAt, runtimeTargetPercent: 0 });
   const active = measurement?.mode === 'charging' ? estimates.timeToFull : estimates.runtime;
   const remainingHours = active.state === 'estimated' ? active.minutes / 60 : null;
   return {
@@ -743,7 +772,7 @@ function batterySummary(measurement, calculatedAt = Date.now(), displayPercent =
     currentWindow, currentStats: currentWindow?.currentStats || [],
     // Recovered/relayed blocks retain coverage, but only this acquisition owns a new archive observation.
     currentStatsUpdates,
-    ratePerHour: null, remainingHours, samples: batteryHistory
+    ratePerHour: estimates.ratePerHour ?? null, remainingHours, samples: batteryHistory
   };
 }
 
@@ -766,7 +795,26 @@ function restoreBatterySummary(snapshot, additionalStats = []) {
     receivedAt: now, identity: batteryMeasurementIdentity({ measurement })
   });
   batteryRestorePending = false;
-  return batterySummary(measurement, now, batteryPercent(snapshot.status));
+  const summary = batterySummary(measurement, now, batteryPercent(snapshot.status), [], snapshot.status?.battery_gauge);
+  // Recovery can carry a newer device log than the foreground cache. Keep a
+  // usable current calculation, otherwise accept a fresh matching collector
+  // estimate instead of allowing a failed/stale/short local log to suppress it.
+  const collected = snapshot.battery;
+  const activeField = measurement.mode === 'charging' ? 'timeToFull' : 'runtime';
+  const collectedTime = collected?.[activeField];
+  const localNeedsCsv = ['unavailable', 'collecting'].includes(summary[activeField]?.state);
+  const usableCollected = collected?.csvAnalysis?.state === 'ready' && collectedTime?.state === 'estimated'
+    && collectedTime.method === 'device-csv' && Number.isFinite(collectedTime.minutes) && collectedTime.minutes >= 0
+    && collectedTime.targetPercent === (activeField === 'timeToFull' ? 100 : 0);
+  if (config.batterySource === 'gauge' && localNeedsCsv && usableCollected && collected.csvAnalysis.source === 'device-csv'
+      && Number.isFinite(collected.calculatedAt) && collected.calculatedAt <= now && now - collected.calculatedAt <= 5000
+      && JSON.stringify(sanitizeBatteryMeasurement(collected.measurement)) === JSON.stringify(measurement)) {
+    for (const field of ['runtime', 'timeToFull', 'csvAnalysis', 'windowSeconds', 'calculatedAt', 'remainingHours']) {
+      if (Object.hasOwn(collected, field)) summary[field] = collected[field];
+    }
+    summary.remainingHours = collectedTime.minutes / 60;
+  }
+  return summary;
 }
 
 function saveBatteryHistory() {
@@ -1098,7 +1146,12 @@ function updateConfig(next) {
     routerUrl: String(next.routerUrl ?? config.routerUrl).trim().replace(/\/$/, ''),
     pollIntervalMs: 1000
   };
-  Object.assign(updated, normalizeBatteryConfig(updated));
+  Object.assign(updated, profileBatteryConfig(updated));
+  if (['routerUrl', 'password', 'batterySource', 'batteryHost', 'batteryPort'].some(key => previous[key] !== updated[key])) {
+    configurationRevision++;
+    batteryCsvClient.invalidate();
+    latestBatteryCsv = null;
+  }
   if (['routerUrl', 'batterySource', 'batteryHost', 'batteryPort'].some(key => previous[key] !== updated[key])) {
     resetBatteryCollection();
     batteryRestoreFloor = Date.now();

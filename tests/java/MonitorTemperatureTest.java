@@ -45,7 +45,7 @@ public final class MonitorTemperatureTest {
             check(output.getJSONObject("chart").getJSONArray("rsrp").getJSONArray(0).getInt(1) == -93, "negative signal retained");
             JSONObject battery = output.getJSONArray("battery").getJSONObject(0);
             check(battery.isNull("temperature"), "suspect battery temperature must not enter derived history");
-            check(battery.isNull("charging"), "missing charging must not turn into false");
+            check(Boolean.FALSE.equals(battery.opt("charging")), "a valid factory reading with empty flags retains original discharging semantics");
             check("-80".equals(output.getJSONArray("snapshots").getJSONObject(0).getJSONObject("temperature").getString("wifi_chip_temp")), "raw diagnostic value retained");
             TemperatureReading invalid = TemperatureReading.read("battery_temp", " -80 ");
             check("invalid".equals(invalid.state) && " -80 ".equals(invalid.raw), "invalid state retains exact raw text");
@@ -56,7 +56,7 @@ public final class MonitorTemperatureTest {
             check(TemperatureReading.battery(new JSONObject(), new JSONObject().put("battery_temp", "34")).value == 34, "missing battery group may use the same field from status");
             check("invalid".equals(TemperatureReading.battery(new JSONObject().put("battery_temp", "-80"), new JSONObject().put("battery_temp", "34")).state), "a suspect primary reading is not silently replaced");
             check(Boolean.FALSE.equals(MonitorHistoryStore.chargingValue(new JSONObject().put("battery_charging", "0"))), "known charging-off remains false");
-            check(Boolean.FALSE.equals(MonitorHistoryStore.chargingValue(new JSONObject().put("battery_charging", "0").put("external_charging_flag", "1"))), "external power does not override known charging-off");
+            check(Boolean.TRUE.equals(MonitorHistoryStore.chargingValue(new JSONObject().put("battery_charging", "0").put("external_charging_flag", "1"))), "factory external power preserves original charging interpretation");
             System.out.println("PASS native temperature validation, history migration, independent sensors, raw preservation and unknown charging");
         } finally {
             remove(root);

@@ -1,0 +1,1269 @@
+{
+  "schemaVersion": 1,
+  "parserCases": [
+    {
+      "name": "BOM reordered quoted CRLF and missing USB",
+      "csv": "﻿status,temp_c,power_w,current_ma,voltage_mv,soc,ts,ts_iso,input_power_w\r\n\"Discharging\",31,-1.6,-400,4000,50,1800000000,\"date, ignored\",\r\n",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0,
+        "firstRow": {
+          "soc": 50,
+          "ts": 1800000000,
+          "input_power_w": null,
+          "ts_iso": "date, ignored"
+        }
+      }
+    },
+    {
+      "name": "legacy eight-column extended header",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status,usb_online,input_voltage_mv,input_current_ma,input_power_w\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0,
+        "firstRow": {
+          "usb_online": null,
+          "input_voltage_mv": null,
+          "input_current_ma": null,
+          "input_power_w": null
+        }
+      }
+    },
+    {
+      "name": "required-only header",
+      "csv": "ts,soc,voltage_mv,current_ma,power_w,temp_c,status\n1800000000,50,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0
+      }
+    },
+    {
+      "name": "unknown header ignored",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status,unknown\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging,future",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0
+      }
+    },
+    {
+      "name": "escaped quote in display field",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\n\"date \"\"quoted\"\"\",1800000000,50,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0,
+        "firstRow": {
+          "ts_iso": "date \"quoted\""
+        }
+      }
+    },
+    {
+      "name": "quoted multiline display field",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\n\"date\nignored\",1800000000,50,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 0,
+        "firstRow": {
+          "ts_iso": "date\nignored"
+        }
+      }
+    },
+    {
+      "name": "numeric malformed boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1800000000,nope,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 1,
+        "firstRow": null
+      }
+    },
+    {
+      "name": "extra cells boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging,extra",
+      "expected": {
+        "rows": 1,
+        "invalidRows": 1,
+        "firstRow": null
+      }
+    },
+    {
+      "name": "blank interior boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\n\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging",
+      "expected": {
+        "rows": 3,
+        "invalidRows": 1
+      }
+    },
+    {
+      "name": "duplicate required header",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status,soc\n",
+      "error": true
+    },
+    {
+      "name": "missing required header",
+      "csv": "ts,soc,current_ma,power_w,temp_c,status\n",
+      "error": true
+    },
+    {
+      "name": "unterminated quoted record",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\n\"unfinished",
+      "error": true
+    },
+    {
+      "name": "characters after quoted field",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\n\"date\"bad,1800000000,50,4000,-400,-1.6,31,Discharging",
+      "error": true
+    },
+    {
+      "name": "unquoted embedded quote",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nda\"te,1800000000,50,4000,-400,-1.6,31,Discharging",
+      "error": true
+    },
+    {
+      "name": "HTML is not CSV",
+      "csv": "<html>error</html>",
+      "error": true
+    }
+  ],
+  "estimateCases": [
+    {
+      "name": "one hour discharge to zero",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated",
+          "method": "device-csv",
+          "targetPercent": 0
+        },
+        "timeToFull": {
+          "minutes": null,
+          "state": "not-applicable"
+        },
+        "windowSeconds": 3600,
+        "csvAnalysis": {
+          "state": "ready",
+          "reason": "",
+          "points": 61,
+          "windowSeconds": 3600,
+          "socMovement": 5,
+          "energyWh": 1.6
+        }
+      }
+    },
+    {
+      "name": "one hour charge to full",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,45.000000,4000,400,1.6,31,Charging\nignored,1799996460,45.083333,4000,400,1.6,31,Charging\nignored,1799996520,45.166667,4000,400,1.6,31,Charging\nignored,1799996580,45.250000,4000,400,1.6,31,Charging\nignored,1799996640,45.333333,4000,400,1.6,31,Charging\nignored,1799996700,45.416667,4000,400,1.6,31,Charging\nignored,1799996760,45.500000,4000,400,1.6,31,Charging\nignored,1799996820,45.583333,4000,400,1.6,31,Charging\nignored,1799996880,45.666667,4000,400,1.6,31,Charging\nignored,1799996940,45.750000,4000,400,1.6,31,Charging\nignored,1799997000,45.833333,4000,400,1.6,31,Charging\nignored,1799997060,45.916667,4000,400,1.6,31,Charging\nignored,1799997120,46.000000,4000,400,1.6,31,Charging\nignored,1799997180,46.083333,4000,400,1.6,31,Charging\nignored,1799997240,46.166667,4000,400,1.6,31,Charging\nignored,1799997300,46.250000,4000,400,1.6,31,Charging\nignored,1799997360,46.333333,4000,400,1.6,31,Charging\nignored,1799997420,46.416667,4000,400,1.6,31,Charging\nignored,1799997480,46.500000,4000,400,1.6,31,Charging\nignored,1799997540,46.583333,4000,400,1.6,31,Charging\nignored,1799997600,46.666667,4000,400,1.6,31,Charging\nignored,1799997660,46.750000,4000,400,1.6,31,Charging\nignored,1799997720,46.833333,4000,400,1.6,31,Charging\nignored,1799997780,46.916667,4000,400,1.6,31,Charging\nignored,1799997840,47.000000,4000,400,1.6,31,Charging\nignored,1799997900,47.083333,4000,400,1.6,31,Charging\nignored,1799997960,47.166667,4000,400,1.6,31,Charging\nignored,1799998020,47.250000,4000,400,1.6,31,Charging\nignored,1799998080,47.333333,4000,400,1.6,31,Charging\nignored,1799998140,47.416667,4000,400,1.6,31,Charging\nignored,1799998200,47.500000,4000,400,1.6,31,Charging\nignored,1799998260,47.583333,4000,400,1.6,31,Charging\nignored,1799998320,47.666667,4000,400,1.6,31,Charging\nignored,1799998380,47.750000,4000,400,1.6,31,Charging\nignored,1799998440,47.833333,4000,400,1.6,31,Charging\nignored,1799998500,47.916667,4000,400,1.6,31,Charging\nignored,1799998560,48.000000,4000,400,1.6,31,Charging\nignored,1799998620,48.083333,4000,400,1.6,31,Charging\nignored,1799998680,48.166667,4000,400,1.6,31,Charging\nignored,1799998740,48.250000,4000,400,1.6,31,Charging\nignored,1799998800,48.333333,4000,400,1.6,31,Charging\nignored,1799998860,48.416667,4000,400,1.6,31,Charging\nignored,1799998920,48.500000,4000,400,1.6,31,Charging\nignored,1799998980,48.583333,4000,400,1.6,31,Charging\nignored,1799999040,48.666667,4000,400,1.6,31,Charging\nignored,1799999100,48.750000,4000,400,1.6,31,Charging\nignored,1799999160,48.833333,4000,400,1.6,31,Charging\nignored,1799999220,48.916667,4000,400,1.6,31,Charging\nignored,1799999280,49.000000,4000,400,1.6,31,Charging\nignored,1799999340,49.083333,4000,400,1.6,31,Charging\nignored,1799999400,49.166667,4000,400,1.6,31,Charging\nignored,1799999460,49.250000,4000,400,1.6,31,Charging\nignored,1799999520,49.333333,4000,400,1.6,31,Charging\nignored,1799999580,49.416667,4000,400,1.6,31,Charging\nignored,1799999640,49.500000,4000,400,1.6,31,Charging\nignored,1799999700,49.583333,4000,400,1.6,31,Charging\nignored,1799999760,49.666667,4000,400,1.6,31,Charging\nignored,1799999820,49.750000,4000,400,1.6,31,Charging\nignored,1799999880,49.833333,4000,400,1.6,31,Charging\nignored,1799999940,49.916667,4000,400,1.6,31,Charging\nignored,1800000000,50.000000,4000,400,1.6,31,Charging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "charging",
+        "netCurrentMa": 400,
+        "voltageMv": 4000,
+        "netPowerW": 1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "timeToFull": {
+          "minutes": 600,
+          "state": "estimated",
+          "method": "device-csv",
+          "targetPercent": 100
+        },
+        "runtime": {
+          "minutes": null,
+          "state": "not-applicable"
+        },
+        "windowSeconds": 3600,
+        "csvAnalysis": {
+          "state": "ready",
+          "reason": ""
+        }
+      }
+    },
+    {
+      "name": "zero SOC is a zero estimate",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,5.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,4.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,4.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,4.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,4.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,4.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,4.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,4.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,4.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,4.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,4.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,4.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,4.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,3.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,3.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,3.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,3.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,3.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,3.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,3.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,3.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,3.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,3.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,3.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,3.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,2.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,2.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,2.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,2.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,2.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,2.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,2.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,2.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,2.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,2.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,2.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,2.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,1.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,1.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,1.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,1.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,1.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,1.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,1.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,1.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,1.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,1.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,1.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,1.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,0.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,0.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,0.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,0.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,0.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,0.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,0.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,0.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,0.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,0.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,0.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,0.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 0,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 0,
+          "state": "estimated"
+        },
+        "csvAnalysis": {
+          "state": "ready"
+        }
+      }
+    },
+    {
+      "name": "device time independent of phone clock",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated"
+        },
+        "csvAnalysis": {
+          "state": "ready"
+        }
+      }
+    },
+    {
+      "name": "age exactly 120 seconds",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000120,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated"
+        },
+        "csvAnalysis": {
+          "state": "ready"
+        }
+      }
+    },
+    {
+      "name": "stale log",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000121,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "stale"
+        }
+      }
+    },
+    {
+      "name": "future log",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1799999999,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "device-time"
+        }
+      }
+    },
+    {
+      "name": "missing device clock",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": null,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "device-time"
+        }
+      }
+    },
+    {
+      "name": "missing CSV",
+      "csv": null,
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "missing"
+        }
+      }
+    },
+    {
+      "name": "invalid live measurement",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": null,
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "live-measurement"
+        }
+      }
+    },
+    {
+      "name": "short half-hour",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        },
+        "windowSeconds": 1800
+      }
+    },
+    {
+      "name": "31 points at maximum supported gap",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated"
+        },
+        "windowSeconds": 3600,
+        "csvAnalysis": {
+          "state": "ready",
+          "points": 31
+        }
+      }
+    },
+    {
+      "name": "last two hours only",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799989200,65.000000,4000,-400,-1.6,31,Discharging\nignored,1799989260,64.916667,4000,-400,-1.6,31,Discharging\nignored,1799989320,64.833333,4000,-400,-1.6,31,Discharging\nignored,1799989380,64.750000,4000,-400,-1.6,31,Discharging\nignored,1799989440,64.666667,4000,-400,-1.6,31,Discharging\nignored,1799989500,64.583333,4000,-400,-1.6,31,Discharging\nignored,1799989560,64.500000,4000,-400,-1.6,31,Discharging\nignored,1799989620,64.416667,4000,-400,-1.6,31,Discharging\nignored,1799989680,64.333333,4000,-400,-1.6,31,Discharging\nignored,1799989740,64.250000,4000,-400,-1.6,31,Discharging\nignored,1799989800,64.166667,4000,-400,-1.6,31,Discharging\nignored,1799989860,64.083333,4000,-400,-1.6,31,Discharging\nignored,1799989920,64.000000,4000,-400,-1.6,31,Discharging\nignored,1799989980,63.916667,4000,-400,-1.6,31,Discharging\nignored,1799990040,63.833333,4000,-400,-1.6,31,Discharging\nignored,1799990100,63.750000,4000,-400,-1.6,31,Discharging\nignored,1799990160,63.666667,4000,-400,-1.6,31,Discharging\nignored,1799990220,63.583333,4000,-400,-1.6,31,Discharging\nignored,1799990280,63.500000,4000,-400,-1.6,31,Discharging\nignored,1799990340,63.416667,4000,-400,-1.6,31,Discharging\nignored,1799990400,63.333333,4000,-400,-1.6,31,Discharging\nignored,1799990460,63.250000,4000,-400,-1.6,31,Discharging\nignored,1799990520,63.166667,4000,-400,-1.6,31,Discharging\nignored,1799990580,63.083333,4000,-400,-1.6,31,Discharging\nignored,1799990640,63.000000,4000,-400,-1.6,31,Discharging\nignored,1799990700,62.916667,4000,-400,-1.6,31,Discharging\nignored,1799990760,62.833333,4000,-400,-1.6,31,Discharging\nignored,1799990820,62.750000,4000,-400,-1.6,31,Discharging\nignored,1799990880,62.666667,4000,-400,-1.6,31,Discharging\nignored,1799990940,62.583333,4000,-400,-1.6,31,Discharging\nignored,1799991000,62.500000,4000,-400,-1.6,31,Discharging\nignored,1799991060,62.416667,4000,-400,-1.6,31,Discharging\nignored,1799991120,62.333333,4000,-400,-1.6,31,Discharging\nignored,1799991180,62.250000,4000,-400,-1.6,31,Discharging\nignored,1799991240,62.166667,4000,-400,-1.6,31,Discharging\nignored,1799991300,62.083333,4000,-400,-1.6,31,Discharging\nignored,1799991360,62.000000,4000,-400,-1.6,31,Discharging\nignored,1799991420,61.916667,4000,-400,-1.6,31,Discharging\nignored,1799991480,61.833333,4000,-400,-1.6,31,Discharging\nignored,1799991540,61.750000,4000,-400,-1.6,31,Discharging\nignored,1799991600,61.666667,4000,-400,-1.6,31,Discharging\nignored,1799991660,61.583333,4000,-400,-1.6,31,Discharging\nignored,1799991720,61.500000,4000,-400,-1.6,31,Discharging\nignored,1799991780,61.416667,4000,-400,-1.6,31,Discharging\nignored,1799991840,61.333333,4000,-400,-1.6,31,Discharging\nignored,1799991900,61.250000,4000,-400,-1.6,31,Discharging\nignored,1799991960,61.166667,4000,-400,-1.6,31,Discharging\nignored,1799992020,61.083333,4000,-400,-1.6,31,Discharging\nignored,1799992080,61.000000,4000,-400,-1.6,31,Discharging\nignored,1799992140,60.916667,4000,-400,-1.6,31,Discharging\nignored,1799992200,60.833333,4000,-400,-1.6,31,Discharging\nignored,1799992260,60.750000,4000,-400,-1.6,31,Discharging\nignored,1799992320,60.666667,4000,-400,-1.6,31,Discharging\nignored,1799992380,60.583333,4000,-400,-1.6,31,Discharging\nignored,1799992440,60.500000,4000,-400,-1.6,31,Discharging\nignored,1799992500,60.416667,4000,-400,-1.6,31,Discharging\nignored,1799992560,60.333333,4000,-400,-1.6,31,Discharging\nignored,1799992620,60.250000,4000,-400,-1.6,31,Discharging\nignored,1799992680,60.166667,4000,-400,-1.6,31,Discharging\nignored,1799992740,60.083333,4000,-400,-1.6,31,Discharging\nignored,1799992800,60.000000,4000,-400,-1.6,31,Discharging\nignored,1799992860,59.916667,4000,-400,-1.6,31,Discharging\nignored,1799992920,59.833333,4000,-400,-1.6,31,Discharging\nignored,1799992980,59.750000,4000,-400,-1.6,31,Discharging\nignored,1799993040,59.666667,4000,-400,-1.6,31,Discharging\nignored,1799993100,59.583333,4000,-400,-1.6,31,Discharging\nignored,1799993160,59.500000,4000,-400,-1.6,31,Discharging\nignored,1799993220,59.416667,4000,-400,-1.6,31,Discharging\nignored,1799993280,59.333333,4000,-400,-1.6,31,Discharging\nignored,1799993340,59.250000,4000,-400,-1.6,31,Discharging\nignored,1799993400,59.166667,4000,-400,-1.6,31,Discharging\nignored,1799993460,59.083333,4000,-400,-1.6,31,Discharging\nignored,1799993520,59.000000,4000,-400,-1.6,31,Discharging\nignored,1799993580,58.916667,4000,-400,-1.6,31,Discharging\nignored,1799993640,58.833333,4000,-400,-1.6,31,Discharging\nignored,1799993700,58.750000,4000,-400,-1.6,31,Discharging\nignored,1799993760,58.666667,4000,-400,-1.6,31,Discharging\nignored,1799993820,58.583333,4000,-400,-1.6,31,Discharging\nignored,1799993880,58.500000,4000,-400,-1.6,31,Discharging\nignored,1799993940,58.416667,4000,-400,-1.6,31,Discharging\nignored,1799994000,58.333333,4000,-400,-1.6,31,Discharging\nignored,1799994060,58.250000,4000,-400,-1.6,31,Discharging\nignored,1799994120,58.166667,4000,-400,-1.6,31,Discharging\nignored,1799994180,58.083333,4000,-400,-1.6,31,Discharging\nignored,1799994240,58.000000,4000,-400,-1.6,31,Discharging\nignored,1799994300,57.916667,4000,-400,-1.6,31,Discharging\nignored,1799994360,57.833333,4000,-400,-1.6,31,Discharging\nignored,1799994420,57.750000,4000,-400,-1.6,31,Discharging\nignored,1799994480,57.666667,4000,-400,-1.6,31,Discharging\nignored,1799994540,57.583333,4000,-400,-1.6,31,Discharging\nignored,1799994600,57.500000,4000,-400,-1.6,31,Discharging\nignored,1799994660,57.416667,4000,-400,-1.6,31,Discharging\nignored,1799994720,57.333333,4000,-400,-1.6,31,Discharging\nignored,1799994780,57.250000,4000,-400,-1.6,31,Discharging\nignored,1799994840,57.166667,4000,-400,-1.6,31,Discharging\nignored,1799994900,57.083333,4000,-400,-1.6,31,Discharging\nignored,1799994960,57.000000,4000,-400,-1.6,31,Discharging\nignored,1799995020,56.916667,4000,-400,-1.6,31,Discharging\nignored,1799995080,56.833333,4000,-400,-1.6,31,Discharging\nignored,1799995140,56.750000,4000,-400,-1.6,31,Discharging\nignored,1799995200,56.666667,4000,-400,-1.6,31,Discharging\nignored,1799995260,56.583333,4000,-400,-1.6,31,Discharging\nignored,1799995320,56.500000,4000,-400,-1.6,31,Discharging\nignored,1799995380,56.416667,4000,-400,-1.6,31,Discharging\nignored,1799995440,56.333333,4000,-400,-1.6,31,Discharging\nignored,1799995500,56.250000,4000,-400,-1.6,31,Discharging\nignored,1799995560,56.166667,4000,-400,-1.6,31,Discharging\nignored,1799995620,56.083333,4000,-400,-1.6,31,Discharging\nignored,1799995680,56.000000,4000,-400,-1.6,31,Discharging\nignored,1799995740,55.916667,4000,-400,-1.6,31,Discharging\nignored,1799995800,55.833333,4000,-400,-1.6,31,Discharging\nignored,1799995860,55.750000,4000,-400,-1.6,31,Discharging\nignored,1799995920,55.666667,4000,-400,-1.6,31,Discharging\nignored,1799995980,55.583333,4000,-400,-1.6,31,Discharging\nignored,1799996040,55.500000,4000,-400,-1.6,31,Discharging\nignored,1799996100,55.416667,4000,-400,-1.6,31,Discharging\nignored,1799996160,55.333333,4000,-400,-1.6,31,Discharging\nignored,1799996220,55.250000,4000,-400,-1.6,31,Discharging\nignored,1799996280,55.166667,4000,-400,-1.6,31,Discharging\nignored,1799996340,55.083333,4000,-400,-1.6,31,Discharging\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated"
+        },
+        "windowSeconds": 7200,
+        "csvAnalysis": {
+          "state": "ready",
+          "points": 121,
+          "socMovement": 10,
+          "energyWh": 3.2
+        }
+      }
+    },
+    {
+      "name": "less than SOC minimum movement",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,50.100000,4000,-400,-1.6,31,Discharging\nignored,1799996460,50.098333,4000,-400,-1.6,31,Discharging\nignored,1799996520,50.096667,4000,-400,-1.6,31,Discharging\nignored,1799996580,50.095000,4000,-400,-1.6,31,Discharging\nignored,1799996640,50.093333,4000,-400,-1.6,31,Discharging\nignored,1799996700,50.091667,4000,-400,-1.6,31,Discharging\nignored,1799996760,50.090000,4000,-400,-1.6,31,Discharging\nignored,1799996820,50.088333,4000,-400,-1.6,31,Discharging\nignored,1799996880,50.086667,4000,-400,-1.6,31,Discharging\nignored,1799996940,50.085000,4000,-400,-1.6,31,Discharging\nignored,1799997000,50.083333,4000,-400,-1.6,31,Discharging\nignored,1799997060,50.081667,4000,-400,-1.6,31,Discharging\nignored,1799997120,50.080000,4000,-400,-1.6,31,Discharging\nignored,1799997180,50.078333,4000,-400,-1.6,31,Discharging\nignored,1799997240,50.076667,4000,-400,-1.6,31,Discharging\nignored,1799997300,50.075000,4000,-400,-1.6,31,Discharging\nignored,1799997360,50.073333,4000,-400,-1.6,31,Discharging\nignored,1799997420,50.071667,4000,-400,-1.6,31,Discharging\nignored,1799997480,50.070000,4000,-400,-1.6,31,Discharging\nignored,1799997540,50.068333,4000,-400,-1.6,31,Discharging\nignored,1799997600,50.066667,4000,-400,-1.6,31,Discharging\nignored,1799997660,50.065000,4000,-400,-1.6,31,Discharging\nignored,1799997720,50.063333,4000,-400,-1.6,31,Discharging\nignored,1799997780,50.061667,4000,-400,-1.6,31,Discharging\nignored,1799997840,50.060000,4000,-400,-1.6,31,Discharging\nignored,1799997900,50.058333,4000,-400,-1.6,31,Discharging\nignored,1799997960,50.056667,4000,-400,-1.6,31,Discharging\nignored,1799998020,50.055000,4000,-400,-1.6,31,Discharging\nignored,1799998080,50.053333,4000,-400,-1.6,31,Discharging\nignored,1799998140,50.051667,4000,-400,-1.6,31,Discharging\nignored,1799998200,50.050000,4000,-400,-1.6,31,Discharging\nignored,1799998260,50.048333,4000,-400,-1.6,31,Discharging\nignored,1799998320,50.046667,4000,-400,-1.6,31,Discharging\nignored,1799998380,50.045000,4000,-400,-1.6,31,Discharging\nignored,1799998440,50.043333,4000,-400,-1.6,31,Discharging\nignored,1799998500,50.041667,4000,-400,-1.6,31,Discharging\nignored,1799998560,50.040000,4000,-400,-1.6,31,Discharging\nignored,1799998620,50.038333,4000,-400,-1.6,31,Discharging\nignored,1799998680,50.036667,4000,-400,-1.6,31,Discharging\nignored,1799998740,50.035000,4000,-400,-1.6,31,Discharging\nignored,1799998800,50.033333,4000,-400,-1.6,31,Discharging\nignored,1799998860,50.031667,4000,-400,-1.6,31,Discharging\nignored,1799998920,50.030000,4000,-400,-1.6,31,Discharging\nignored,1799998980,50.028333,4000,-400,-1.6,31,Discharging\nignored,1799999040,50.026667,4000,-400,-1.6,31,Discharging\nignored,1799999100,50.025000,4000,-400,-1.6,31,Discharging\nignored,1799999160,50.023333,4000,-400,-1.6,31,Discharging\nignored,1799999220,50.021667,4000,-400,-1.6,31,Discharging\nignored,1799999280,50.020000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.018333,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.016667,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.015000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.013333,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.011667,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.010000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.008333,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.006667,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.005000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.003333,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.001667,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "soc-movement"
+        }
+      }
+    },
+    {
+      "name": "less than energy minimum",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-0.04,31,Discharging\nignored,1799996460,54.916667,4000,-400,-0.04,31,Discharging\nignored,1799996520,54.833333,4000,-400,-0.04,31,Discharging\nignored,1799996580,54.750000,4000,-400,-0.04,31,Discharging\nignored,1799996640,54.666667,4000,-400,-0.04,31,Discharging\nignored,1799996700,54.583333,4000,-400,-0.04,31,Discharging\nignored,1799996760,54.500000,4000,-400,-0.04,31,Discharging\nignored,1799996820,54.416667,4000,-400,-0.04,31,Discharging\nignored,1799996880,54.333333,4000,-400,-0.04,31,Discharging\nignored,1799996940,54.250000,4000,-400,-0.04,31,Discharging\nignored,1799997000,54.166667,4000,-400,-0.04,31,Discharging\nignored,1799997060,54.083333,4000,-400,-0.04,31,Discharging\nignored,1799997120,54.000000,4000,-400,-0.04,31,Discharging\nignored,1799997180,53.916667,4000,-400,-0.04,31,Discharging\nignored,1799997240,53.833333,4000,-400,-0.04,31,Discharging\nignored,1799997300,53.750000,4000,-400,-0.04,31,Discharging\nignored,1799997360,53.666667,4000,-400,-0.04,31,Discharging\nignored,1799997420,53.583333,4000,-400,-0.04,31,Discharging\nignored,1799997480,53.500000,4000,-400,-0.04,31,Discharging\nignored,1799997540,53.416667,4000,-400,-0.04,31,Discharging\nignored,1799997600,53.333333,4000,-400,-0.04,31,Discharging\nignored,1799997660,53.250000,4000,-400,-0.04,31,Discharging\nignored,1799997720,53.166667,4000,-400,-0.04,31,Discharging\nignored,1799997780,53.083333,4000,-400,-0.04,31,Discharging\nignored,1799997840,53.000000,4000,-400,-0.04,31,Discharging\nignored,1799997900,52.916667,4000,-400,-0.04,31,Discharging\nignored,1799997960,52.833333,4000,-400,-0.04,31,Discharging\nignored,1799998020,52.750000,4000,-400,-0.04,31,Discharging\nignored,1799998080,52.666667,4000,-400,-0.04,31,Discharging\nignored,1799998140,52.583333,4000,-400,-0.04,31,Discharging\nignored,1799998200,52.500000,4000,-400,-0.04,31,Discharging\nignored,1799998260,52.416667,4000,-400,-0.04,31,Discharging\nignored,1799998320,52.333333,4000,-400,-0.04,31,Discharging\nignored,1799998380,52.250000,4000,-400,-0.04,31,Discharging\nignored,1799998440,52.166667,4000,-400,-0.04,31,Discharging\nignored,1799998500,52.083333,4000,-400,-0.04,31,Discharging\nignored,1799998560,52.000000,4000,-400,-0.04,31,Discharging\nignored,1799998620,51.916667,4000,-400,-0.04,31,Discharging\nignored,1799998680,51.833333,4000,-400,-0.04,31,Discharging\nignored,1799998740,51.750000,4000,-400,-0.04,31,Discharging\nignored,1799998800,51.666667,4000,-400,-0.04,31,Discharging\nignored,1799998860,51.583333,4000,-400,-0.04,31,Discharging\nignored,1799998920,51.500000,4000,-400,-0.04,31,Discharging\nignored,1799998980,51.416667,4000,-400,-0.04,31,Discharging\nignored,1799999040,51.333333,4000,-400,-0.04,31,Discharging\nignored,1799999100,51.250000,4000,-400,-0.04,31,Discharging\nignored,1799999160,51.166667,4000,-400,-0.04,31,Discharging\nignored,1799999220,51.083333,4000,-400,-0.04,31,Discharging\nignored,1799999280,51.000000,4000,-400,-0.04,31,Discharging\nignored,1799999340,50.916667,4000,-400,-0.04,31,Discharging\nignored,1799999400,50.833333,4000,-400,-0.04,31,Discharging\nignored,1799999460,50.750000,4000,-400,-0.04,31,Discharging\nignored,1799999520,50.666667,4000,-400,-0.04,31,Discharging\nignored,1799999580,50.583333,4000,-400,-0.04,31,Discharging\nignored,1799999640,50.500000,4000,-400,-0.04,31,Discharging\nignored,1799999700,50.416667,4000,-400,-0.04,31,Discharging\nignored,1799999760,50.333333,4000,-400,-0.04,31,Discharging\nignored,1799999820,50.250000,4000,-400,-0.04,31,Discharging\nignored,1799999880,50.166667,4000,-400,-0.04,31,Discharging\nignored,1799999940,50.083333,4000,-400,-0.04,31,Discharging\nignored,1800000000,50.000000,4000,-400,-0.04,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "energy"
+        }
+      }
+    },
+    {
+      "name": "live SOC correction",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 80,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "live-discontinuity"
+        }
+      }
+    },
+    {
+      "name": "live SOC reverse direction",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50.2,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000060,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "live-discontinuity"
+        }
+      }
+    },
+    {
+      "name": "live current discontinuity",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -2000,
+        "voltageMv": 4000,
+        "netPowerW": -8,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "live-discontinuity"
+        }
+      }
+    },
+    {
+      "name": "reboot within latest hour",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "sampleMonoSeconds": 600
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        },
+        "windowSeconds": 600
+      }
+    },
+    {
+      "name": "boot identity is not invented",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "bootId": "new-boot-without-uptime"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated"
+        },
+        "csvAnalysis": {
+          "state": "ready"
+        }
+      }
+    },
+    {
+      "name": "backward timestamp boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799990000,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "duplicate timestamp boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "SOC correction boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,99,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "opposite mode boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Charging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "opposite current boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "opposite power boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window"
+        }
+      }
+    },
+    {
+      "name": "invalid middle record boundary",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\ninvalid,,,,,,,\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "short-window",
+          "invalidRows": 1
+        }
+      }
+    },
+    {
+      "name": "invalid last record",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging\ninvalid,,,,,,,",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "invalid-latest"
+        }
+      }
+    },
+    {
+      "name": "CSV latest mode does not match live",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,45.000000,4000,400,1.6,31,Charging\nignored,1799996460,45.083333,4000,400,1.6,31,Charging\nignored,1799996520,45.166667,4000,400,1.6,31,Charging\nignored,1799996580,45.250000,4000,400,1.6,31,Charging\nignored,1799996640,45.333333,4000,400,1.6,31,Charging\nignored,1799996700,45.416667,4000,400,1.6,31,Charging\nignored,1799996760,45.500000,4000,400,1.6,31,Charging\nignored,1799996820,45.583333,4000,400,1.6,31,Charging\nignored,1799996880,45.666667,4000,400,1.6,31,Charging\nignored,1799996940,45.750000,4000,400,1.6,31,Charging\nignored,1799997000,45.833333,4000,400,1.6,31,Charging\nignored,1799997060,45.916667,4000,400,1.6,31,Charging\nignored,1799997120,46.000000,4000,400,1.6,31,Charging\nignored,1799997180,46.083333,4000,400,1.6,31,Charging\nignored,1799997240,46.166667,4000,400,1.6,31,Charging\nignored,1799997300,46.250000,4000,400,1.6,31,Charging\nignored,1799997360,46.333333,4000,400,1.6,31,Charging\nignored,1799997420,46.416667,4000,400,1.6,31,Charging\nignored,1799997480,46.500000,4000,400,1.6,31,Charging\nignored,1799997540,46.583333,4000,400,1.6,31,Charging\nignored,1799997600,46.666667,4000,400,1.6,31,Charging\nignored,1799997660,46.750000,4000,400,1.6,31,Charging\nignored,1799997720,46.833333,4000,400,1.6,31,Charging\nignored,1799997780,46.916667,4000,400,1.6,31,Charging\nignored,1799997840,47.000000,4000,400,1.6,31,Charging\nignored,1799997900,47.083333,4000,400,1.6,31,Charging\nignored,1799997960,47.166667,4000,400,1.6,31,Charging\nignored,1799998020,47.250000,4000,400,1.6,31,Charging\nignored,1799998080,47.333333,4000,400,1.6,31,Charging\nignored,1799998140,47.416667,4000,400,1.6,31,Charging\nignored,1799998200,47.500000,4000,400,1.6,31,Charging\nignored,1799998260,47.583333,4000,400,1.6,31,Charging\nignored,1799998320,47.666667,4000,400,1.6,31,Charging\nignored,1799998380,47.750000,4000,400,1.6,31,Charging\nignored,1799998440,47.833333,4000,400,1.6,31,Charging\nignored,1799998500,47.916667,4000,400,1.6,31,Charging\nignored,1799998560,48.000000,4000,400,1.6,31,Charging\nignored,1799998620,48.083333,4000,400,1.6,31,Charging\nignored,1799998680,48.166667,4000,400,1.6,31,Charging\nignored,1799998740,48.250000,4000,400,1.6,31,Charging\nignored,1799998800,48.333333,4000,400,1.6,31,Charging\nignored,1799998860,48.416667,4000,400,1.6,31,Charging\nignored,1799998920,48.500000,4000,400,1.6,31,Charging\nignored,1799998980,48.583333,4000,400,1.6,31,Charging\nignored,1799999040,48.666667,4000,400,1.6,31,Charging\nignored,1799999100,48.750000,4000,400,1.6,31,Charging\nignored,1799999160,48.833333,4000,400,1.6,31,Charging\nignored,1799999220,48.916667,4000,400,1.6,31,Charging\nignored,1799999280,49.000000,4000,400,1.6,31,Charging\nignored,1799999340,49.083333,4000,400,1.6,31,Charging\nignored,1799999400,49.166667,4000,400,1.6,31,Charging\nignored,1799999460,49.250000,4000,400,1.6,31,Charging\nignored,1799999520,49.333333,4000,400,1.6,31,Charging\nignored,1799999580,49.416667,4000,400,1.6,31,Charging\nignored,1799999640,49.500000,4000,400,1.6,31,Charging\nignored,1799999700,49.583333,4000,400,1.6,31,Charging\nignored,1799999760,49.666667,4000,400,1.6,31,Charging\nignored,1799999820,49.750000,4000,400,1.6,31,Charging\nignored,1799999880,49.833333,4000,400,1.6,31,Charging\nignored,1799999940,49.916667,4000,400,1.6,31,Charging\nignored,1800000000,50.000000,4000,400,1.6,31,Charging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "collecting"
+        },
+        "csvAnalysis": {
+          "state": "collecting",
+          "reason": "live-discontinuity"
+        }
+      }
+    },
+    {
+      "name": "confirmed full guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 100,
+        "mode": "full",
+        "netCurrentMa": 20,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "fullConfirmed": true
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "timeToFull": {
+          "minutes": null,
+          "state": "full"
+        },
+        "runtime": {
+          "minutes": null,
+          "state": "not-applicable"
+        }
+      }
+    },
+    {
+      "name": "unconfirmed full guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 100,
+        "mode": "full",
+        "netCurrentMa": 20,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "fullConfirmed": false
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "timeToFull": {
+          "minutes": null,
+          "state": "confirming"
+        }
+      }
+    },
+    {
+      "name": "confirming guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "confirming",
+        "netCurrentMa": 20,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "timeToFull": {
+          "minutes": null,
+          "state": "confirming"
+        },
+        "runtime": {
+          "minutes": null,
+          "state": "not-applicable"
+        }
+      }
+    },
+    {
+      "name": "taper guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,91.000000,4000,400,1.6,31,Charging\nignored,1799996460,91.083333,4000,400,1.6,31,Charging\nignored,1799996520,91.166667,4000,400,1.6,31,Charging\nignored,1799996580,91.250000,4000,400,1.6,31,Charging\nignored,1799996640,91.333333,4000,400,1.6,31,Charging\nignored,1799996700,91.416667,4000,400,1.6,31,Charging\nignored,1799996760,91.500000,4000,400,1.6,31,Charging\nignored,1799996820,91.583333,4000,400,1.6,31,Charging\nignored,1799996880,91.666667,4000,400,1.6,31,Charging\nignored,1799996940,91.750000,4000,400,1.6,31,Charging\nignored,1799997000,91.833333,4000,400,1.6,31,Charging\nignored,1799997060,91.916667,4000,400,1.6,31,Charging\nignored,1799997120,92.000000,4000,400,1.6,31,Charging\nignored,1799997180,92.083333,4000,400,1.6,31,Charging\nignored,1799997240,92.166667,4000,400,1.6,31,Charging\nignored,1799997300,92.250000,4000,400,1.6,31,Charging\nignored,1799997360,92.333333,4000,400,1.6,31,Charging\nignored,1799997420,92.416667,4000,400,1.6,31,Charging\nignored,1799997480,92.500000,4000,400,1.6,31,Charging\nignored,1799997540,92.583333,4000,400,1.6,31,Charging\nignored,1799997600,92.666667,4000,400,1.6,31,Charging\nignored,1799997660,92.750000,4000,400,1.6,31,Charging\nignored,1799997720,92.833333,4000,400,1.6,31,Charging\nignored,1799997780,92.916667,4000,400,1.6,31,Charging\nignored,1799997840,93.000000,4000,400,1.6,31,Charging\nignored,1799997900,93.083333,4000,400,1.6,31,Charging\nignored,1799997960,93.166667,4000,400,1.6,31,Charging\nignored,1799998020,93.250000,4000,400,1.6,31,Charging\nignored,1799998080,93.333333,4000,400,1.6,31,Charging\nignored,1799998140,93.416667,4000,400,1.6,31,Charging\nignored,1799998200,93.500000,4000,400,1.6,31,Charging\nignored,1799998260,93.583333,4000,400,1.6,31,Charging\nignored,1799998320,93.666667,4000,400,1.6,31,Charging\nignored,1799998380,93.750000,4000,400,1.6,31,Charging\nignored,1799998440,93.833333,4000,400,1.6,31,Charging\nignored,1799998500,93.916667,4000,400,1.6,31,Charging\nignored,1799998560,94.000000,4000,400,1.6,31,Charging\nignored,1799998620,94.083333,4000,400,1.6,31,Charging\nignored,1799998680,94.166667,4000,400,1.6,31,Charging\nignored,1799998740,94.250000,4000,400,1.6,31,Charging\nignored,1799998800,94.333333,4000,400,1.6,31,Charging\nignored,1799998860,94.416667,4000,400,1.6,31,Charging\nignored,1799998920,94.500000,4000,400,1.6,31,Charging\nignored,1799998980,94.583333,4000,400,1.6,31,Charging\nignored,1799999040,94.666667,4000,400,1.6,31,Charging\nignored,1799999100,94.750000,4000,400,1.6,31,Charging\nignored,1799999160,94.833333,4000,400,1.6,31,Charging\nignored,1799999220,94.916667,4000,400,1.6,31,Charging\nignored,1799999280,95.000000,4000,400,1.6,31,Charging\nignored,1799999340,95.083333,4000,400,1.6,31,Charging\nignored,1799999400,95.166667,4000,400,1.6,31,Charging\nignored,1799999460,95.250000,4000,400,1.6,31,Charging\nignored,1799999520,95.333333,4000,400,1.6,31,Charging\nignored,1799999580,95.416667,4000,400,1.6,31,Charging\nignored,1799999640,95.500000,4000,400,1.6,31,Charging\nignored,1799999700,95.583333,4000,400,1.6,31,Charging\nignored,1799999760,95.666667,4000,400,1.6,31,Charging\nignored,1799999820,95.750000,4000,400,1.6,31,Charging\nignored,1799999880,95.833333,4000,400,1.6,31,Charging\nignored,1799999940,95.916667,4000,400,1.6,31,Charging\nignored,1800000000,96.000000,4000,400,1.6,31,Charging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 96,
+        "mode": "charging",
+        "netCurrentMa": 400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "timeToFull": {
+          "minutes": null,
+          "state": "tapering"
+        }
+      }
+    },
+    {
+      "name": "low voltage guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "eodImminent": true
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "low-battery"
+        }
+      }
+    },
+    {
+      "name": "low voltage clamp guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "eodClamp": true
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "low-battery"
+        }
+      }
+    },
+    {
+      "name": "unknown guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "unknown",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unknown"
+        },
+        "timeToFull": {
+          "minutes": null,
+          "state": "unknown"
+        }
+      }
+    },
+    {
+      "name": "external power guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "external",
+        "netCurrentMa": 0,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json",
+        "externalPower": true
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "external"
+        },
+        "timeToFull": {
+          "minutes": null,
+          "state": "external"
+        }
+      }
+    },
+    {
+      "name": "low live current guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -20,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "low-current"
+        }
+      }
+    },
+    {
+      "name": "opposite live current guard",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": 400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unknown"
+        }
+      }
+    },
+    {
+      "name": "missing live current",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-1.6,31,Discharging\nignored,1799996460,54.916667,4000,-400,-1.6,31,Discharging\nignored,1799996520,54.833333,4000,-400,-1.6,31,Discharging\nignored,1799996580,54.750000,4000,-400,-1.6,31,Discharging\nignored,1799996640,54.666667,4000,-400,-1.6,31,Discharging\nignored,1799996700,54.583333,4000,-400,-1.6,31,Discharging\nignored,1799996760,54.500000,4000,-400,-1.6,31,Discharging\nignored,1799996820,54.416667,4000,-400,-1.6,31,Discharging\nignored,1799996880,54.333333,4000,-400,-1.6,31,Discharging\nignored,1799996940,54.250000,4000,-400,-1.6,31,Discharging\nignored,1799997000,54.166667,4000,-400,-1.6,31,Discharging\nignored,1799997060,54.083333,4000,-400,-1.6,31,Discharging\nignored,1799997120,54.000000,4000,-400,-1.6,31,Discharging\nignored,1799997180,53.916667,4000,-400,-1.6,31,Discharging\nignored,1799997240,53.833333,4000,-400,-1.6,31,Discharging\nignored,1799997300,53.750000,4000,-400,-1.6,31,Discharging\nignored,1799997360,53.666667,4000,-400,-1.6,31,Discharging\nignored,1799997420,53.583333,4000,-400,-1.6,31,Discharging\nignored,1799997480,53.500000,4000,-400,-1.6,31,Discharging\nignored,1799997540,53.416667,4000,-400,-1.6,31,Discharging\nignored,1799997600,53.333333,4000,-400,-1.6,31,Discharging\nignored,1799997660,53.250000,4000,-400,-1.6,31,Discharging\nignored,1799997720,53.166667,4000,-400,-1.6,31,Discharging\nignored,1799997780,53.083333,4000,-400,-1.6,31,Discharging\nignored,1799997840,53.000000,4000,-400,-1.6,31,Discharging\nignored,1799997900,52.916667,4000,-400,-1.6,31,Discharging\nignored,1799997960,52.833333,4000,-400,-1.6,31,Discharging\nignored,1799998020,52.750000,4000,-400,-1.6,31,Discharging\nignored,1799998080,52.666667,4000,-400,-1.6,31,Discharging\nignored,1799998140,52.583333,4000,-400,-1.6,31,Discharging\nignored,1799998200,52.500000,4000,-400,-1.6,31,Discharging\nignored,1799998260,52.416667,4000,-400,-1.6,31,Discharging\nignored,1799998320,52.333333,4000,-400,-1.6,31,Discharging\nignored,1799998380,52.250000,4000,-400,-1.6,31,Discharging\nignored,1799998440,52.166667,4000,-400,-1.6,31,Discharging\nignored,1799998500,52.083333,4000,-400,-1.6,31,Discharging\nignored,1799998560,52.000000,4000,-400,-1.6,31,Discharging\nignored,1799998620,51.916667,4000,-400,-1.6,31,Discharging\nignored,1799998680,51.833333,4000,-400,-1.6,31,Discharging\nignored,1799998740,51.750000,4000,-400,-1.6,31,Discharging\nignored,1799998800,51.666667,4000,-400,-1.6,31,Discharging\nignored,1799998860,51.583333,4000,-400,-1.6,31,Discharging\nignored,1799998920,51.500000,4000,-400,-1.6,31,Discharging\nignored,1799998980,51.416667,4000,-400,-1.6,31,Discharging\nignored,1799999040,51.333333,4000,-400,-1.6,31,Discharging\nignored,1799999100,51.250000,4000,-400,-1.6,31,Discharging\nignored,1799999160,51.166667,4000,-400,-1.6,31,Discharging\nignored,1799999220,51.083333,4000,-400,-1.6,31,Discharging\nignored,1799999280,51.000000,4000,-400,-1.6,31,Discharging\nignored,1799999340,50.916667,4000,-400,-1.6,31,Discharging\nignored,1799999400,50.833333,4000,-400,-1.6,31,Discharging\nignored,1799999460,50.750000,4000,-400,-1.6,31,Discharging\nignored,1799999520,50.666667,4000,-400,-1.6,31,Discharging\nignored,1799999580,50.583333,4000,-400,-1.6,31,Discharging\nignored,1799999640,50.500000,4000,-400,-1.6,31,Discharging\nignored,1799999700,50.416667,4000,-400,-1.6,31,Discharging\nignored,1799999760,50.333333,4000,-400,-1.6,31,Discharging\nignored,1799999820,50.250000,4000,-400,-1.6,31,Discharging\nignored,1799999880,50.166667,4000,-400,-1.6,31,Discharging\nignored,1799999940,50.083333,4000,-400,-1.6,31,Discharging\nignored,1800000000,50.000000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": null,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": null,
+          "state": "unavailable"
+        },
+        "csvAnalysis": {
+          "state": "unavailable",
+          "reason": "live-current"
+        }
+      }
+    },
+    {
+      "name": "exact SOC minimum accepted despite floating subtraction",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,0.300000,4000,-400,-1.6,31,Discharging\nignored,1799996520,0.293333,4000,-400,-1.6,31,Discharging\nignored,1799996640,0.286667,4000,-400,-1.6,31,Discharging\nignored,1799996760,0.280000,4000,-400,-1.6,31,Discharging\nignored,1799996880,0.273333,4000,-400,-1.6,31,Discharging\nignored,1799997000,0.266667,4000,-400,-1.6,31,Discharging\nignored,1799997120,0.260000,4000,-400,-1.6,31,Discharging\nignored,1799997240,0.253333,4000,-400,-1.6,31,Discharging\nignored,1799997360,0.246667,4000,-400,-1.6,31,Discharging\nignored,1799997480,0.240000,4000,-400,-1.6,31,Discharging\nignored,1799997600,0.233333,4000,-400,-1.6,31,Discharging\nignored,1799997720,0.226667,4000,-400,-1.6,31,Discharging\nignored,1799997840,0.220000,4000,-400,-1.6,31,Discharging\nignored,1799997960,0.213333,4000,-400,-1.6,31,Discharging\nignored,1799998080,0.206667,4000,-400,-1.6,31,Discharging\nignored,1799998200,0.200000,4000,-400,-1.6,31,Discharging\nignored,1799998320,0.193333,4000,-400,-1.6,31,Discharging\nignored,1799998440,0.186667,4000,-400,-1.6,31,Discharging\nignored,1799998560,0.180000,4000,-400,-1.6,31,Discharging\nignored,1799998680,0.173333,4000,-400,-1.6,31,Discharging\nignored,1799998800,0.166667,4000,-400,-1.6,31,Discharging\nignored,1799998920,0.160000,4000,-400,-1.6,31,Discharging\nignored,1799999040,0.153333,4000,-400,-1.6,31,Discharging\nignored,1799999160,0.146667,4000,-400,-1.6,31,Discharging\nignored,1799999280,0.140000,4000,-400,-1.6,31,Discharging\nignored,1799999400,0.133333,4000,-400,-1.6,31,Discharging\nignored,1799999520,0.126667,4000,-400,-1.6,31,Discharging\nignored,1799999640,0.120000,4000,-400,-1.6,31,Discharging\nignored,1799999760,0.113333,4000,-400,-1.6,31,Discharging\nignored,1799999880,0.106667,4000,-400,-1.6,31,Discharging\nignored,1800000000,0.100000,4000,-400,-1.6,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 0.1,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 30,
+          "state": "estimated",
+          "method": "device-csv",
+          "targetPercent": 0
+        },
+        "csvAnalysis": {
+          "state": "ready",
+          "reason": "",
+          "socMovement": 0.2,
+          "energyWh": 1.6,
+          "points": 31,
+          "windowSeconds": 3600
+        }
+      }
+    },
+    {
+      "name": "exact energy minimum accepted despite floating sum",
+      "csv": "ts_iso,ts,soc,voltage_mv,current_ma,power_w,temp_c,status\nignored,1799996400,55.000000,4000,-400,-0.05,31,Discharging\nignored,1799996460,54.916667,4000,-400,-0.05,31,Discharging\nignored,1799996520,54.833333,4000,-400,-0.05,31,Discharging\nignored,1799996580,54.750000,4000,-400,-0.05,31,Discharging\nignored,1799996640,54.666667,4000,-400,-0.05,31,Discharging\nignored,1799996700,54.583333,4000,-400,-0.05,31,Discharging\nignored,1799996760,54.500000,4000,-400,-0.05,31,Discharging\nignored,1799996820,54.416667,4000,-400,-0.05,31,Discharging\nignored,1799996880,54.333333,4000,-400,-0.05,31,Discharging\nignored,1799996940,54.250000,4000,-400,-0.05,31,Discharging\nignored,1799997000,54.166667,4000,-400,-0.05,31,Discharging\nignored,1799997060,54.083333,4000,-400,-0.05,31,Discharging\nignored,1799997120,54.000000,4000,-400,-0.05,31,Discharging\nignored,1799997180,53.916667,4000,-400,-0.05,31,Discharging\nignored,1799997240,53.833333,4000,-400,-0.05,31,Discharging\nignored,1799997300,53.750000,4000,-400,-0.05,31,Discharging\nignored,1799997360,53.666667,4000,-400,-0.05,31,Discharging\nignored,1799997420,53.583333,4000,-400,-0.05,31,Discharging\nignored,1799997480,53.500000,4000,-400,-0.05,31,Discharging\nignored,1799997540,53.416667,4000,-400,-0.05,31,Discharging\nignored,1799997600,53.333333,4000,-400,-0.05,31,Discharging\nignored,1799997660,53.250000,4000,-400,-0.05,31,Discharging\nignored,1799997720,53.166667,4000,-400,-0.05,31,Discharging\nignored,1799997780,53.083333,4000,-400,-0.05,31,Discharging\nignored,1799997840,53.000000,4000,-400,-0.05,31,Discharging\nignored,1799997900,52.916667,4000,-400,-0.05,31,Discharging\nignored,1799997960,52.833333,4000,-400,-0.05,31,Discharging\nignored,1799998020,52.750000,4000,-400,-0.05,31,Discharging\nignored,1799998080,52.666667,4000,-400,-0.05,31,Discharging\nignored,1799998140,52.583333,4000,-400,-0.05,31,Discharging\nignored,1799998200,52.500000,4000,-400,-0.05,31,Discharging\nignored,1799998260,52.416667,4000,-400,-0.05,31,Discharging\nignored,1799998320,52.333333,4000,-400,-0.05,31,Discharging\nignored,1799998380,52.250000,4000,-400,-0.05,31,Discharging\nignored,1799998440,52.166667,4000,-400,-0.05,31,Discharging\nignored,1799998500,52.083333,4000,-400,-0.05,31,Discharging\nignored,1799998560,52.000000,4000,-400,-0.05,31,Discharging\nignored,1799998620,51.916667,4000,-400,-0.05,31,Discharging\nignored,1799998680,51.833333,4000,-400,-0.05,31,Discharging\nignored,1799998740,51.750000,4000,-400,-0.05,31,Discharging\nignored,1799998800,51.666667,4000,-400,-0.05,31,Discharging\nignored,1799998860,51.583333,4000,-400,-0.05,31,Discharging\nignored,1799998920,51.500000,4000,-400,-0.05,31,Discharging\nignored,1799998980,51.416667,4000,-400,-0.05,31,Discharging\nignored,1799999040,51.333333,4000,-400,-0.05,31,Discharging\nignored,1799999100,51.250000,4000,-400,-0.05,31,Discharging\nignored,1799999160,51.166667,4000,-400,-0.05,31,Discharging\nignored,1799999220,51.083333,4000,-400,-0.05,31,Discharging\nignored,1799999280,51.000000,4000,-400,-0.05,31,Discharging\nignored,1799999340,50.916667,4000,-400,-0.05,31,Discharging\nignored,1799999400,50.833333,4000,-400,-0.05,31,Discharging\nignored,1799999460,50.750000,4000,-400,-0.05,31,Discharging\nignored,1799999520,50.666667,4000,-400,-0.05,31,Discharging\nignored,1799999580,50.583333,4000,-400,-0.05,31,Discharging\nignored,1799999640,50.500000,4000,-400,-0.05,31,Discharging\nignored,1799999700,50.416667,4000,-400,-0.05,31,Discharging\nignored,1799999760,50.333333,4000,-400,-0.05,31,Discharging\nignored,1799999820,50.250000,4000,-400,-0.05,31,Discharging\nignored,1799999880,50.166667,4000,-400,-0.05,31,Discharging\nignored,1799999940,50.083333,4000,-400,-0.05,31,Discharging\nignored,1800000000,50.000000,4000,-400,-0.05,31,Discharging",
+      "measurement": {
+        "schemaVersion": 2,
+        "rawSoc": 50,
+        "mode": "discharging",
+        "netCurrentMa": -400,
+        "voltageMv": 4000,
+        "netPowerW": -1.6,
+        "usableCapacityMah": 8000,
+        "percentageSource": "gauge88",
+        "endpoint": "http://fixture.invalid:88/state.json"
+      },
+      "deviceNowSeconds": 1800000000,
+      "calculatedAt": 1900000000000,
+      "expected": {
+        "runtime": {
+          "minutes": 600,
+          "state": "estimated",
+          "method": "device-csv",
+          "targetPercent": 0
+        },
+        "csvAnalysis": {
+          "state": "ready",
+          "reason": "",
+          "socMovement": 5,
+          "energyWh": 0.05,
+          "points": 61,
+          "windowSeconds": 3600
+        }
+      }
+    }
+  ]
+}

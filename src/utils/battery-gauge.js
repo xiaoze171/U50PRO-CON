@@ -35,11 +35,12 @@ export function batteryGaugeReading(raw, headers = {}, url = '', now = Date.now(
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
   const ageHeader = Object.entries(headers).find(([key]) => key.toLowerCase() === 'x-gauge-age')?.[1];
   const hasAgeHeader = ageHeader != null && String(ageHeader).trim() !== '';
-  const age = hasAgeHeader
-    ? Number(ageHeader)
-    : typeof raw.ts === 'number' && Number.isFinite(raw.ts) ? now / 1000 - raw.ts : NaN;
+  // ts belongs to the device clock. Only a relative age can establish freshness
+  // on a phone whose clock may differ from that device by hours.
+  if (!hasAgeHeader) return { ...result, state: 'unavailable', error: '设备未提供相对数据时龄' };
+  const age = Number(ageHeader);
   if (!Number.isFinite(age) || age < 0 || age > 5) return { ...result, state: 'stale' };
-  result.validUntil = hasAgeHeader ? now + (5 - age) * 1000 : raw.ts * 1000 + 5000;
+  result.validUntil = now + (5 - age) * 1000;
   if (raw.data_quality !== 'ok' || typeof raw.soc !== 'number' || !Number.isFinite(raw.soc) || raw.soc < 0 || raw.soc > 100) return result;
   const pendingFull = ['Charging', 'Full'].includes(raw.status) && raw.full_confirmed === false;
   return {

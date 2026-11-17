@@ -71,3 +71,32 @@ test('desktop factory redirects still send and update the shared login session',
     assert.equal(session.header(), 'login=factory-final');
   });
 });
+
+test('desktop CSV text and all redirected hops stay isolated from factory cookies', async () => {
+  const requests = [];
+  await withServer((req, res) => {
+    requests.push({ path: req.url, cookie: req.headers.cookie });
+    res.setHeader('Set-Cookie', 'login=csv');
+    if (req.url === '/backup/battery-log.csv') { res.writeHead(302, { Location: '/csv/actual' }); res.end(); }
+    else { res.setHeader('Content-Type', 'text/csv'); res.end('ts,soc\n1,50\n'); }
+  }, async origin => {
+    session.replace('login=factory');
+    const result = await routerHttp.request({ url: `${origin}/backup/battery-log.csv`, headers: { Cookie: 'leak=yes' } });
+    assert.equal(result.ok, true);
+    assert.equal(result.body, 'ts,soc\n1,50');
+    assert.deepEqual(requests, [
+      { path: '/backup/battery-log.csv', cookie: undefined },
+      { path: '/csv/actual', cookie: undefined }
+    ]);
+    assert.equal(session.header(), 'login=factory');
+  });
+});
+
+test('desktop CSV downloads stop at the body bound instead of returning truncated history', async () => {
+  await withServer((req, res) => { res.end('x'.repeat(4 * 1024 * 1024 + 1)); }, async origin => {
+    const result = await routerHttp.request({ url: `${origin}/backup/battery-log.csv` });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /4 MiB|过大/);
+    assert.equal(result.body, undefined);
+  });
+});

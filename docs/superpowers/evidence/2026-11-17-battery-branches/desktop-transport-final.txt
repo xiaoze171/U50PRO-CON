@@ -1,0 +1,38 @@
+
+> u50pro-console-desktop@1.4.5 selftest:transport
+> node sync-selftest.js
+
+== sync-server ==
+  PASS  tokenFingerprint 长度为 8
+  PASS  token 为大写十六进制
+  PASS  fetchPeer /sync/hello 成功
+  PASS  /sync/hello app 标签正确
+  PASS  /sync/hello 回报本机身份
+  PASS  /sync/hello tokenFP 与服务端一致
+  PASS  未带令牌被拒 (403)
+  PASS  错误令牌被拒 (403)
+  PASS  /sync/live 返回已发布快照
+  PASS  /sync/live 为旧查看端补回电池历史
+  PASS  精简实时接口不携带电池历史
+  PASS  /sync/history 全量返回全部 rsrp 桶
+  PASS  /sync/history 全量返回温度序列
+  PASS  /sync/history 全量返回电池
+  PASS  /sync/history?since 只返回新于 since 的 rsrp 桶
+  PASS  /sync/history?since 电池增量正确
+  PASS  /sync/history 回报 now 时间戳
+  PASS  POST /sync/history 返回 ok
+  PASS  drainInbound 返回 1 条入站片段
+  PASS  入站片段携带 chart 数据
+  PASS  drainInbound 二次调用为空（已清空）
+  PASS  非局域网地址被拒绝
+  PASS  无令牌时 fetchPeer 报“同步未启用”
+  PASS  关闭令牌后服务端一律 403
+== discovery ==
+  PASS  发现合法对端 peer-2
+  PASS  对端 host 被记录为 127.0.0.1
+  PASS  忽略自身信标 self-1
+  PASS  过滤 tokenFP 不匹配的 peer-x
+  PASS  忽略非本应用信标 peer-y
+
+结果：29 通过 / 0 失败
+SELFTEST_ALL_PASS

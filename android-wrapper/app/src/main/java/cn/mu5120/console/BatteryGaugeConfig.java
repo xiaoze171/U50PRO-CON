@@ -10,9 +10,7 @@ final class BatteryGaugeConfig {
     final int port;
 
     BatteryGaugeConfig(String source, String host, int port) {
-        String normalizedSource = source == null || source.trim().isEmpty() ? "gauge" : source.trim();
-        if (!"gauge".equals(normalizedSource) && !"factory".equals(normalizedSource)) throw new IllegalArgumentException("Invalid battery source");
-        if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid battery port");
+        String normalizedSource = BatteryProfile.source();
         String normalizedHost = host == null ? "" : host.trim();
         if (!normalizedHost.isEmpty()) {
             if (normalizedHost.matches(".*[\\s/@?#\\\\].*")) throw new IllegalArgumentException("Invalid battery host");
@@ -25,20 +23,26 @@ final class BatteryGaugeConfig {
         }
         this.source = normalizedSource;
         this.host = normalizedHost;
-        this.port = port;
+        this.port = 88;
     }
 
     static BatteryGaugeConfig fromJson(JSONObject json) {
         JSONObject input = json == null ? new JSONObject() : json;
-        String rawPort = String.valueOf(input.opt("batteryPort") == null || input.isNull("batteryPort") ? 88 : input.opt("batteryPort")).trim();
-        if (!rawPort.matches("[0-9]+")) throw new IllegalArgumentException("Invalid battery port");
-        return new BatteryGaugeConfig(input.optString("batterySource", "gauge"), input.optString("batteryHost", ""), Integer.parseInt(rawPort));
+        return new BatteryGaugeConfig(BatteryProfile.source(), input.optString("batteryHost", ""), 88);
     }
 
     String endpoint(String routerUrl) throws java.net.MalformedURLException {
+        return endpoint(routerUrl, "/state.json");
+    }
+
+    String csvEndpoint(String routerUrl) throws java.net.MalformedURLException {
+        return endpoint(routerUrl, "/backup/battery-log.csv");
+    }
+
+    private String endpoint(String routerUrl, String path) throws java.net.MalformedURLException {
         URL router = new URL(routerUrl);
         if (!"http".equals(router.getProtocol()) && !"https".equals(router.getProtocol())) throw new java.net.MalformedURLException("Only HTTP/HTTPS supported");
-        return new URL(router.getProtocol(), host.isEmpty() ? router.getHost() : host, port, "/state.json").toExternalForm();
+        return new URL(router.getProtocol(), host.isEmpty() ? router.getHost() : host, 88, path).toExternalForm();
     }
 
     boolean matches(JSONObject status, String routerUrl) {

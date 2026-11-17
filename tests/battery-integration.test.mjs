@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { importBatteryProfileClient } from './helpers/battery-profile-client.mjs';
 
 let now = 1800000000000;
 const realNow = Date.now;
@@ -19,20 +20,23 @@ globalThis.window = { AndroidRouter: {
     const fields = { loginfo: 'ok', battery_charging: '0', battery_vol_percent: String(factoryPercent),
       battery_temp: '45', battery_current: '999999', battery_voltage: '999999', battery_capacity: '999999' };
     const cmd = url.searchParams.get('cmd') || '';
-    const body = url.pathname === '/state.json' ? gauge
+    const csv = url.pathname === '/backup/battery-log.csv';
+    const body = csv ? 'ts,ts_iso,soc,voltage_mv,current_ma,power_w,temp_c,status\n' +
+      Array.from({ length: 61 }, (_, i) => `${gauge.ts - 3600 + i * 60},,${gauge.soc + (60 - i) / 12},4000,-400,-1.6,31,Discharging`).join('\n')
+      : url.pathname === '/state.json' ? gauge
       : ['station_list', 'lan_station_list'].includes(cmd) ? { [cmd]: [] }
         : Object.fromEntries(cmd.split(',').map(key => [key, fields[key] ?? '']));
     const response = unavailable && url.pathname === '/state.json' ? { ok: false, status: 503 }
-      : { ok: true, status: 200, headers: { 'X-Gauge-Age': '0' }, body: JSON.stringify(body) };
+      : { ok: true, status: 200, headers: { 'X-Gauge-Age': '0' }, body: csv ? body : JSON.stringify(body) };
     queueMicrotask(() => window.__mu5120NativeResponse(id, JSON.stringify(response)));
   }
 } };
-const { routerApi } = await import('../src/services/router-client.js');
+const { routerApi } = await importBatteryProfileClient('gauge88-csv');
 
 function configure(seconds = 0, extra = {}) {
   now = 1800000000000 + seconds * 1000;
-  gauge = { soc: 50, status: 'Discharging', current_ma: -400, capacity_mah_used: 8000,
-    capacity_basis: 'fixture', boot_id: 'integration-boot', sample_mono_s: seconds,
+  gauge = { ts: 4600 + seconds, soc: 50, status: 'Discharging', current_ma: -400, capacity_mah_used: 8000,
+    capacity_basis: 'fixture', boot_id: 'integration-boot', sample_mono_s: 4000 + seconds,
     voltage_mv: 4000, power_w: -1.6, temp_c: 31, data_quality: 'ok', usb_online: 1,
     full_confirmed: false, full_anchor_valid: true, full_anchor_ts: 100, ...extra };
 }
@@ -115,28 +119,28 @@ test('late dashboard work cannot refresh an expired gauge response', async () =>
   }
 });
 
-test('source roundtrips reset SOC fallback while retaining chart history', async () => {
+test('endpoint roundtrips retain chart history while device CSV replaces any app SOC fallback', async () => {
   Date.now = () => now;
   try {
     configure(1000);
-    routerApi.updateConfig({ batterySource: 'factory' });
+    routerApi.updateConfig({ batteryHost: 'another.test' });
     const start = now;
     routerApi.mergeExternalBattery(Array.from({ length: 11 }, (_, i) => ({
       timestamp: start + i * 60000, percent: 52 - i * 0.2, charging: false,
-      percentSource: 'router', percentEndpoint: 'http://router.test'
+      percentSource: 'gauge88', percentEndpoint: 'http://another.test:88/state.json'
     })));
     configure(1600); factoryPercent = 50;
     const before = await routerApi.dashboard();
     assert.equal(before.battery.runtime.state, 'estimated');
     configure(1601);
-    routerApi.updateConfig({ batterySource: 'gauge' });
-    routerApi.updateConfig({ batterySource: 'factory' });
+    routerApi.updateConfig({ batteryHost: '' });
+    routerApi.updateConfig({ batteryHost: 'another.test' });
     const after = await routerApi.dashboard();
-    assert.equal(after.battery.runtime.state, 'collecting');
-    assert.equal(after.battery.runtime.minutes, null);
+    assert.equal(after.battery.runtime.state, 'estimated');
+    assert.equal(after.battery.runtime.minutes, 600, 'new endpoint CSV is sufficient independently of app history');
     assert.ok(after.battery.samples.some(item => item.timestamp === start));
   } finally {
-    routerApi.updateConfig({ batterySource: 'gauge' });
+    routerApi.updateConfig({ batteryHost: '' });
     Date.now = realNow;
   }
 });
@@ -146,7 +150,7 @@ test('restored blocks keep the original historical measurement and source', asyn
   try {
     configure(1700);
     const first = await routerApi.dashboard();
-    const measurement = { ...first.battery.measurement, rawSoc: 51, sampleMonoSeconds: 1730 };
+    const measurement = { ...first.battery.measurement, rawSoc: 51, sampleMonoSeconds: 5730 };
     const { batteryMeasurementIdentity } = await import('../src/utils/battery-current-window.js');
     const identity = batteryMeasurementIdentity({ measurement });
     const original = { timestamp: now + 30000, percent: 51, charging: false,
@@ -161,7 +165,7 @@ test('restored blocks keep the original historical measurement and source', asyn
     const restored = routerApi.getBatteryHistory().find(item => item.currentStats?.blockId === 'native-keep:minute');
     assert.equal(restored.percent, 51);
     assert.equal(restored.measurement.rawSoc, 51);
-    assert.equal(restored.measurement.sampleMonoSeconds, 1730);
+    assert.equal(restored.measurement.sampleMonoSeconds, 5730);
     assert.equal(restored.source, 'background');
   } finally { Date.now = realNow; }
 });
@@ -171,7 +175,7 @@ test('split minute statistics retain the actual observation time', async () => {
   try {
     routerApi.resetBatteryCollection();
     for (const second of [2005, 2025, 2065]) { configure(second); await routerApi.dashboard(); }
-    const records = routerApi.getBatteryHistory().filter(item => item.currentStats && item.measurement?.sampleMonoSeconds === 2065);
+    const records = routerApi.getBatteryHistory().filter(item => item.currentStats && item.measurement?.sampleMonoSeconds === 6065);
     assert.ok(records.some(item => item.currentStats.endAt < now), 'one completed minute ends before this acquisition');
     for (const item of records) assert.equal(item.timestamp, now, 'integral boundary is independent of sample reception');
   } finally { Date.now = realNow; }

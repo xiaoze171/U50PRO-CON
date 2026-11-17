@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+def batteryProfile = new groovy.json.JsonSlurper().parse(file('../../config/battery-profile.json')).mode
+if (!(batteryProfile in ['factory', 'gauge88-csv'])) throw new GradleException('Invalid battery profile')
+
 android {
     compileSdkVersion 30
     buildToolsVersion '30.0.3'
@@ -11,6 +14,7 @@ android {
         versionCode 77
         versionName '1.4.5'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        buildConfigField 'String', 'BATTERY_PROFILE', '"' + batteryProfile + '"'
     }
 
     signingConfigs {
@@ -41,7 +45,8 @@ android {
 
     useLibrary 'android.test.runner'
     useLibrary 'android.test.base'
-    sourceSets.main.assets.srcDir "$buildDir/generated/monitorAssets"
+    // Never package a legacy source-tree H5 bundle: generate from the selected profile.
+    sourceSets.main.assets.srcDirs = ["$buildDir/generated/monitorAssets", "$buildDir/generated/webAssets"]
 }
 
 // Both runtimes consume one field inventory, including after boot without a WebView.
@@ -50,3 +55,13 @@ task prepareMonitorAssets(type: Copy) {
     into "$buildDir/generated/monitorAssets"
 }
 preBuild.dependsOn prepareMonitorAssets
+
+task buildMonitorWeb(type: Exec) {
+    workingDir '../..'
+    commandLine 'node', 'android-wrapper/build-web-assets.mjs'
+}
+task prepareWebAssets(type: Sync, dependsOn: buildMonitorWeb) {
+    from '../../dist/build/h5'
+    into "$buildDir/generated/webAssets/www"
+}
+preBuild.dependsOn prepareWebAssets

@@ -9,6 +9,7 @@ unpackage/
 android-wrapper/.gradle/
 android-wrapper/build/
 android-wrapper/app/build/
+android-wrapper/app/src/main/assets/www/
 android-wrapper/local.properties
 android-wrapper/*.jks
 server/node_modules/
