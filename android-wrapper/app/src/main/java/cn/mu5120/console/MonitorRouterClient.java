@@ -216,7 +216,7 @@ final class MonitorRouterClient {
         request("/index.html", "GET", "");
         command("Language,cr_version,wa_inner_version", "multi_data", "1");
         JSONObject token = command("LD", "multi_data", "1");
-        String hash = SyncServer.sha256Hex(SyncServer.sha256Hex(password) + token.optString("LD"));
+        String hash = RouterAuth.loginHash(password, token.optString("LD"));
         request("/goform/goform_set_cmd_process", "POST", form("isTest", "false", "goformId", "LOGIN", "password", hash));
     }
 

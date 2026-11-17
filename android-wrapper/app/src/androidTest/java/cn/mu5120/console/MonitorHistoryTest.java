@@ -75,6 +75,31 @@ public final class MonitorHistoryTest extends AndroidTestCase {
         assertEquals(0, result.getJSONArray("battery").getJSONObject(0).getInt("percent"));
     }
 
+    public void testCompactBatteryResultsSurviveLocalRecovery() throws Exception {
+        JSONObject snapshot = sample(T + 1000, -93).put("source", "screenOff");
+        snapshot.put("battery", new JSONObject().put("percent", 0)
+            .put("measurement", BatteryGaugeReading.normalizeBatteryMeasurement(snapshot.getJSONObject("status")))
+            .put("timeToFull", new JSONObject().put("minutes", JSONObject.NULL).put("state", "not-applicable"))
+            .put("runtime", new JSONObject().put("minutes", 600).put("state", "estimated"))
+            .put("calculatedAt", T + 1000).put("windowSeconds", 60)
+            .put("csvAnalysis", new JSONObject().put("state", "ready").put("source", "device-csv")
+                .put("endpoint", "http://fixture.invalid:88/backup/battery-log.csv"))
+            .put("samples", new JSONArray().put(new JSONObject().put("timestamp", T))));
+        record(snapshot, T + 1000);
+        store = storeType.getDeclaredConstructor(File.class).newInstance(directory);
+        JSONObject restored = read(T + 2000);
+        JSONObject battery = restored.getJSONObject("live").getJSONObject("battery");
+        assertFalse(battery.has("samples"));
+        assertTrue(battery.getJSONObject("timeToFull").isNull("minutes"));
+        assertEquals(600, battery.getJSONObject("runtime").getInt("minutes"));
+        assertEquals(T + 1000, battery.getLong("calculatedAt"));
+        assertEquals(60, battery.getInt("windowSeconds"));
+        assertEquals("device-csv", battery.getJSONObject("csvAnalysis").getString("source"));
+        assertEquals("http://fixture.invalid:88/backup/battery-log.csv", battery.getJSONObject("csvAnalysis").getString("endpoint"));
+        assertEquals(0.0, battery.getJSONObject("measurement").getDouble("rawSoc"), 0.0);
+        assertEquals("screenOff", restored.getJSONArray("battery").getJSONObject(0).getString("source"));
+    }
+
     public void testStaleAndFailedSamplesNeverFillAnOfflineGap() throws Exception {
         record(sample(T + 1000, -93), T + 1000);
         record(sample(T + 62000, -91).put("stale", true), T + 62000);

@@ -16,8 +16,8 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5120,
     strictPort: false,
-    // 忽略打包产物目录：electron-builder/gradle 写入大量文件时曾把 dev 服务冲垮。
-    watch: { ignored: ['**/desktop/release/**', '**/android-wrapper/app/build/**'] },
+    // Android 构建产物不参与开发页面的热更新。
+    watch: { ignored: ['**/android-wrapper/app/build/**'] },
     proxy: {
       '/router-api': {
         target: routerOrigin,

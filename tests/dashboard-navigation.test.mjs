@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { parse } from '@babel/parser';
 import { numeric, firstValue, withUnit } from '../src/utils/format.js';
-import { normalizePoints } from '../src/utils/history.js';
+import { mergeChartHistory, normalizePoints } from '../src/utils/history.js';
 import { isTemperatureField, temperatureReading, normalizeTemperaturePoints } from '../src/utils/temperature.js';
 import { batteryModeText, formatBatteryTime, batteryTimeReason } from '../src/utils/battery-presentation.js';
 
@@ -36,6 +36,23 @@ test('settings entries open their editor and reject unknown sections', () => {
   open('update');
   assert.equal(settingsSection.value, 'update');
   assert.equal(diagnosticsOpen.value, false);
+  open('sync');
+  assert.equal(settingsSection.value, 'update', 'retired sync links must not open an empty settings page');
+});
+
+test('Android full-screen stock UI uses the confirmed local session and saved router URL', async () => {
+  let openedUrl;
+  const context = {
+    stockOpenMode: 'navigate',
+    stockConsole: { busy: false, loggedIn: false, message: '' },
+    routerApi: { stockUiSession: async () => ({ loggedIn: true, developer: true }),
+      getConfig: () => ({ routerUrl: 'http://192.168.8.1/' }) },
+    window: { AndroidRouter: { openStockUi(url) { openedUrl = url; } } }
+  };
+  await assert.doesNotReject(pageFunction('openStockConsoleNative', context)());
+  assert.equal(openedUrl, 'http://192.168.8.1/index.html');
+  assert.equal(context.stockConsole.loggedIn, true);
+  assert.equal(context.stockConsole.busy, false);
 });
 
 test('carrier aggregation summary does not treat firmware flags as active carriers', () => {
@@ -171,7 +188,7 @@ test('a successful poll clears the failed-poll stale flag so history resumes', (
   assert.equal(merge(recovered, { stale: true, timestamp: 3000 }).stale, true);
 });
 
-test('fresh legacy snapshots cannot inherit client availability from another collector', () => {
+test('fresh legacy snapshots cannot inherit client availability from an earlier capture', () => {
   const merge = pageFunction('mergeDashboard');
   const previous = { timestamp: 1000, clientAvailability: { stations: true, cableStations: true }, errors: { stations: 'old failure' } };
   const legacy = merge(previous, { timestamp: 2000, stations: [], cableStations: [] });
@@ -321,7 +338,7 @@ test('complete dashboard capture metadata survives newer battery-only recovery a
   const previous = merge({}, { timestamp: now - 60000, source: 'foreground', login: { loggedIn: true },
     signal: { network_type: 'LTE', lte_rsrp: -103 }, temperature: { wifi_chip_temp: 46 }, status: {} });
   assert.equal(previous.telemetryTimestamp, now - 60000);
-  const context = { backfillingBackground: false, backgroundState: { available: true }, syncState: { role: 'direct' },
+  const context = { backfillingBackground: false, backgroundState: { available: true },
     data: { value: previous }, messages: { value: [] }, collectionSourceLabels: {}, backgroundSourceCounts: {}, backgroundBackfill: { value: '' },
     routerApi: { getBackgroundHistory: async () => ({ live: { timestamp: now, source: 'screenOff', status: {}, battery: {} } }),
       restoreBatterySummary: () => ({ measurement: { percentageSource: 'router' }, calculatedAt: now }) }, syncBackgroundState() {} };
@@ -349,9 +366,9 @@ test('background recovery replaces the complete battery summary and prefers a ne
   const replacement = { samples: archive, measurement: { rawSoc: 40 }, runtime: { minutes: 100 }, calculatedAt: 3000 };
   const calls = [];
   const context = {
-    backfillingBackground: false, backgroundState: { available: true }, syncState: { role: 'direct' },
+    backfillingBackground: false, backgroundState: { available: true },
     data: { value: current }, messages: { value: [] }, collectionSourceLabels: {}, backgroundSourceCounts: {}, backgroundBackfill: { value: '' },
-    routerApi: { getBackgroundHistory: async () => ({ live: native, battery: archive }), mergeExternalBattery: () => archive,
+    routerApi: { getBackgroundHistory: async () => ({ live: native, battery: archive }), mergeBackgroundBatteryHistory: () => archive,
       restoreBatterySummary(snapshot, stats) { calls.push({ snapshot, stats }); return replacement; } }, syncBackgroundState() {}
   };
   const recover = pageFunction('backfillBackgroundHistory', context);
@@ -362,13 +379,6 @@ test('background recovery replaces the complete battery summary and prefers a ne
   context.data.value = { timestamp: 1000, battery: {} };
   await recover();
   assert.equal(calls[1].snapshot, native);
-  context.syncState.role = 'viewer';
-  const collectorRuntime = { minutes: 123.456, state: 'estimated' };
-  context.data.value = { timestamp: 3000, battery: { runtime: collectorRuntime } };
-  await recover();
-  assert.equal(calls.length, 2, 'a LAN viewer must never recompute the collector result from native history');
-  assert.equal(context.data.value.battery.runtime, collectorRuntime);
-  assert.equal(context.data.value.battery.samples, archive);
 });
 
 test('validated newer native battery recovery updates SOC and freshness together without importing unrelated status', async () => {
@@ -380,7 +390,7 @@ test('validated newer native battery recovery updates SOC and freshness together
     status: { network_type: 'untrusted-native-network', battery_gauge: marker }, battery: {} };
   let restored = { percent: 50, percentSource: 'gauge88', measurement: { percentageSource: 'gauge88', rawSoc: 50 },
     calculatedAt: now, runtime: { state: 'estimated', minutes: 600 } };
-  const context = { backfillingBackground: false, backgroundState: { available: true }, syncState: { role: 'direct' },
+  const context = { backfillingBackground: false, backgroundState: { available: true },
     data: { value: previous }, messages: { value: [] }, collectionSourceLabels: {}, backgroundSourceCounts: {}, backgroundBackfill: { value: '' },
     routerApi: { getBackgroundHistory: async () => ({ live: native }), restoreBatterySummary: () => restored }, syncBackgroundState() {} };
   const recover = pageFunction('backfillBackgroundHistory', context);
@@ -408,23 +418,74 @@ test('validated newer native battery recovery updates SOC and freshness together
   assert.equal(context.data.value.status.network_type, 'LTE');
 });
 
-test('battery collection resets at native ownership boundaries and page hide while viewers remain passive', () => {
+test('battery collection resets at local ownership boundaries without a peer role', () => {
   let resets = 0;
-  const context = { syncState: { role: 'direct' }, backgroundState: { background: false },
+  const context = { backgroundState: { background: false },
     routerApi: { getBackgroundMonitorState: () => ({ background: true }), getBatteryOptimizationState: () => ({}),
       resetBatteryCollection() { resets++; } } };
   const update = pageFunction('syncBackgroundState', context);
   const hide = pageFunction('handlePageHide', context);
-  update();
+  assert.doesNotThrow(update, 'local ownership changes cannot depend on removed sync state');
   assert.equal(resets, 1);
   update();
   assert.equal(resets, 1, 'unchanged background state must not interrupt the current window');
   hide();
   assert.equal(resets, 2);
-  context.syncState.role = 'viewer';
   context.backgroundState.background = false;
   update(); hide();
-  assert.equal(resets, 2);
+  assert.equal(resets, 4, 'every ownership change and page hide resets the local window');
+});
+
+test('refresh acquires local router data even when legacy peer state is present', async () => {
+  const local = { timestamp: 2000, source: 'foreground', status: { battery_vol_percent: '51' }, signal: { lte_rsrp: '-93' } };
+  const remote = { timestamp: 1000, source: 'screenOff', status: { battery_vol_percent: '12' }, signal: { lte_rsrp: '-120' } };
+  const context = {
+    refreshing: { value: false }, manualRefreshing: { value: false }, actionBusy: { value: false },
+    pendingRefresh: false, pendingManualRefresh: false,
+    data: { value: {} }, errorMessage: { value: '' }, freshnessNow: { value: 0 },
+    routerApi: { dashboard: async () => local },
+    syncClient: { dashboard: async () => remote, afterTick: async () => {} },
+    syncState: { role: 'viewer', enabled: true },
+    mergeDashboard: pageFunction('mergeDashboard'), applyDashboardData: Object.assign,
+    updateCellDisplay() {}, syncTrafficPlanForm() {}, captureHistory() {}, applyInitialBands() {}, syncCandidate() {}, refreshSyncState() {},
+    uni: { showToast() {} }, setTimeout() {}
+  };
+  await pageFunction('refresh', context)();
+  assert.equal(context.data.value.status.battery_vol_percent, '51');
+  assert.equal(context.data.value.signal.lte_rsrp, '-93');
+  assert.equal(context.data.value.telemetryTimestamp, 2000);
+  assert.equal(context.data.value.telemetrySource, 'foreground');
+  assert.equal(context.errorMessage.value, '');
+});
+
+test('same-phone background chart and battery recovery works without sync state', async () => {
+  const minute = 1700000040000;
+  const histories = { rsrp: [[minute - 60000, -93, 'foreground']], sinr: [], rsrq: [], down: [], up: [], temperatures: {} };
+  const archive = [{ timestamp: minute, percent: 48, charging: false, source: 'screenOff' }];
+  let chartSaves = 0;
+  const context = {
+    backfillingBackground: false, backgroundState: { available: true }, histories,
+    data: { value: { timestamp: minute, status: {}, battery: {} } }, messages: { value: [] },
+    collectionSourceLabels: { screenOff: '息屏采集' }, backgroundSourceCounts: {}, backgroundBackfill: { value: '' },
+    routerApi: { getBackgroundHistory: async () => ({
+      chart: { rsrp: [[minute, -95, 'screenOff']] }, battery: archive, snapshotCount: 1, sourceCounts: { screenOff: 1 }
+    }), mergeBackgroundBatteryHistory: () => archive,
+    restoreBatterySummary: () => ({ samples: archive, percent: 48, measurement: null }) },
+    syncBackgroundState() {}, Date: { now: () => minute }, METRIC_HISTORY_WINDOW_MS: 86400000,
+    CHART_HISTORY_SAMPLE_MS: 60000, CHART_HISTORY_MAX_POINTS: Infinity,
+    mergeChartHistory, toRaw: value => value, normalizeTemperaturePoints,
+    persistChartHistory() { chartSaves++; }
+  };
+  context.chartSnapshot = pageFunction('chartSnapshot', context);
+  context.applyChartUpdater = pageFunction('applyChartUpdater', context);
+  await pageFunction('backfillBackgroundHistory', context)();
+  assert.equal(context.backgroundBackfill.value, '已回补 1 条分钟记录（含前台与后台）');
+  assert.deepEqual(Array.from(histories.rsrp, point => Array.from(point)), [
+    [minute - 60000, -93, 'foreground'], [minute, -95, 'screenOff']
+  ]);
+  assert.equal(chartSaves, 1);
+  assert.equal(context.data.value.battery.samples, archive);
+  assert.equal(context.backgroundSourceCounts.screenOff, 1);
 });
 
 test('automatic polling stays quiet while manual refresh shows progress and clears on failure', async () => {
@@ -434,9 +495,9 @@ test('automatic polling stays quiet while manual refresh shows progress and clea
       refreshing: { value: false }, manualRefreshing: { value: false }, actionBusy: { value: false },
       pendingRefresh: false, pendingManualRefresh: false,
       data: { value: {} }, errorMessage: { value: '' }, freshnessNow: { value: 0 },
-      syncClient: { dashboard: () => new Promise((resolve, reject) => { finish = { resolve, reject }; }), afterTick: async () => {} },
+      routerApi: { dashboard: () => new Promise((resolve, reject) => { finish = { resolve, reject }; }) },
       mergeDashboard: (_current, payload) => payload, applyDashboardData: Object.assign,
-      updateCellDisplay() {}, syncTrafficPlanForm() {}, captureHistory() {}, applyInitialBands() {}, syncCandidate() {}, refreshSyncState() {},
+      updateCellDisplay() {}, syncTrafficPlanForm() {}, captureHistory() {}, applyInitialBands() {}, syncCandidate() {},
       uni: { showToast() {} }, setTimeout() {},
     };
     return { context, refresh: pageFunction('refresh', context), complete: (failed = false) => failed ? finish.reject(Error('offline')) : finish.resolve({ timestamp: 1 }) };

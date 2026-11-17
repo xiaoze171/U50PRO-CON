@@ -238,8 +238,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         foregroundHandler.removeCallbacks(foregroundHeartbeat);
         if (routerBridge != null) {
-            routerBridge.shutdownSync();
-            routerBridge.shutdownStockProxy();
+            routerBridge.shutdown();
             routerBridge = null;
         }
         if (webView != null) {

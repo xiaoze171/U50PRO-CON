@@ -1,11 +1,11 @@
 param(
     [ValidateSet('factory', 'gauge88-csv')][string]$Profile = '',
     [string]$JsonJar = "$env:USERPROFILE/.gradle/caches/modules-2/files-2.1/org.json/json/20180813/8566b2b0391d9d4479ea225645c6ed47ef17fe41/json-20180813.jar",
-    [string[]]$Tests = @('NativeBatteryProfileTest', 'NativeBatteryCsvTest', 'NativeBatteryCsvCacheTest', 'NativeBatteryFactoryTest', 'NativeBatteryGaugeTest', 'NativeBatteryCurrentWindowTest', 'NativeMonitorGaugeHistoryTest', 'NativeBatteryHistoryTest', 'MonitorSourceTest', 'MonitorTemperatureTest', 'NativeSyncPublicationTest')
+    [string[]]$Tests = @('NativeBatteryProfileTest', 'NativeBatteryCsvTest', 'NativeBatteryCsvCacheTest', 'NativeBatteryFactoryTest', 'NativeBatteryGaugeTest', 'NativeBatteryCurrentWindowTest', 'NativeMonitorGaugeHistoryTest', 'NativeBatteryHistoryTest', 'MonitorSourceTest', 'MonitorTemperatureTest', 'NativeRouterAuthTest', 'NativeLocalBridgeTest')
 )
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
-$output = Join-Path $repository '.superpowers/sdd/2026-11-17-battery-branches/jvm-classes'
+$output = Join-Path $repository '.codex/apk-only-2026-11-17/jvm-classes'
 $androidJar = Join-Path $repository '.android-sdk/platforms/android-30/android.jar'
 $resourceJar = Join-Path $repository 'android-wrapper/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/R.jar'
 foreach ($dependency in @($JsonJar, $androidJar, $resourceJar)) {

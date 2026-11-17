@@ -125,7 +125,7 @@ test('endpoint roundtrips retain chart history while device CSV replaces any app
     configure(1000);
     routerApi.updateConfig({ batteryHost: 'another.test' });
     const start = now;
-    routerApi.mergeExternalBattery(Array.from({ length: 11 }, (_, i) => ({
+    routerApi.mergeBackgroundBatteryHistory(Array.from({ length: 11 }, (_, i) => ({
       timestamp: start + i * 60000, percent: 52 - i * 0.2, charging: false,
       percentSource: 'gauge88', percentEndpoint: 'http://another.test:88/state.json'
     })));
@@ -157,7 +157,7 @@ test('restored blocks keep the original historical measurement and source', asyn
       source: 'background', percentSource: measurement.percentageSource, percentEndpoint: measurement.endpoint,
       measurement, currentStats: { segmentId: 'native-keep', blockId: 'native-keep:minute', revision: 1,
         startAt: now, endAt: now + 30000, integralMaMs: -12000000, observedDurationMs: 30000, sampleCount: 3, identity } };
-    routerApi.mergeExternalBattery([original]);
+    routerApi.mergeBackgroundBatteryHistory([original]);
     configure(1760);
     const forwarded = await routerApi.dashboard();
     assert.ok(forwarded.battery.currentStats.some(block => block.blockId === 'native-keep:minute'));

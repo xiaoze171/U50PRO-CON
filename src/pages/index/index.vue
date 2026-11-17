@@ -56,7 +56,7 @@
 
       <view class="freshness-strip" :class="freshness.state" role="status">
         <view class="freshness-state"><view class="freshness-dot" :class="freshness.state"></view><text>{{ freshness.label }}</text></view>
-        <text class="freshness-source">{{ collectionSourceLabel(data.telemetrySource) }} · {{ syncRoleText }}</text>
+        <text class="freshness-source">{{ collectionSourceLabel(data.telemetrySource) }}</text>
         <text class="freshness-time">{{ freshness.time }}</text>
       </view>
       <scroll-view :key="`${activeTab}-${managementTab}-${trendDetail}-${settingsSection}`" class="content-scroll" scroll-y>
@@ -436,7 +436,6 @@
                 <button class="entry-row" @click="openSettingsSection('battery')"><BatteryCharging :size="18" /><view class="entry-copy"><b>电量来源</b></view><text class="entry-tail">{{ batterySourceText }}</text><ChevronRight :size="16" /></button>
                 <button class="entry-row" @click="openSettingsSection('background')"><BatteryCharging :size="18" /><view class="entry-copy"><b>后台采集与权限</b><text>{{ backgroundStateText }}</text></view><ChevronRight :size="16" /></button>
                 <view class="entry-row"><Layers3 :size="18" /><view class="entry-copy"><b>悬浮监测</b><text>{{ overlayStateText }}</text></view><switch :checked="overlayState.enabled" :disabled="!overlayState.available" color="#4267ed" @change="toggleOverlay" /></view>
-                <button class="entry-row" @click="openSettingsSection('sync')"><Smartphone :size="18" /><view class="entry-copy"><b>局域网互通</b><text>{{ syncStateText }}</text></view><text class="entry-tail">{{ syncState.enabled ? '已启用' : '已关闭' }}</text><ChevronRight :size="16" /></button>
               </section>
               <text class="section-label">应用</text>
               <section class="panel entry-group">
@@ -469,37 +468,10 @@
                 <text class="battery-source-hint">电量来自设备实时读数，续航来自设备 CSV 日志；日志不可用时显示对应原因。</text>
               </template>
               <text v-else class="battery-source-hint">使用路由器原厂返回的电池百分比。</text>
-              <text v-if="syncState.role === 'viewer'" class="battery-source-hint">当前跟随采集器显示；此设置用于本机采集。</text>
               <view class="action-row battery-source-actions">
                 <button class="primary-button battery-source-save" :disabled="batterySettingsSaving" @click="saveBatterySettings"><Save :size="15" />{{ batterySettingsSaving ? '保存中…' : '保存' }}</button>
                 <text class="action-result" :class="{ 'battery-source-error': batterySettingsError }" role="status">{{ batterySettingsResult }}</text>
               </view>
-            </section>
-            <section v-if="settingsSection === 'sync'" class="panel settings-panel">
-              <view class="panel-header"><view><text class="panel-title">局域网互通</text><text class="panel-subtitle">同一 Wi-Fi 下多设备共享历史，避免各自抢占路由器登录导致数据断层</text></view><Wifi :size="20" /></view>
-              <view class="overlay-setting-row">
-                <view class="overlay-setting-copy">
-                  <b>启用局域网互通</b>
-                  <text>{{ syncStateText }}</text>
-                </view>
-                <switch :checked="syncState.enabled" :disabled="!syncState.supported" color="#4267ed" @change="toggleSync" />
-              </view>
-              <template v-if="syncState.supported && syncState.enabled">
-                <view class="sync-role-line">
-                  <text class="sync-role-badge" :class="syncRoleClass">{{ syncRoleText }}</text>
-                  <text class="sync-role-hint">{{ syncRoleHint }}</text>
-                </view>
-                <view v-if="syncState.peers.length" class="sync-peer-list">
-                  <view v-for="peer in syncState.peers" :key="peer.id" class="sync-peer-row">
-                    <view class="sync-peer-copy">
-                      <b>{{ peer.name || peer.id }}</b>
-                      <text>{{ peerPlatformText(peer.platform) }}<template v-if="peer.collecting"> · 采集中</template></text>
-                    </view>
-                    <button class="secondary-button sync-pin-button" :class="{ 'sync-pinned': syncState.preferredCollector === peer.id }" @click="pinCollector(peer.id)">{{ syncState.preferredCollector === peer.id ? '已钉住' : '设为采集器' }}</button>
-                  </view>
-                </view>
-                <view v-else class="sync-empty">局域网内暂无其他节点，正在直连路由器</view>
-              </template>
             </section>
             <section v-if="settingsSection === 'overlay'" class="panel settings-panel">
               <view class="panel-header"><view><text class="panel-title">悬浮监测</text><text class="panel-subtitle">在其他应用上层显示实时速率、电量与电池温度</text></view><Layers3 :size="20" /></view>
@@ -605,7 +577,6 @@ import { routerApi } from '../../services/router-client.js';
 import { batteryGaugeUrl } from '../../utils/battery-gauge.js';
 import { buildHomeSignalPanels, buildHomeTemperatureMetrics } from '../../utils/home-telemetry.js';
 import { formatBatteryTime, batteryTimeReason, batteryModeText, batteryCsvStatusText } from '../../utils/battery-presentation.js';
-import { syncClient } from '../../services/sync.js';
 import { buildCellCandidates } from '../../utils/cells.js';
 import { mergeChartHistory, normalizePoints } from '../../utils/history.js';
 import { TEMPERATURE_LABELS, isTemperatureField, temperatureReading, normalizeTemperaturePoints } from '../../utils/temperature.js';
@@ -671,7 +642,6 @@ function openSoftwareRelease() {
 }
 const CHART_HISTORY_KEY = 'mu5120-chart-history-v1';
 const METRIC_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 // 温度/信号折线图只展示最近 2 小时（历史仍按 24 小时采集存储），固定窗口、不带缩放滑块。
 const CHART_RECENT_WINDOW_MS = 2 * 60 * 60 * 1000;
 const CHART_HISTORY_SAMPLE_MS = 60 * 1000;
@@ -826,7 +796,6 @@ const overlayState = reactive(routerApi.getOverlayState());
 const backgroundState = reactive({ ...routerApi.getBackgroundMonitorState(), ...routerApi.getBatteryOptimizationState() });
 const backgroundSourceCounts = reactive({});
 const backgroundBackfill = ref('');
-const syncState = reactive(syncClient.getState());
 let pollTimer = null;
 let smsPollTimer = null;
 let clockTimer = null;
@@ -855,7 +824,7 @@ const featureFormsInitialized = ref(false);
 const trafficPlanForm = reactive({ enabled: false, sizeGb: '', alertPercent: '', autoClear: false, clearDate: '', usedGb: '' });
 const activeTabInfo = computed(() => tabs.find(tab => tab.id === activeTab.value) || tabs[0]);
 const secondaryPage = computed(() => (activeTab.value === 'devices' && managementTab.value !== 'clients') || (activeTab.value === 'settings' && Boolean(settingsSection.value)));
-const settingsTitles = { connection: '路由器连接', battery: '电量来源', sync: '局域网互通', overlay: '悬浮监测', background: '后台采集与权限', update: '软件更新', diagnostics: '采集诊断' };
+const settingsTitles = { connection: '路由器连接', battery: '电量来源', overlay: '悬浮监测', background: '后台采集与权限', update: '软件更新', diagnostics: '采集诊断' };
 const pageTitle = computed(() => {
   if (activeTab.value === 'devices' && managementTab.value !== 'clients') return managementTabs.find(item => item.id === managementTab.value)?.label || '设备';
   if (activeTab.value === 'settings' && settingsSection.value) return settingsTitles[settingsSection.value] || '设置';
@@ -879,18 +848,6 @@ const backgroundStateText = computed(() => {
 const batteryOptimizationText = computed(() => {
   if (!backgroundState.available) return '';
   return backgroundState.ignoring ? '已豁免 Android 电池优化，厂商后台权限需单独设置' : '未豁免电池优化，息屏后可能被系统暂停';
-});
-const syncStateText = computed(() => {
-  if (!syncState.supported) return '当前环境不支持（仅 EXE 桌面端与 Android App 可作服务节点，浏览器预览始终直连）';
-  if (!syncState.enabled) return '已关闭，各设备各自直连路由器';
-  return '已开启，局域网内自动共享历史';
-});
-const syncRoleText = computed(() => ({ collector: '本机：采集器', viewer: '本机：查看端', direct: '本机：直连' }[syncState.role] || '本机：直连'));
-const syncRoleClass = computed(() => `sync-role-${syncState.role}`);
-const syncRoleHint = computed(() => {
-  if (syncState.role === 'collector') return '本机独占登录路由器，并向其他设备共享实时与历史数据';
-  if (syncState.role === 'viewer') return `正在读取采集器「${syncState.hub?.name || '未知'}」的数据，本机不占用路由器会话`;
-  return '局域网内暂无其他采集器，本机直接连接路由器';
 });
 const connectionMessage = computed(() => data.value.stale ? '服务器缓存数据' : (login.value.message || '连接失败'));
 const networkType = computed(() => firstValue(signal.value.network_type, status.value.network_type));
@@ -1229,15 +1186,12 @@ function buildBatteryDiagnostics(measurement = {}, raw = {}, summary = {}) {
   ];
 }
 const runtimeDetails = computed(() => toItems({
-  '当前数据通道': syncState.role === 'viewer'
-    ? `局域网互通 · 读取采集器「${syncState.hub?.name || '未知'}」`
-    : (syncState.role === 'collector' ? '局域网互通 · 本机采集并共享' : '局域网直连'),
+  '当前数据通道': '本机直连路由器',
   'H5 浏览器': '开发预览通过本机代理访问路由器',
   'Android App': '原生 HTTP 直连路由器，原厂后台走本机反向代理',
-  'Windows 桌面端': '主进程代理会话直连路由器',
   '登录': '使用保存密码与动态 LD 自动计算 SHA-256',
   '图表窗口': '可查看最近 2 小时 / 24 小时',
-  '历史保存': '本机 24 小时，启用互通后随局域网共享',
+  '历史保存': '本机保存最近 24 小时的前台与后台采集记录',
   '软件版本': `v${APP_VERSION}`,
   '开发者': '晓泽',
   '开发者写接口': '自动刷新主会话、LD 与动态 AD',
@@ -1266,7 +1220,7 @@ function toItems(object) {
 }
 
 function normalizePointList(value, cutoff) {
-  // 委托给共享工具，保持原有分钟桶归一行为（sync.js / desktop 主进程复用同一逻辑）。
+  // 本机前台采集与原生后台恢复使用相同的分钟桶归一。
   return normalizePoints(value, { cutoff, sampleMs: CHART_HISTORY_SAMPLE_MS, maxPoints: CHART_HISTORY_MAX_POINTS });
 }
 
@@ -1314,9 +1268,9 @@ function persistChartHistory(force = false) {
   } catch {}
 }
 
-// —— 局域网互通：图表历史的快照 / 合并写回 —— //
+// —— 本机图表历史的快照 / 后台恢复写回 —— //
 
-// 把 histories 反应式对象拍平成普通结构，交给 syncClient 发布或作为合并输入。
+// 把 histories 反应式对象拍平成普通结构，用于合并本机原生后台历史。
 function chartSnapshot() {
   const raw = toRaw(histories);
   return {
@@ -1329,7 +1283,7 @@ function chartSnapshot() {
   };
 }
 
-// syncClient 合并外部图表历史时的回调：updater(当前快照)->合并结果，写回反应式并持久化。
+// 将本机后台图表历史与当前快照合并，写回反应式对象并持久化。
 function applyChartUpdater(updater) {
   if (typeof updater !== 'function') return;
   const merged = updater(chartSnapshot());
@@ -1339,29 +1293,6 @@ function applyChartUpdater(updater) {
   });
   if (merged.temperatures && typeof merged.temperatures === 'object') histories.temperatures = Object.fromEntries(Object.entries(merged.temperatures).map(([key, values]) => [key, normalizeTemperaturePoints(key, values)]).filter(([, values]) => values.length));
   persistChartHistory(true);
-}
-
-// 从 syncClient 拉取最新角色/对端状态刷新到设置页展示。
-function refreshSyncState() {
-  Object.assign(syncState, syncClient.getState());
-}
-
-function peerPlatformText(platform) {
-  return { desktop: '电脑端', android: '安卓端', h5: '浏览器' }[platform] || '其他';
-}
-
-// 设置页开关：启用/关闭局域网互通。
-function toggleSync(event) {
-  const enabled = event?.detail?.value ?? !syncState.enabled;
-  syncClient.setEnabled(enabled);
-  refreshSyncState();
-}
-
-// 设置页：钉住某台设备为首选采集器（再次点击当前项则取消钉住恢复自动）。
-function pinCollector(id) {
-  const next = syncState.preferredCollector === id ? '' : id;
-  syncClient.setPreferredCollector(next);
-  refreshSyncState();
 }
 
 function pushHistory(list, timestamp, value, source) {
@@ -1475,8 +1406,7 @@ async function refresh(manual = false) {
   pendingManualRefresh = false;
   manualRefreshing.value = manual;
   try {
-    // 数据来源被 syncClient 透明代理：查看端读采集器 /sync/live，其余（采集器/直连）走真正的路由器轮询。
-    const payload = await syncClient.dashboard();
+    const payload = await routerApi.dashboard();
     const merged = mergeDashboard(data.value, payload);
     applyDashboardData(data.value, merged);
     updateCellDisplay(merged, manual);
@@ -1486,15 +1416,6 @@ async function refresh(manual = false) {
     syncCandidate();
     errorMessage.value = merged.stale ? `当前显示缓存数据：${merged.serverMessage || '路由器暂时离线'}` : '';
     freshnessNow.value = Date.now();
-    // 本地历史更新完毕后按角色发布/回补/拉取；图表合并经 applyChartUpdater 写回本地并持久化。
-    try {
-      await syncClient.afterTick({
-        live: merged,
-        localStore: () => ({ chart: chartSnapshot(), battery: toRaw(data.value.battery?.samples) || [] }),
-        onMergeChart: applyChartUpdater
-      });
-    } catch {}
-    refreshSyncState();
   } catch (error) {
     data.value.stale = true;
     data.value.telemetryStale = true;
@@ -1624,7 +1545,7 @@ function openDiagnostics() {
 }
 
 function openSettingsSection(id) {
-  if (!['connection', 'battery', 'sync', 'overlay', 'background', 'update', 'diagnostics'].includes(id)) return;
+  if (!['connection', 'battery', 'overlay', 'background', 'update', 'diagnostics'].includes(id)) return;
   if (id === 'battery') resetBatterySettings();
   settingsSection.value = id;
   diagnosticsOpen.value = id === 'diagnostics';
@@ -2140,7 +2061,7 @@ function syncOverlayState() {
 
 function syncBackgroundState() {
   const next = routerApi.getBackgroundMonitorState();
-  if (Boolean(next.background) !== Boolean(backgroundState.background) && syncState.role !== 'viewer') routerApi.resetBatteryCollection();
+  if (Boolean(next.background) !== Boolean(backgroundState.background)) routerApi.resetBatteryCollection();
   Object.assign(backgroundState, next, routerApi.getBatteryOptimizationState());
 }
 
@@ -2161,33 +2082,28 @@ async function backfillBackgroundHistory() {
     const history = await routerApi.getBackgroundHistory();
     if (!history || typeof history !== 'object') return;
     if (history.chart) applyChartUpdater(current => mergeChartHistory(current, history.chart, { cutoff: Date.now() - METRIC_HISTORY_WINDOW_MS, sampleMs: CHART_HISTORY_SAMPLE_MS, maxPoints: CHART_HISTORY_MAX_POINTS }));
-    const merged = Array.isArray(history.battery) && history.battery.length
-      ? routerApi.mergeExternalBattery(history.battery) : null;
-    if (syncState.role === 'viewer') {
-      if (merged && data.value.battery) data.value.battery = { ...data.value.battery, samples: merged };
-    } else {
-      const native = history.live;
-      const currentAt = typeof data.value.timestamp === 'number' && Number.isFinite(data.value.timestamp) ? data.value.timestamp : 0;
-      const nativeAt = typeof native?.timestamp === 'number' && Number.isFinite(native.timestamp) ? native.timestamp : 0;
-      const snapshot = nativeAt > currentAt ? native : data.value;
-      const stats = Array.isArray(native?.battery?.currentStats) ? native.battery.currentStats : [];
-      const restored = routerApi.restoreBatterySummary(snapshot, stats);
-      data.value.battery = restored;
-      if (snapshot === native && restored.measurement) {
-        // Restore only battery-source fields after the collector validates the
-        // newer capture; unrelated foreground modules keep their own values.
-        const sourceStatus = { ...data.value.status };
-        for (const key of ['battery_gauge', 'battery_vol_percent', 'battery_value', 'battery_charging', 'external_charging_flag', 'battery_charg_type', 'battery_health', 'percentEndpoint']) {
-          if (Object.hasOwn(snapshot.status || {}, key)) sourceStatus[key] = snapshot.status[key];
-          else delete sourceStatus[key];
-        }
-        data.value.status = sourceStatus;
-        data.value.timestamp = snapshot.timestamp;
-        data.value.stale = false;
-        data.value.source = snapshot.source || 'unknown';
-        if (restored.measurement.percentageSource === 'router') {
-          data.value.temperature = { ...data.value.temperature, battery_temp: snapshot.temperature?.battery_temp };
-        }
+    if (Array.isArray(history.battery) && history.battery.length) routerApi.mergeBackgroundBatteryHistory(history.battery);
+    const native = history.live;
+    const currentAt = typeof data.value.timestamp === 'number' && Number.isFinite(data.value.timestamp) ? data.value.timestamp : 0;
+    const nativeAt = typeof native?.timestamp === 'number' && Number.isFinite(native.timestamp) ? native.timestamp : 0;
+    const snapshot = nativeAt > currentAt ? native : data.value;
+    const stats = Array.isArray(native?.battery?.currentStats) ? native.battery.currentStats : [];
+    const restored = routerApi.restoreBatterySummary(snapshot, stats);
+    data.value.battery = restored;
+    if (snapshot === native && restored.measurement) {
+      // Restore only battery-source fields after local validation of the
+      // newer capture; unrelated foreground modules keep their own values.
+      const sourceStatus = { ...data.value.status };
+      for (const key of ['battery_gauge', 'battery_vol_percent', 'battery_value', 'battery_charging', 'external_charging_flag', 'battery_charg_type', 'battery_health', 'percentEndpoint']) {
+        if (Object.hasOwn(snapshot.status || {}, key)) sourceStatus[key] = snapshot.status[key];
+        else delete sourceStatus[key];
+      }
+      data.value.status = sourceStatus;
+      data.value.timestamp = snapshot.timestamp;
+      data.value.stale = false;
+      data.value.source = snapshot.source || 'unknown';
+      if (restored.measurement.percentageSource === 'router') {
+        data.value.temperature = { ...data.value.temperature, battery_temp: snapshot.temperature?.battery_temp };
       }
     }
     if (history.sms?.messages?.length && !messages.value.length) applySmsSnapshot(history.sms);
@@ -2214,14 +2130,14 @@ function toggleOverlay(event) {
 }
 
 function handlePageShow() {
-  if (syncState.role !== 'viewer') routerApi.resetBatteryCollection();
+  routerApi.resetBatteryCollection();
   setTimeout(syncOverlayState, 250);
   // 从后台/息屏回到页面：先回补原生落盘的历史，再由轮询接续。
   setTimeout(backfillBackgroundHistory, 300);
 }
 
 function handlePageHide() {
-  if (syncState.role !== 'viewer') routerApi.resetBatteryCollection();
+  routerApi.resetBatteryCollection();
 }
 
 function handleVisibilityChange() {
@@ -2280,14 +2196,6 @@ onMounted(() => {
     pollApkDownload();
     updatePollTimer = setInterval(pollApkDownload, 1000);
   }
-  // 用页面自身的图表/电池窗口参数初始化同步编排，确保跨设备合并与本地保留窗口一致。
-  syncClient.init({
-    chartWindowMs: METRIC_HISTORY_WINDOW_MS,
-    chartSampleMs: CHART_HISTORY_SAMPLE_MS,
-    chartMaxPoints: CHART_HISTORY_MAX_POINTS,
-    batteryWindowMs: BATTERY_HISTORY_WINDOW_MS
-  });
-  refreshSyncState();
   initialize();
   syncOverlayState();
   syncBackgroundState();

@@ -3,9 +3,7 @@ package cn.mu5120.console;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
-import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
@@ -20,39 +18,19 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class RouterBridge {
-    private static final String SYNC_PREFS = "u50pro_sync";
-    private static final String KEY_DEVICE_ID = "device_id";
-
     private final WebView webView;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
-    // Serial publication preserves live/history ordering without blocking JS
-    // while org.json parses a full day's archive on the bridge thread.
-    private final ExecutorService syncPublisher = Executors.newSingleThreadExecutor();
     private final StockProxyServer stockProxy = new StockProxyServer();
     private String lastSharedSession = "";
     // 最近一次 H5 configureBackground 传来的路由器地址，供 StockProxyServer
     // （原厂后台本地反代）转发使用。
     private static volatile String routerBaseUrl = "http://192.168.0.1";
-
-    // —— 局域网同步状态（主进程内，与 RouterBridge 同生命周期；镜像 Electron 主进程模型）——
-    private volatile SyncServer syncServer;
-    private DiscoveryBeacon discovery;
-    private boolean syncEnabled = false;
-    private boolean syncStarted = false;
-    private String syncPassword = "";
-    private String syncRole = "auto";
-    private boolean syncCollecting = false;
-    private String deviceId = "";
-    private String deviceName = "";
-    private String appVersion = "";
 
     RouterBridge(WebView webView) {
         this.webView = webView;
@@ -63,10 +41,6 @@ public final class RouterBridge {
     @JavascriptInterface
     public int getStockProxyPort() {
         return stockProxy.getPort();
-    }
-
-    void shutdownStockProxy() {
-        stockProxy.stop();
     }
 
     @JavascriptInterface
@@ -80,11 +54,6 @@ public final class RouterBridge {
     public void configureBackground(String routerUrl, String password, String batterySettings) {
         BackgroundMonitorService.configure(webView.getContext(), routerUrl, password, batterySettings);
         if (routerUrl != null && !routerUrl.trim().isEmpty()) routerBaseUrl = routerUrl.trim();
-        // 路由器密码是唯一的密钥来源：在此派生同步令牌 sha256(密码)，供服务端鉴权与信标 tokenFP。
-        synchronized (this) {
-            syncPassword = password == null ? "" : password;
-            applySyncState();
-        }
     }
 
     static String getRouterBaseUrl() {
@@ -286,166 +255,10 @@ public final class RouterBridge {
         webView.post(() -> webView.evaluateJavascript(script, null));
     }
 
-    // ===== 局域网同步桥（方法面与桌面 window.DesktopRouter 完全对齐）===== //
-
-    @JavascriptInterface
-    public String syncGetSelf() {
-        ensureIdentity();
-        JSONObject self = new JSONObject();
-        try {
-            self.put("id", deviceId);
-            self.put("name", deviceName);
-            self.put("platform", "android");
-            self.put("version", appVersion);
-            self.put("httpPort", SyncServer.SYNC_HTTP_PORT);
-            self.put("tokenFP", syncServer != null ? syncServer.tokenFingerprint() : "");
-            self.put("enabled", syncEnabled);
-        } catch (Exception ignored) {}
-        return self.toString();
-    }
-
-    @JavascriptInterface
-    public String syncGetPeers() {
-        DiscoveryBeacon beacon = discovery;
-        return beacon != null ? beacon.getPeers().toString() : "[]";
-    }
-
-    @JavascriptInterface
-    public String syncDrainInbound() {
-        SyncServer server = syncServer;
-        return server != null ? server.drainInbound().toString() : "[]";
-    }
-
-    @JavascriptInterface
-    public void syncSetEnabled(boolean enabled) {
-        synchronized (this) {
-            syncEnabled = enabled;
-            applySyncState();
-        }
-    }
-
-    @JavascriptInterface
-    public void syncSetAdvertise(String role, boolean collecting) {
-        synchronized (this) {
-            syncRole = role == null || role.isEmpty() ? "auto" : role;
-            syncCollecting = collecting;
-            pushSelfToServer();
-            updateBeacon();
-        }
-    }
-
-    @JavascriptInterface
-    public void syncPublish(String json) {
-        SyncServer server = syncServer;
-        if (server != null) syncPublisher.execute(() -> server.publish(json));
-    }
-
-    @JavascriptInterface
-    public void syncFetch(String requestId, String payload) {
-        executor.execute(() -> {
-            JSONObject result;
-            SyncServer server = syncServer;
-            if (server == null) {
-                result = new JSONObject();
-                try { result.put("ok", false); result.put("status", 0); result.put("error", "同步未启用"); } catch (Exception ignored) {}
-            } else {
-                try { result = server.fetchPeer(new JSONObject(payload)); }
-                catch (Exception error) {
-                    result = new JSONObject();
-                    try { result.put("ok", false); result.put("status", 0); result.put("error", "请求参数异常"); } catch (Exception ignored) {}
-                }
-            }
-            deliverSync(requestId, result.toString());
-        });
-    }
-
-    private void deliverSync(String requestId, String response) {
-        String script = "window.__mu5120SyncResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(response) + ")";
-        webView.post(() -> webView.evaluateJavascript(script, null));
-    }
-
-    /** MainActivity.onDestroy 调用：停掉同步服务与发现，释放线程池。 */
-    void shutdownSync() {
-        synchronized (this) {
-            if (syncServer != null) { syncServer.stop(); syncServer = null; }
-            if (discovery != null) { discovery.stop(); discovery = null; }
-            syncStarted = false;
-        }
+    /** MainActivity.onDestroy 调用：释放路由器请求、异步历史线程池和本地反代。 */
+    void shutdown() {
         executor.shutdownNow();
-        syncPublisher.shutdownNow();
-    }
-
-    // 生成/读取稳定设备身份：UUID 存主进程 SharedPreferences，名称取 Build.MODEL。
-    private synchronized void ensureIdentity() {
-        if (!deviceId.isEmpty()) return;
-        Context context = webView.getContext().getApplicationContext();
-        SharedPreferences prefs = context.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE);
-        String id = prefs.getString(KEY_DEVICE_ID, "");
-        if (id == null || id.isEmpty()) {
-            id = UUID.randomUUID().toString();
-            prefs.edit().putString(KEY_DEVICE_ID, id).apply();
-        }
-        deviceId = id;
-        deviceName = Build.MODEL != null && !Build.MODEL.isEmpty() ? Build.MODEL : "Android";
-        try {
-            String version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
-            appVersion = version != null ? version : "";
-        } catch (Exception ignored) {
-            appVersion = "";
-        }
-    }
-
-    // 依据 (启用 && 有密码) 启停服务与发现；令牌/身份/信标随时刷新。空闲时静默退回直连。
-    private synchronized void applySyncState() {
-        ensureIdentity();
-        boolean shouldRun = syncEnabled && !syncPassword.isEmpty();
-        if (shouldRun) {
-            if (syncServer == null) syncServer = new SyncServer();
-            if (discovery == null) discovery = new DiscoveryBeacon(webView.getContext());
-            syncServer.setToken(syncPassword);
-            pushSelfToServer();
-            updateBeacon();
-            if (!syncStarted) {
-                syncServer.start();
-                discovery.start();
-                syncStarted = true;
-            }
-        } else if (syncStarted) {
-            if (syncServer != null) syncServer.stop();
-            if (discovery != null) discovery.stop();
-            syncStarted = false;
-        }
-    }
-
-    private void pushSelfToServer() {
-        SyncServer server = syncServer;
-        if (server == null) return;
-        try {
-            JSONObject self = new JSONObject();
-            self.put("id", deviceId);
-            self.put("name", deviceName);
-            self.put("platform", "android");
-            self.put("version", appVersion);
-            self.put("role", syncRole);
-            self.put("collecting", syncCollecting);
-            server.setSelf(self);
-        } catch (Exception ignored) {}
-    }
-
-    private void updateBeacon() {
-        DiscoveryBeacon beacon = discovery;
-        if (beacon == null) return;
-        try {
-            JSONObject fields = new JSONObject();
-            fields.put("id", deviceId);
-            fields.put("name", deviceName);
-            fields.put("platform", "android");
-            fields.put("httpPort", SyncServer.SYNC_HTTP_PORT);
-            fields.put("role", syncRole);
-            fields.put("collecting", syncCollecting);
-            fields.put("tokenFP", syncServer != null ? syncServer.tokenFingerprint() : "");
-            beacon.setBeacon(fields);
-        } catch (Exception ignored) {}
+        stockProxy.stop();
     }
 
     private synchronized void shareSessionIfChanged() {

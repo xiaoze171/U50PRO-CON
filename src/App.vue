@@ -55,7 +55,7 @@ button::after,
   border: 0;
 }
 
-/* Slim desktop scrollbars retain a useful indication of longer content. */
+/* Slim scrollbars indicate longer content in the development preview. */
 ::-webkit-scrollbar {
   width: 5px;
   height: 4px;

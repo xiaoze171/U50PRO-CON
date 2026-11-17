@@ -1,6 +1,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
+import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+test('APK web build proxy loads without the desktop product and rejects public hosts', async () => {
+  const temporaryRoot = resolve(tmpdir());
+  const sandbox = await mkdtemp(join(temporaryRoot, 'u50pro-proxy-'));
+  try {
+    const isolatedModule = join(sandbox, 'dev', 'battery-proxy.mjs');
+    await mkdir(dirname(isolatedModule));
+    await copyFile(new URL('../dev/battery-proxy.js', import.meta.url), isolatedModule);
+    const { batteryProxyMiddleware } = await import(pathToFileURL(isolatedModule).href);
+    const proxy = createServer(batteryProxyMiddleware);
+    await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve));
+    try {
+      for (const endpoint of ['http://8.8.8.8/state.json', 'http://172.32.0.1/state.json',
+        'http://example.com/backup/battery-log.csv', 'http://user:pass@localhost/state.json']) {
+        const response = await fetch(`http://127.0.0.1:${proxy.address().port}/?url=${encodeURIComponent(endpoint)}`);
+        assert.equal(response.status, 400, endpoint);
+      }
+    } finally {
+      proxy.closeAllConnections();
+      await new Promise(resolve => proxy.close(resolve));
+    }
+  } finally {
+    assert.equal(dirname(resolve(sandbox)), temporaryRoot);
+    assert.ok(sandbox.startsWith(join(temporaryRoot, 'u50pro-proxy-')));
+    await rm(sandbox, { recursive: true, force: true });
+  }
+});
 
 test('browser battery proxy honors the selected endpoint and forwards gauge age', async () => {
   const { batteryProxyMiddleware } = await import('../dev/battery-proxy.js');
@@ -27,27 +58,6 @@ test('browser battery proxy honors the selected endpoint and forwards gauge age'
     proxy.closeAllConnections(); upstream.closeAllConnections();
     await Promise.all([new Promise(resolve => proxy.close(resolve)), new Promise(resolve => upstream.close(resolve))]);
   }
-});
-
-test('desktop gauge reads do not replace or send the factory login cookie', async () => {
-  const { default: routerHttp } = await import('../desktop/router-http.js');
-  const { default: session } = await import('../desktop/session.js');
-  let cookie;
-  const upstream = createServer((req, res) => {
-    cookie = req.headers.cookie;
-    res.setHeader('X-Gauge-Age', '0.5');
-    res.setHeader('Set-Cookie', 'login=gauge');
-    res.end('{}');
-  });
-  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
-  session.replace('login=factory');
-  try {
-    const result = await routerHttp.request({ url: `http://127.0.0.1:${upstream.address().port}/state.json` });
-    assert.equal(result.ok, true);
-    assert.equal(cookie, undefined);
-    assert.equal(session.header(), 'login=factory');
-    assert.equal(result.headers['X-Gauge-Age'], '0.5');
-  } finally { session.clear(); await new Promise(resolve => upstream.close(resolve)); }
 });
 
 test('browser device CSV proxy forwards text without sending or absorbing router cookies', async () => {

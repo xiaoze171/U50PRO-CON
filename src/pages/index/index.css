@@ -291,19 +291,6 @@ textarea { min-height: 132px; padding: 12px; line-height: 1.6; }
 .band-clear-button { border-color: #eac8ce; color: var(--danger); }
 .band-clear-button:active { background: #fff6f7; }
 
-.sync-role-line { display: flex; margin-top: 14px; align-items: center; flex-wrap: wrap; gap: 8px; }
-.sync-role-badge { padding: 4px 9px; border-radius: 5px; font-size: 12px; font-weight: 600; color: var(--text-muted); background: var(--surface-soft); }
-.sync-role-collector { background: var(--accent-soft); color: var(--accent); }
-.sync-role-viewer { background: #edf8f3; color: var(--success); }
-.sync-role-hint { flex: 1; min-width: 160px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
-.sync-peer-list { display: flex; margin-top: 14px; flex-direction: column; }
-.sync-peer-row { display: flex; padding: 13px 0; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
-.sync-peer-copy { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-.sync-peer-copy b { overflow-wrap: anywhere; font-size: 13px; }
-.sync-peer-copy text { overflow-wrap: anywhere; color: var(--text-muted); font-size: 12px; }
-.sync-pin-button { flex: none; padding-inline: 12px; }
-.sync-pin-button.sync-pinned { color: var(--accent); background: var(--accent-soft); border-color: #b4cbfa; }
-.sync-empty { margin-top: 12px; padding: 18px 12px; color: var(--text-muted); font-size: 12px; line-height: 1.6; text-align: center; }
 .source-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; background: var(--surface-soft); color: var(--text-muted); font-size: 11px; line-height: 18px; }
 .source-hint { display: block; margin-top: 10px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
 .collection-source-summary { padding: 14px 0; color: var(--text-body); font-size: 13px; }
@@ -469,8 +456,6 @@ button:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus
   .client-card > view:first-child { flex: 1 1 150px; }
   .client-card code { max-width: 100%; }
   .client-actions { margin-left: auto; }
-  .sync-peer-row { align-items: flex-start; }
-  .sync-pin-button { padding-inline: 10px; }
 }
 @media (max-width: 360px) {
   .content-wrap { padding-inline: 12px; }

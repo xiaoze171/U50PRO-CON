@@ -214,7 +214,7 @@ test('custom host survives reload while branch source and port override saved se
   assert.equal(reloaded.getConfig().batterySource, 'gauge');
   assert.equal(reloaded.getConfig().batteryPort, 88);
   const old = Date.now() - 1200000;
-  routerApi.mergeExternalBattery([
+  routerApi.mergeBackgroundBatteryHistory([
     { timestamp: old, percent: 80, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:88/state.json' },
     { timestamp: old + 600000, percent: 60, charging: false, percentSource: 'gauge88', percentEndpoint: 'http://192.168.1.2:88/state.json' }
   ]);

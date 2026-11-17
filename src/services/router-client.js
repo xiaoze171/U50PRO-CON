@@ -59,10 +59,9 @@ isH5 = true;
 // #endif
 
 function nativeBridge() {
-  // 兼容安卓 WebView(window.AndroidRouter) 与桌面 Electron(window.DesktopRouter)：
-  // 两者方法面一致，谁在就走谁的原生桥（注入 Origin/Referer/Cookie、走局域网 HTTP）。
+  // Android WebView 通过原生桥直连路由器，浏览器预览使用开发代理。
   const candidate = typeof window !== 'undefined'
-    ? (window.AndroidRouter || window.DesktopRouter)
+    ? window.AndroidRouter
     : null;
   return candidate && typeof candidate.request === 'function' ? candidate : null;
 }
@@ -165,7 +164,7 @@ function readNativeBatteryHistory() {
 }
 
 function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS) {
-  // 委托给共享工具（services/sync.js、desktop 主进程复用同一份分钟桶合并逻辑）。
+  // 前台与本机原生后台历史使用相同的分钟桶归一与测量校验。
   return mergeBatterySamplesShared([local, native], { cutoff });
 }
 
@@ -320,7 +319,6 @@ function stockProxyPort() {
 // - 浏览器 H5：vite 代理路径 /router-api/index.html（与 App 同源）。
 // - 安卓壳：本地反代 http://127.0.0.1:<port>/index.html（POST 完整转发，
 //   响应剥离 X-Frame-Options/CSP，iframe 可内嵌，体验与浏览器一致）。
-// - 桌面壳：直连路由器地址（配合 external 打开方式）。
 function stockUiUrl() {
   const port = stockProxyPort();
   if (port > 0) return `http://127.0.0.1:${port}/index.html`;
@@ -329,9 +327,8 @@ function stockUiUrl() {
 }
 
 // 原厂后台打开方式：浏览器 H5 与安卓壳（本地反代可用时）均为 embed 内嵌；
-// 安卓反代未启动时退回 navigate 全屏直连；桌面壳 = external 系统浏览器兜底。
+// 安卓反代未启动时退回 navigate 全屏直连。
 function stockUiOpenMode() {
-  if (typeof window !== 'undefined' && window.DesktopRouter) return 'external';
   if (typeof window !== 'undefined' && window.AndroidRouter) {
     return stockProxyPort() > 0 ? 'embed' : 'navigate';
   }
@@ -770,14 +767,14 @@ function batterySummary(measurement, calculatedAt = Date.now(), displayPercent =
     percentEndpoint: measurement?.endpoint ?? '', charging: chargingState(measurement),
     measurement, mode: measurement?.mode ?? 'unknown', ...estimates,
     currentWindow, currentStats: currentWindow?.currentStats || [],
-    // Recovered/relayed blocks retain coverage, but only this acquisition owns a new archive observation.
+    // Recovered local blocks retain coverage, but only this acquisition owns a new archive observation.
     currentStatsUpdates,
     ratePerHour: estimates.ratePerHour ?? null, remainingHours, samples: batteryHistory
   };
 }
 
 // A saved valid gauge marker is only usable with a current capture timestamp.
-// This API is for the active collector; LAN viewers retain the collector's result.
+// Restore the local foreground summary from the same phone's native capture.
 function restoreBatterySummary(snapshot, additionalStats = []) {
   const now = Date.now();
   const timestamp = snapshot?.timestamp;
@@ -797,7 +794,7 @@ function restoreBatterySummary(snapshot, additionalStats = []) {
   batteryRestorePending = false;
   const summary = batterySummary(measurement, now, batteryPercent(snapshot.status), [], snapshot.status?.battery_gauge);
   // Recovery can carry a newer device log than the foreground cache. Keep a
-  // usable current calculation, otherwise accept a fresh matching collector
+  // usable current calculation, otherwise accept a fresh matching native
   // estimate instead of allowing a failed/stale/short local log to suppress it.
   const collected = snapshot.battery;
   const activeField = measurement.mode === 'charging' ? 'timeToFull' : 'runtime';
@@ -828,10 +825,9 @@ function saveBatteryHistory() {
   } catch {}
 }
 
-// 合并外部（局域网对端）电池样本进本地历史并持久化。
-// 供 services/sync.js 在查看端拉取采集器历史、或采集器回补离线片段时调用；
-// 分钟桶并集天然幂等，重复合并安全。
-function mergeExternalBattery(samples) {
+// 合并同一手机原生后台保存的电池样本，恢复前台历史并持久化。
+// 分钟桶与电流统计块按身份去重，重复恢复不会累计重复覆盖。
+function mergeBackgroundBatteryHistory(samples) {
   if (!Array.isArray(samples) || !samples.length) return batteryHistory;
   batteryHistory = mergeBatterySamples(batteryHistory, samples);
   batteryRestorePending = true;
@@ -1202,7 +1198,7 @@ export const routerApi = {
   stockUiSession,
   dashboard,
   getBatteryHistory,
-  mergeExternalBattery,
+  mergeBackgroundBatteryHistory,
   resetBatteryCollection,
   restoreBatterySummary,
   setTrafficPlan,

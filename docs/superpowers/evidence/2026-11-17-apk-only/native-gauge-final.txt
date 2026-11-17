@@ -1,0 +1,15 @@
+ע: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+ע: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+PASS native branch profile migration and collector provenance
+PASS native shared CSV fixtures=57
+PASS native device CSV 600-minute model, clock offset, stale/no-fallback
+PASS native CSV coalescing, 60s cache, configuration/endpoint invalidation and cookie route isolation
+PASS native original factory 24h endpoint slope, gauge exclusion and external power
+PASS native gauge freshness, precision, source isolation and shared measurement fixtures=12
+PASS native shared integration fixtures=2, minute blocks, restoration, duplicate mono, gaps and identity boundaries
+PASS native gauge archive, source/address transitions, restart, compact summaries and minute blocks
+PASS native legacy sanitation, atomic fields and frontend/native collection ownership
+PASS native source classification, minute deduplication, restart, chart/battery backfill and counts
+PASS native temperature validation, history migration, independent sensors, raw preservation and unknown charging
+PASS native router authentication UTF-8, uppercase digest, dynamic login vectors and LOGIN request/session
+PASS native local bridge request/history worker and localhost proxy lifecycle

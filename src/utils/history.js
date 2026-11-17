@@ -1,10 +1,9 @@
-// 历史数据的共享合并/归一工具（无平台依赖，Vue 前端与 Node/Electron 主进程都能直接复用）。
+// 本机历史数据的合并/归一工具（无平台依赖）。
 //
-// 关键性质：所有历史都按“分钟桶”存储，因此多设备合并 = 各分钟桶取并集、后写覆盖，
-// 天然幂等、无冲突。这是局域网互通能把多台设备的碎片曲线拼成完整曲线的基础。
+// 图表按分钟桶去重，电池样本保留测量来源与电流统计块身份。
+// 同一手机的前台与原生后台历史重复恢复时不会重复计算覆盖。
 //
-// 由 index.vue（图表历史）、router-client.js（电池历史）、services/sync.js（跨设备合并）、
-// desktop 主进程（常驻采集器）四处共享。
+// index.vue 用于图表历史，router-client.js 用于电池历史与原生后台恢复。
 
 import { normalizeTemperaturePoints, temperatureReading } from './temperature.js';
 import { sanitizeBatteryMeasurement, normalizeBatteryEndpoint } from './battery-gauge.js';
@@ -19,7 +18,7 @@ function numeric(value) {
 }
 
 // 把 [[ts,val],...] 序列按分钟桶归一：并集、后写覆盖、按时间升序、可限长。
-// 传入拼接后的多来源即等于“跨设备合并”。
+// 同一手机前后台保存的序列可以拼接后统一归一。
 export function normalizePoints(list, options = {}) {
   const { cutoff = 0, sampleMs = MINUTE_MS, maxPoints = Infinity } = options;
   if (!Array.isArray(list)) return [];

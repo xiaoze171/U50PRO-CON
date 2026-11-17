@@ -204,12 +204,13 @@ test('SMS snapshots preserve decoded content, raw content and capacity for offli
   assert.equal(saved.timestamp, result.timestamp);
 });
 
-test('native history backfill returns chart series, battery samples and merges battery into local history', async () => {
+test('native history backfill imports battery samples through the same-phone history API', async () => {
   const history = await routerApi.getBackgroundHistory();
   assert.equal(history.chart.rsrp[0][1], -95);
   assert.equal(history.chart.temperatures.wifi_chip_temp[0][1], 40);
   assert.equal(history.snapshotCount, 1);
-  const merged = routerApi.mergeExternalBattery(history.battery);
+  assert.equal(typeof routerApi.mergeBackgroundBatteryHistory, 'function', 'local recovery needs a background history import API');
+  const merged = routerApi.mergeBackgroundBatteryHistory(history.battery);
   assert.ok(merged.some(item => item.timestamp === nativeTimestamp && item.percent === 48), 'background battery samples must enter local history');
 });
 

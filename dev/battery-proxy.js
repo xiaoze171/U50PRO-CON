@@ -1,9 +1,15 @@
 import http from 'node:http';
 import https from 'node:https';
-import { createRequire } from 'node:module';
 
-// Keep the desktop CommonJS transport outside Vite's ESM config bundle.
-const routerHttp = createRequire(import.meta.url)('../desktop/router-http.js');
+// Match the Android router bridge's private/local-host allowlist.
+function isLocalRouterHost(host) {
+  if (!host) return false;
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  return host.endsWith('.local');
+}
 
 // Browser development uses the profile's gauge host for both live state and CSV.
 export function batteryProxyMiddleware(req, res) {
@@ -12,7 +18,7 @@ export function batteryProxyMiddleware(req, res) {
     target = new URL(new URL(req.url, 'http://localhost').searchParams.get('url'));
     if (req.method !== 'GET' || !['http:', 'https:'].includes(target.protocol) ||
         target.username || target.password || !['/state.json', '/backup/battery-log.csv'].includes(target.pathname) ||
-        !routerHttp.isLocalRouterHost(target.hostname)) throw new Error();
+        !isLocalRouterHost(target.hostname)) throw new Error();
   } catch { res.writeHead(400); res.end('Invalid battery endpoint'); return; }
   const csv = target.pathname === '/backup/battery-log.csv';
   const maxBytes = csv ? 4 * 1024 * 1024 : 512 * 1024;

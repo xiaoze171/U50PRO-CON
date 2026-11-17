@@ -16,7 +16,7 @@ function pageFunction(name, context = {}) {
   return runInNewContext(`(${script.slice(node.start, node.end)})`, context);
 }
 
-test('switching to an older collector cannot relabel new data with the previous source', () => {
+test('restoring an older native snapshot cannot relabel new data with the previous source', () => {
   const merge = pageFunction('mergeDashboard');
   const previous = { source: 'screenOff', status: { value: 1 } };
   const fresh = merge(previous, { status: { value: 2 } });

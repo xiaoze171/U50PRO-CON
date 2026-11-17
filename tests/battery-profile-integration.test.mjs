@@ -154,7 +154,7 @@ for (const localState of ['failed', 'stale', 'insufficient']) {
       assert.equal(restored.csvAnalysis.state, 'ready');
       assert.equal(restored.csvAnalysis.fetchedAt, now, 'native provenance stays with the selected native calculation');
       assert.equal(restored.calculatedAt, now);
-      assert.equal(client.requests.length, requestsBeforeRestore, 'recovery uses the available collector result synchronously');
+      assert.equal(client.requests.length, requestsBeforeRestore, 'recovery uses the available native result synchronously');
       assert.deepEqual(restored.measurement, native.battery.measurement);
     } finally { Date.now = realNow; }
   });

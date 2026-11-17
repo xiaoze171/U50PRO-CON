@@ -65,7 +65,11 @@ public final class NativeMonitorGaugeHistoryTest {
             .put("battery", new JSONObject().put("measurement", measurement).put("mode", measurement.getString("mode"))
                 .put("currentStats", new JSONArray().put(block)).put("samples", new JSONArray().put(new JSONObject().put("huge", true)))
                 .put("currentStatsUpdates", new JSONArray().put(new JSONObject().put("blockId", block.getString("blockId")).put("revision", revision)))
-                .put("timeToFull", new JSONObject().put("minutes", 240).put("state", "estimated")).put("calculatedAt", end));
+                .put("timeToFull", new JSONObject().put("minutes", 240).put("state", "estimated"))
+                .put("runtime", new JSONObject().put("minutes", 600).put("state", "estimated"))
+                .put("calculatedAt", end).put("windowSeconds", 60)
+                .put("csvAnalysis", new JSONObject().put("state", "ready").put("source", "device-csv")
+                    .put("endpoint", "http://fixture.invalid:88/backup/battery-log.csv")));
     }
 
     private static void testFactoryEndpointBoundary() throws Exception {
@@ -155,6 +159,19 @@ public final class NativeMonitorGaugeHistoryTest {
             check(live.has("battery"), "compact battery summary must survive native archive");
             check(!live.getJSONObject("battery").has("samples"), "per-second battery summary excludes full history");
             check(live.getJSONObject("battery").getLong("calculatedAt") == T + 10000, "collector calculation timestamp is preserved");
+            check(live.getJSONObject("battery").getJSONObject("timeToFull").getInt("minutes") == 240
+                && live.getJSONObject("battery").getJSONObject("runtime").getInt("minutes") == 600,
+                "local compact summary preserves independent charging and runtime results");
+            check(live.getJSONObject("battery").getInt("windowSeconds") == 60
+                && "device-csv".equals(live.getJSONObject("battery").getJSONObject("csvAnalysis").getString("source"))
+                && "http://fixture.invalid:88/backup/battery-log.csv".equals(
+                    live.getJSONObject("battery").getJSONObject("csvAnalysis").getString("endpoint")),
+                "local recovery retains calculation coverage and the device CSV provenance");
+            MonitorHistoryStore restarted = new MonitorHistoryStore(root);
+            JSONObject restored = restarted.read(T + 10000).getJSONObject("live").getJSONObject("battery");
+            check(restored.getJSONObject("runtime").getInt("minutes") == 600
+                && restored.getLong("calculatedAt") == T + 10000,
+                "independent estimate and calculation timestamp survive local service restart");
             store.record(withBattery(T + 1000, T + 15000, "front-a", "Charging", 2), T + 15000);
             store.record(withBattery(T + 20000, T + 30000, "native-b", "Charging", 1), T + 30000);
             store.record(withBattery(T + 40000, T + 50000, "front-c", "Charging", 1), T + 50000);
