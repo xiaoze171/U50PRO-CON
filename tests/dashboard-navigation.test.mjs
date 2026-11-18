@@ -12,11 +12,13 @@ const page = readFileSync(new URL('../src/pages/index/index.vue', import.meta.ur
 const script = page.split('<script setup>')[1].split('</script>')[0];
 const ast = parse(script, { sourceType: 'module' });
 function pageFunction(name, context = {}) {
+  context.usesDeviceHistory ??= false;
   const node = ast.program.body.find(item => item.type === 'FunctionDeclaration' && item.id.name === name);
   assert.ok(node, `${name} must implement dashboard behavior`);
   return runInNewContext(`(${script.slice(node.start, node.end)})`, context);
 }
 function pageComputed(name, context = {}) {
+  context.usesDeviceHistory ??= false;
   const declaration = ast.program.body.flatMap(item => item.declarations || []).find(item => item.id.name === name);
   const callback = declaration.init.arguments[0];
   return runInNewContext(`(${script.slice(callback.start, callback.end)})()`, context);

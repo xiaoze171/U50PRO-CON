@@ -1,7 +1,7 @@
 param(
     [ValidateSet('factory', 'gauge88-csv')][string]$Profile = '',
     [string]$JsonJar = "$env:USERPROFILE/.gradle/caches/modules-2/files-2.1/org.json/json/20180813/8566b2b0391d9d4479ea225645c6ed47ef17fe41/json-20180813.jar",
-    [string[]]$Tests = @('NativeBatteryProfileTest', 'NativeBatteryCsvTest', 'NativeBatteryCsvCacheTest', 'NativeBatteryFactoryTest', 'NativeBatteryGaugeTest', 'NativeBatteryCurrentWindowTest', 'NativeMonitorGaugeHistoryTest', 'NativeBatteryHistoryTest', 'MonitorSourceTest', 'MonitorTemperatureTest', 'NativeRouterAuthTest', 'NativeLocalBridgeTest')
+    [string[]]$Tests = @('NativeBatteryProfileTest', 'NativeBatteryCsvTest', 'NativeBatteryCsvCacheTest', 'NativeBatteryFactoryTest', 'NativeBatteryGaugeTest', 'NativeBatteryCurrentWindowTest', 'NativeMonitorGaugeHistoryTest', 'NativeBatteryHistoryTest', 'MonitorSourceTest', 'MonitorTemperatureTest', 'NativeRouterAuthTest', 'NativeLocalBridgeTest', 'MonitorRuntimePolicyTest', 'NativeMonitorRequestLifecycleTest')
 )
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot

@@ -24,12 +24,12 @@ export function createBatteryCsvClient({ request, now = Date.now, timeoutMs = 50
     cached = null;
     inFlight = null;
   }
-  function get(endpoint) {
+  function get(endpoint, { force = false } = {}) {
     const url = batteryCsvUrl(endpoint);
     if (activeUrl !== url) { invalidate(); activeUrl = url; }
     const startedAt = now();
-    if (cached && startedAt >= cached.fetchedAt && startedAt - cached.fetchedAt < CACHE_MS) return Promise.resolve(cached);
     if (inFlight) return inFlight;
+    if (!force && cached && startedAt >= cached.fetchedAt && startedAt - cached.fetchedAt < CACHE_MS) return Promise.resolve(cached);
     const token = generation;
     const run = async () => {
       let timer;
@@ -43,10 +43,10 @@ export function createBatteryCsvClient({ request, now = Date.now, timeoutMs = 50
         if (text.length > MAX_BYTES || new TextEncoder().encode(text).byteLength > MAX_BYTES) {
           throw Object.assign(new Error('CSV 超过 4 MiB'), { code: 'too-large' });
         }
-        let csv;
-        try { csv = parseBatteryCsv(text); }
+        let csv, historyCsv;
+        try { csv = parseBatteryCsv(text); historyCsv = parseBatteryCsv(text, { history: true }); }
         catch (error) { throw Object.assign(error, { code: 'invalid-csv' }); }
-        value = { state: 'ready', reason: '', csv, url, fetchedAt: now() };
+        value = { state: 'ready', reason: '', csv, historyCsv, url, fetchedAt: now() };
       } catch (error) {
         value = { state: 'unavailable', reason: error.code || 'fetch-error', error: error.message,
           csv: null, url, fetchedAt: now() };

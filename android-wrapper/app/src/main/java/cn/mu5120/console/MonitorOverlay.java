@@ -236,7 +236,11 @@ final class MonitorOverlay {
                 return true;
             }
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                preferences.edit().putInt(KEY_X, layoutParams.x).putInt(KEY_Y, layoutParams.y).apply();
+                // Device mode must not serialize this process's cached overlay choice.
+                // Its position already resets each time the overlay opens.
+                if (!"gauge88-csv".equals(BatteryProfile.mode())) {
+                    preferences.edit().putInt(KEY_X, layoutParams.x).putInt(KEY_Y, layoutParams.y).apply();
+                }
                 return true;
             }
             return false;

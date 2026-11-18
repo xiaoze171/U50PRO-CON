@@ -66,7 +66,7 @@ globalThis.window = {
   }
 };
 
-const { routerApi } = await import('../src/services/router-client.js');
+const { routerApi } = await importBatteryProfileClient('factory');
 
 const page = readFileSync(new URL('../src/pages/index/index.vue', import.meta.url), 'utf8');
 const pageScript = page.split('<script setup>')[1].split('</script>')[0];
@@ -204,7 +204,7 @@ test('SMS snapshots preserve decoded content, raw content and capacity for offli
   assert.equal(saved.timestamp, result.timestamp);
 });
 
-test('native history backfill imports battery samples through the same-phone history API', async () => {
+test('factory native history backfill imports battery samples through the same-phone history API', async () => {
   const history = await routerApi.getBackgroundHistory();
   assert.equal(history.chart.rsrp[0][1], -95);
   assert.equal(history.chart.temperatures.wifi_chip_temp[0][1], 40);
@@ -224,7 +224,7 @@ test('background monitor state and battery optimization status are readable from
   assert.equal(power.ignoring, false);
 });
 
-test('empty charging flags preserve factory off/gauge unknown semantics while invalid temperatures remain diagnostic only', async () => {
+test('empty factory charging flags stay off while invalid temperatures remain diagnostic only', async () => {
   const previous = { ...fixtures };
   try {
     fixtures.battery_charging = '';

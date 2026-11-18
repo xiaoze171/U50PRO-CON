@@ -3,10 +3,10 @@
     <view class="history-window" :class="{ virtualized }" :style="virtualized ? { transform: `translateY(${range.offset}px)` } : {}">
       <view v-for="sample in visibleSamples" :key="sample.timestamp" class="history-row">
         <view class="history-time">
-          <text>{{ formatDate(sample.timestamp) }}</text>
+          <text>{{ formatDate(sample.timestamp, sample.source) }}</text>
           <text class="source-badge">{{ collectionSourceLabel(sample.source) }}</text>
         </view>
-        <b>{{ sample.percent }}%</b>
+        <b>{{ sample.percent == null ? '—' : `${sample.percent}%` }}</b>
         <text>{{ sample.charging === true ? '充电' : sample.charging === false ? '放电' : '状态未知' }}</text>
         <text class="history-temperature">{{ sample.temperature == null ? '—' : `${sample.temperature}°C` }}</text>
       </view>

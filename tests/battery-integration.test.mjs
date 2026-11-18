@@ -8,6 +8,7 @@ let gauge = {};
 let unavailable = false;
 let factoryPercent = 80;
 let writes = 0;
+let csvResponseDelayMs = 0;
 const storage = new Map([['mu5120-config', { routerUrl: 'http://router.test', batterySource: 'gauge' }]]);
 const snapshots = [];
 globalThis.uni = { getStorageSync: key => storage.get(key), setStorageSync(key, value) {
@@ -28,7 +29,9 @@ globalThis.window = { AndroidRouter: {
         : Object.fromEntries(cmd.split(',').map(key => [key, fields[key] ?? '']));
     const response = unavailable && url.pathname === '/state.json' ? { ok: false, status: 503 }
       : { ok: true, status: 200, headers: { 'X-Gauge-Age': '0' }, body: csv ? body : JSON.stringify(body) };
-    queueMicrotask(() => window.__mu5120NativeResponse(id, JSON.stringify(response)));
+    const reply = () => window.__mu5120NativeResponse(id, JSON.stringify(response));
+    if (csv && csvResponseDelayMs > 0) setImmediate(() => { now += csvResponseDelayMs; reply(); });
+    else queueMicrotask(reply);
   }
 } };
 const { routerApi } = await importBatteryProfileClient('gauge88-csv');
@@ -41,7 +44,7 @@ function configure(seconds = 0, extra = {}) {
     full_confirmed: false, full_anchor_valid: true, full_anchor_ts: 100, ...extra };
 }
 
-test('foreground uses same-source current statistics, compact native payloads and minute persistence', async () => {
+test('88 foreground keeps same-source current statistics and compact diagnostics without writing phone history', async () => {
   Date.now = () => now;
   try {
     configure();
@@ -51,6 +54,7 @@ test('foreground uses same-source current statistics, compact native payloads an
     assert.equal(first.battery.samples.at(-1).temperature, 31);
     assert.equal(first.battery.samples.at(-1).current, -400);
     const initialWrites = writes;
+    assert.equal(initialWrites, 0, 'the first foreground reading must not archive battery history');
     let result;
     for (let second = 1; second <= 60; second++) {
       configure(second);
@@ -59,13 +63,14 @@ test('foreground uses same-source current statistics, compact native payloads an
     assert.equal(result.battery.runtime.minutes, 600);
     assert.equal(result.battery.timeToFull.minutes, null);
     assert.equal(result.battery.currentWindow.observedDurationMs, 60000);
-    assert.ok(writes - initialWrites <= 2, 'live updates must not rewrite all history every second');
+    assert.equal(writes, 0, 'minute boundaries and current statistics stay in memory');
+    assert.equal(storage.has('mu5120-battery-history'), false);
     const compact = snapshots.at(-1).battery;
     assert.equal(compact.samples, undefined);
     assert.equal(compact.measurement.netCurrentMa, -400);
     assert.equal(compact.runtime.minutes, 600);
     assert.ok(compact.currentStats.length > 0);
-    assert.ok(compact.currentStatsUpdates.length > 0, 'only revisions from this acquisition authorize native archival');
+    assert.ok(compact.currentStatsUpdates.length > 0, 'foreground diagnostics keep revisions from this acquisition');
     for (const update of compact.currentStatsUpdates) assert.ok(compact.currentStats.some(block => block.blockId === update.blockId && block.revision === update.revision));
     assert.ok(routerApi.getBatteryHistory().some(item => item.currentStats?.observedDurationMs > 0));
   } finally { Date.now = realNow; }
@@ -100,35 +105,34 @@ test('history recovery requires a current reading and restores coverage once aft
 });
 
 
-test('late dashboard work cannot refresh an expired gauge response', async () => {
+test('a delayed CSV response cannot refresh an expired foreground gauge measurement', async () => {
   Date.now = () => now;
   try {
     configure(200);
-    window.AndroidRouter.getBackgroundBatteryHistoryAsync = id => {
-      now += 6000;
-      queueMicrotask(() => window.__mu5120HistoryResponse(id, '[]'));
-    };
+    csvResponseDelayMs = 6000;
     const result = await routerApi.dashboard();
     assert.equal(result.status.battery_gauge.state, 'stale');
     assert.equal(result.battery.measurement, null);
     assert.equal(result.battery.runtime.minutes, null);
     assert.equal(result.battery.percent, null);
   } finally {
-    delete window.AndroidRouter.getBackgroundBatteryHistoryAsync;
+    csvResponseDelayMs = 0;
     Date.now = realNow;
   }
 });
 
-test('endpoint roundtrips retain chart history while device CSV replaces any app SOC fallback', async () => {
+test('88 endpoint roundtrips reject phone SOC backfill and estimate independently from device CSV', async () => {
   Date.now = () => now;
   try {
     configure(1000);
     routerApi.updateConfig({ batteryHost: 'another.test' });
     const start = now;
-    routerApi.mergeBackgroundBatteryHistory(Array.from({ length: 11 }, (_, i) => ({
+    const phoneHistory = Array.from({ length: 11 }, (_, i) => ({
       timestamp: start + i * 60000, percent: 52 - i * 0.2, charging: false,
       percentSource: 'gauge88', percentEndpoint: 'http://another.test:88/state.json'
-    })));
+    }));
+    const imported = routerApi.mergeBackgroundBatteryHistory(phoneHistory);
+    assert.ok(!imported.some(item => item.timestamp === start), 'old phone SOC records are rejected before collection');
     configure(1600); factoryPercent = 50;
     const before = await routerApi.dashboard();
     assert.equal(before.battery.runtime.state, 'estimated');
@@ -138,17 +142,20 @@ test('endpoint roundtrips retain chart history while device CSV replaces any app
     const after = await routerApi.dashboard();
     assert.equal(after.battery.runtime.state, 'estimated');
     assert.equal(after.battery.runtime.minutes, 600, 'new endpoint CSV is sufficient independently of app history');
-    assert.ok(after.battery.samples.some(item => item.timestamp === start));
+    assert.ok(!after.battery.samples.some(item => item.timestamp === start), 'endpoint changes do not import old phone records');
+    assert.ok(after.battery.samples.every(item => item.source === 'foreground'));
+    assert.equal(writes, 0);
   } finally {
     routerApi.updateConfig({ batteryHost: '' });
     Date.now = realNow;
   }
 });
 
-test('restored blocks keep the original historical measurement and source', async () => {
+test('88 rejects old native current blocks while retaining foreground measurements and coverage', async () => {
   Date.now = () => now;
   try {
     configure(1700);
+    routerApi.resetBatteryCollection();
     const first = await routerApi.dashboard();
     const measurement = { ...first.battery.measurement, rawSoc: 51, sampleMonoSeconds: 5730 };
     const { batteryMeasurementIdentity } = await import('../src/utils/battery-current-window.js');
@@ -157,16 +164,21 @@ test('restored blocks keep the original historical measurement and source', asyn
       source: 'background', percentSource: measurement.percentageSource, percentEndpoint: measurement.endpoint,
       measurement, currentStats: { segmentId: 'native-keep', blockId: 'native-keep:minute', revision: 1,
         startAt: now, endAt: now + 30000, integralMaMs: -12000000, observedDurationMs: 30000, sampleCount: 3, identity } };
-    routerApi.mergeBackgroundBatteryHistory([original]);
+    const originalCopy = structuredClone(original);
+    const imported = routerApi.mergeBackgroundBatteryHistory([original]);
+    assert.ok(!imported.some(item => item.currentStats?.blockId === 'native-keep:minute'));
     configure(1760);
     const forwarded = await routerApi.dashboard();
-    assert.ok(forwarded.battery.currentStats.some(block => block.blockId === 'native-keep:minute'));
+    assert.ok(!forwarded.battery.currentStats.some(block => block.blockId === 'native-keep:minute'));
     assert.ok(!forwarded.battery.currentStatsUpdates.some(block => block.blockId === 'native-keep:minute'), 'forwarding a remote block does not authorize a new archive observation');
+    assert.equal(forwarded.battery.currentWindow.observedDurationMs, 60000, 'only foreground coverage contributes to the window');
+    assert.equal(forwarded.battery.currentWindow.meanCurrentMa, -400);
+    assert.equal(forwarded.battery.measurement.rawSoc, 50);
+    assert.equal(forwarded.battery.measurement.sampleMonoSeconds, 5760);
     const restored = routerApi.getBatteryHistory().find(item => item.currentStats?.blockId === 'native-keep:minute');
-    assert.equal(restored.percent, 51);
-    assert.equal(restored.measurement.rawSoc, 51);
-    assert.equal(restored.measurement.sampleMonoSeconds, 5730);
-    assert.equal(restored.source, 'background');
+    assert.equal(restored, undefined);
+    assert.deepEqual(original, originalCopy, 'rejected old history retains its original measurement and source');
+    assert.equal(writes, 0);
   } finally { Date.now = realNow; }
 });
 

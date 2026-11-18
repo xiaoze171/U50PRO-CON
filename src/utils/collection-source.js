@@ -1,4 +1,7 @@
+import { formatDate } from './format.js';
+
 export const collectionSourceLabels = Object.freeze({
+  device: '设备记录',
   foreground: '前台', background: '后台', overlay: '悬浮窗', screenOff: '息屏', unknown: '未标记'
 });
 
@@ -40,7 +43,8 @@ export function historyTooltip(params) {
   const timestamp = axisTimestamp ?? Number(validPoints[0].value[0]);
   const points = validPoints.filter(item => Number(item.value[0]) === timestamp);
   if (!points.length) return '';
-  const time = new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
+  const time = points[0].value[2] === 'device' ? formatDate(timestamp, 'device')
+    : new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
   const rows = points.map(item => {
     // ECharts marker HTML may contain external values. Build a small swatch
     // ourselves and accept only a plain hexadecimal color.

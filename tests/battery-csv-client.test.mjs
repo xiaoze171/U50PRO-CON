@@ -82,3 +82,65 @@ test('CSV input is bounded and hanging transports settle as a timeout', async ()
   const hanging = createBatteryCsvClient({ request: () => new Promise(() => {}), timeoutMs: 10 });
   assert.equal((await hanging.get('http://router.test:88/state.json')).reason, 'timeout');
 });
+
+test('manual force refresh replaces a fresh cached CSV while preserving reader identity', async () => {
+  const { createBatteryCsvClient } = await import('../src/services/battery-csv-client.js');
+  let now = 1000;
+  let content = goodCsv;
+  const client = createBatteryCsvClient({ now: () => now, request: async () => content });
+  const first = await client.get('http://router.test:88/state.json');
+  assert.equal(await client.get('http://router.test:88/state.json'), first);
+  now += 1000;
+  content = goodCsv.replace(',50,', ',49,');
+  const forced = await client.get('http://router.test:88/state.json', { force: true });
+  assert.notEqual(forced, first);
+  assert.equal(forced.csv.rows[0].soc, 49);
+  assert.equal(await client.get('http://router.test:88/state.json'), forced);
+});
+
+test('force refresh coalesces with a running refresh and normal readers await that result', async () => {
+  const { createBatteryCsvClient } = await import('../src/services/battery-csv-client.js');
+  const next = deferred();
+  let content = goodCsv;
+  const client = createBatteryCsvClient({ request: async () => content });
+  await client.get('http://router.test:88/state.json');
+  content = next.promise;
+  const first = client.get('http://router.test:88/state.json', { force: true });
+  const second = client.get('http://router.test:88/state.json', { force: true });
+  const reader = client.get('http://router.test:88/state.json');
+  assert.equal(first, second);
+  assert.equal(reader, first);
+  next.resolve(goodCsv.replace(',50,', ',48,'));
+  assert.equal((await reader).csv.rows[0].soc, 48);
+});
+
+test('a forced retry can recover immediately from a cached fetch failure', async () => {
+  const { createBatteryCsvClient } = await import('../src/services/battery-csv-client.js');
+  let offline = true;
+  const client = createBatteryCsvClient({ request: async () => {
+    if (offline) throw new Error('offline');
+    return goodCsv;
+  } });
+  const failed = await client.get('http://router.test:88/state.json');
+  assert.equal(failed.state, 'unavailable');
+  offline = false;
+  assert.equal(await client.get('http://router.test:88/state.json'), failed);
+  assert.equal((await client.get('http://router.test:88/state.json', { force: true })).state, 'ready');
+});
+
+test('changing endpoint during a forced refresh prevents its late response from replacing the new cache', async () => {
+  const { createBatteryCsvClient } = await import('../src/services/battery-csv-client.js');
+  const oldRefresh = deferred();
+  let oldRequests = 0;
+  const client = createBatteryCsvClient({ request: async url => {
+    if (new URL(url).hostname === 'one.test' && ++oldRequests === 2) return oldRefresh.promise;
+    return goodCsv;
+  } });
+  await client.get('http://one.test:88/state.json');
+  const stale = client.get('http://one.test:88/state.json', { force: true });
+  const current = await client.get('http://two.test:88/state.json');
+  oldRefresh.resolve(goodCsv.replace(',50,', ',1,'));
+  assert.equal((await stale).state, 'invalidated');
+  assert.equal(await client.get('http://two.test:88/state.json'), current);
+  assert.equal(current.csv.rows[0].soc, 50);
+});

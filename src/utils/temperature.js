@@ -42,9 +42,9 @@ export function normalizeTemperaturePoints(key, list) {
     if (!Array.isArray(item) || item[0] == null || item[0] === '') continue;
     const timestamp = Number(item[0]);
     const reading = temperatureReading(key, item[1]);
-    if (!Number.isFinite(timestamp) || reading.state !== 'valid') continue;
+    if (!Number.isFinite(timestamp) || reading.state !== 'valid' && item[2] !== 'device') continue;
     const point = [timestamp, reading.value];
-    if (typeof item[2] === 'string') point.push(item[2]);
+    if (typeof item[2] === 'string') point.push(...item.slice(2));
     points.push(point);
   }
   return points;

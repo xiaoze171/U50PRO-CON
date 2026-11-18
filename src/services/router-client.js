@@ -6,6 +6,8 @@ import { createBatteryCurrentWindow, batteryMeasurementIdentity, sameBatteryIden
 import { estimateCsvBatteryTimes } from '../utils/battery-csv.js';
 import { estimateFactoryBatteryTimes, normalizeFactoryBatteryMeasurement } from '../utils/battery-factory.js';
 import { createBatteryCsvClient } from './battery-csv-client.js';
+import { buildDeviceHistory } from '../utils/device-history.js';
+import { emptyChartHistory } from '../utils/history.js';
 import batteryProfile from '../../config/battery-profile.json' with { type: 'json' };
 import routerFields from './router-fields.json' with { type: 'json' };
 
@@ -22,6 +24,7 @@ const DEFAULT_CONFIG = {
 
 const BATTERY_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NATIVE_BATTERY_MERGE_MS = 30000;
+const usesDeviceHistory = batteryProfile.mode === 'gauge88-csv';
 
 // 与 Android 后台共享字段清单，新增字段会同时进入前后台采集。
 const {
@@ -44,6 +47,10 @@ let configurationRevision = 0;
 const batteryCsvClient = createBatteryCsvClient({ now: () => Date.now(), request: async (url, options) =>
   requestRouter('/backup/battery-log.csv', { ...options, url }) });
 let latestBatteryCsv = null;
+let deviceHistoryEndpoint = '';
+let deviceHistoryCsv = null;
+let deviceHistoryResult = null;
+let retainedDeviceHistory = null;
 const archivedBatteryRevisions = new Map(batteryHistory.filter(item => item.currentStats)
   .map(item => [item.currentStats.blockId, item.currentStats.revision]));
 const localBatteryBlockReadings = new Map();
@@ -135,6 +142,7 @@ function saveConfig() {
 }
 
 function loadBatteryHistory() {
+  if (usesDeviceHistory) return [];
   let stored = [];
   try {
     const value = uni.getStorageSync('mu5120-battery-history');
@@ -163,6 +171,7 @@ function mergeBatterySamples(local, native, cutoff = Date.now() - BATTERY_HISTOR
 }
 
 async function mergeNativeBatteryHistory(force = false, current = () => true) {
+  if (usesDeviceHistory) return;
   const now = Date.now();
   if (!force && now - lastNativeBatteryMerge < NATIVE_BATTERY_MERGE_MS) return;
   lastNativeBatteryMerge = now;
@@ -342,6 +351,42 @@ async function getBatteryGauge(settings) {
   } catch (error) {
     return { percent: null, state: 'unavailable', url, raw: null, error: error.message };
   }
+}
+
+function emptyDeviceHistory(state, url = '') {
+  return { state, url, chart: { ...emptyChartHistory(), signals: {} }, battery: [],
+    snapshotCount: 0, sourceCounts: { device: 0 }, latestTimestamp: null, deviceTimestamp: null };
+}
+
+// Device history is independent of the factory login and is replaced atomically.
+// A failed refresh retains only this endpoint's last downloaded archive.
+async function getDeviceHistory(force = false) {
+  if (!usesDeviceHistory) return emptyDeviceHistory('disabled');
+  const revision = configurationRevision;
+  const endpoint = batteryGaugeUrl(config.routerUrl, config.batteryHost, 88);
+  if (deviceHistoryEndpoint !== endpoint) {
+    deviceHistoryEndpoint = endpoint;
+    deviceHistoryCsv = null;
+    deviceHistoryResult = null;
+    retainedDeviceHistory = null;
+  }
+  const result = await batteryCsvClient.get(endpoint, { force });
+  if (revision !== configurationRevision || deviceHistoryEndpoint !== endpoint || result.state === 'invalidated') {
+    return emptyDeviceHistory('invalidated', result.url);
+  }
+  latestBatteryCsv = result;
+  if (result === deviceHistoryCsv && deviceHistoryResult) return deviceHistoryResult;
+  deviceHistoryCsv = result;
+  if (result.state === 'ready') {
+    retainedDeviceHistory = buildDeviceHistory(result.historyCsv, { endpoint });
+    deviceHistoryResult = { ...retainedDeviceHistory, state: 'ready', url: result.url,
+      fetchedAt: result.fetchedAt, error: '' };
+  } else {
+    deviceHistoryResult = { ...(retainedDeviceHistory || emptyDeviceHistory('unavailable')),
+      state: 'unavailable', url: result.url, fetchedAt: result.fetchedAt,
+      error: result.error || '设备历史暂不可读', reason: result.reason };
+  }
+  return deviceHistoryResult;
 }
 
 async function getFields(fields, extra = {}) {
@@ -749,6 +794,7 @@ function restoreBatterySummary(snapshot, additionalStats = []) {
 }
 
 function saveBatteryHistory() {
+  if (usesDeviceHistory) return;
   try {
     const cutoff = Date.now() - BATTERY_HISTORY_WINDOW_MS;
     batteryHistory = mergeBatterySamples(batteryHistory, [], cutoff);
@@ -762,6 +808,7 @@ function saveBatteryHistory() {
 // 合并同一手机原生后台保存的电池样本，恢复前台历史并持久化。
 // 分钟桶与电流统计块按身份去重，重复恢复不会累计重复覆盖。
 function mergeBackgroundBatteryHistory(samples) {
+  if (usesDeviceHistory) return batteryHistory;
   if (!Array.isArray(samples) || !samples.length) return batteryHistory;
   batteryHistory = mergeBatterySamples(batteryHistory, samples);
   batteryRestorePending = true;
@@ -1132,6 +1179,7 @@ export const routerApi = {
   developerLogin,
   stockUiSession,
   dashboard,
+  getDeviceHistory,
   getBatteryHistory,
   mergeBackgroundBatteryHistory,
   resetBatteryCollection,

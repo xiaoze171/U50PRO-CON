@@ -4,7 +4,10 @@ import { batteryTimeResult as timeResult, initializeBatteryTimeResults } from '.
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_RECORDS = 50000;
 const REQUIRED = ['ts', 'soc', 'voltage_mv', 'current_ma', 'power_w', 'temp_c', 'status'];
-const OPTIONAL = ['ts_iso', 'usb_online', 'input_voltage_mv', 'input_current_ma', 'input_power_w'];
+const TELEMETRY = ['download_bps', 'upload_bps', 'net_interval_s', 'cpu_temp_c', 'modem_temp_c',
+  'pa_temp_c', 'network_type', 'lte_rsrp_dbm', 'lte_rsrq_db', 'lte_snr_db', 'nr_rsrp_dbm',
+  'nr_rsrq_db', 'nr_sinr_db'];
+const OPTIONAL = ['ts_iso', 'usb_online', 'input_voltage_mv', 'input_current_ma', 'input_power_w', ...TELEMETRY];
 const NUMERIC = ['ts', 'soc', 'voltage_mv', 'current_ma', 'power_w', 'temp_c'];
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 const numberPattern = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
@@ -25,7 +28,7 @@ function utf8Length(text) {
   return bytes;
 }
 
-function parseRecord(cells, headers) {
+function parseRecord(cells, headers, history) {
   if (cells.length > headers.length) return null;
   const row = {};
   for (let index = 0; index < headers.length; index++) {
@@ -34,25 +37,44 @@ function parseRecord(cells, headers) {
     const value = cells[index]?.trim() ?? '';
     if (NUMERIC.includes(name)) {
       row[name] = numeric(value);
-      if (row[name] === null) return null;
+      if (row[name] === null && (!history || name === 'ts')) return null;
     } else if (name === 'status') {
-      if (!value) return null;
-      row[name] = value;
+      if (!value && !history) return null;
+      row[name] = value || null;
     } else if (name === 'ts_iso') row[name] = cells[index] ?? '';
+    else if (name === 'network_type') row[name] = value || null;
+    // Added telemetry cannot invalidate a battery record that was usable before
+    // the log upgrade. Empty and malformed metrics stay independently missing.
+    else if (TELEMETRY.includes(name)) {
+      row[name] = numeric(value);
+      if (['download_bps', 'upload_bps'].includes(name) && row[name] < 0
+        || name === 'net_interval_s' && row[name] <= 0) row[name] = null;
+    }
     else {
       row[name] = value ? numeric(value) : null;
       if (value && row[name] === null || name === 'usb_online' && row[name] !== null
-        && row[name] !== 0 && row[name] !== 1) return null;
+        && row[name] !== 0 && row[name] !== 1) {
+        if (!history) return null;
+        row[name] = null;
+      }
     }
   }
-  if (!Number.isSafeInteger(row.ts) || row.ts < 0 || row.soc < 0 || row.soc > 100 || row.voltage_mv <= 0) return null;
+  if (!Number.isSafeInteger(row.ts) || row.ts < 0) return null;
+  if (row.soc < 0 || row.soc > 100) {
+    if (!history) return null;
+    row.soc = null;
+  }
+  if (row.voltage_mv !== null && row.voltage_mv <= 0) {
+    if (!history) return null;
+    row.voltage_mv = null;
+  }
   for (const name of OPTIONAL) if (!Object.hasOwn(row, name)) row[name] = null;
   return row;
 }
 
 // An invalid data record stays in its original position as null. Consumers must
 // never join the valid records on either side of that boundary.
-export function parseBatteryCsv(text) {
+export function parseBatteryCsv(text, { history = false } = {}) {
   if (typeof text !== 'string') throw new Error('Battery CSV must be text');
   utf8Length(text);
   if (text.startsWith('\ufeff')) text = text.slice(1);
@@ -70,7 +92,7 @@ export function parseBatteryCsv(text) {
       return;
     }
     if (rows.length >= MAX_RECORDS) throw new Error('Battery CSV record limit exceeded');
-    const row = parseRecord(cells, headers);
+    const row = parseRecord(cells, headers, history);
     if (!row) invalidRows++;
     rows.push(row);
   }

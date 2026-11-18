@@ -22,12 +22,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Set;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class RouterBridge {
     private final WebView webView;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final StockProxyServer stockProxy = new StockProxyServer();
     private String lastSharedSession = "";
+    private volatile boolean appForeground = true;
+    private volatile long requestGeneration;
+    private final Set<HttpURLConnection> foregroundReads = Collections.newSetFromMap(new ConcurrentHashMap<HttpURLConnection, Boolean>());
     // 最近一次 H5 configureBackground 传来的路由器地址，供 StockProxyServer
     // （原厂后台本地反代）转发使用。
     private static volatile String routerBaseUrl = "http://192.168.0.1";
@@ -172,6 +178,7 @@ public final class RouterBridge {
 
     @JavascriptInterface
     public void request(String requestId, String payload) {
+        final long generation = requestGeneration;
         executor.execute(() -> {
             JSONObject result = new JSONObject();
             HttpURLConnection connection = null;
@@ -179,13 +186,22 @@ public final class RouterBridge {
                 JSONObject input = new JSONObject(payload);
                 URL url = new URL(input.getString("url"));
                 boolean gaugeRequest = BatteryProfile.isGaugeRoute(url);
+                String method = input.optString("method", "GET").toUpperCase();
+                String body = input.optString("body", "");
+                // Pause read/login sequences without changing explicit management writes.
+                boolean lifecycleRead = "GET".equals(method) || "HEAD".equals(method) || gaugeRequest
+                    || ("&" + body + "&").contains("&goformId=LOGIN&");
+                MonitorRouterClient.RequestAllowed allowed = () -> !lifecycleRead
+                    || !"gauge88-csv".equals(BatteryProfile.mode()) || appForeground && generation == requestGeneration;
                 String protocol = url.getProtocol();
                 if (!"http".equals(protocol) && !"https".equals(protocol)) throw new SecurityException("只允许 HTTP/HTTPS");
                 String host = url.getHost();
                 if (!isLocalRouterHost(host)) throw new SecurityException("只允许访问局域网路由器地址");
 
+                MonitorRouterClient.ensureRequestAllowed(allowed);
                 connection = RouterNetwork.open(webView.getContext(), url);
-                connection.setRequestMethod(input.optString("method", "GET").toUpperCase());
+                if (lifecycleRead && "gauge88-csv".equals(BatteryProfile.mode())) foregroundReads.add(connection);
+                connection.setRequestMethod(method);
                 int timeout = Math.min(Math.max(input.optInt("timeoutMs", 12000), 1000), 20000);
                 connection.setConnectTimeout(timeout);
                 connection.setReadTimeout(timeout);
@@ -209,17 +225,19 @@ public final class RouterBridge {
                 String sessionCookie = gaugeRequest ? "" : RouterSession.header();
                 if (!sessionCookie.isEmpty()) connection.setRequestProperty("Cookie", sessionCookie);
 
-                String body = input.optString("body", "");
                 if (!body.isEmpty() && !"GET".equals(connection.getRequestMethod()) && !"HEAD".equals(connection.getRequestMethod())) {
                     connection.setDoOutput(true);
                     byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                     connection.setFixedLengthStreamingMode(bytes.length);
+                    MonitorRouterClient.ensureRequestAllowed(allowed);
                     try (OutputStream output = connection.getOutputStream()) {
                         output.write(bytes);
                     }
                 }
 
+                MonitorRouterClient.ensureRequestAllowed(allowed);
                 int status = connection.getResponseCode();
+                MonitorRouterClient.ensureRequestAllowed(allowed);
                 if (!gaugeRequest) {
                     RouterSession.remember(connection.getHeaderFields());
                     shareSessionIfChanged();
@@ -233,6 +251,7 @@ public final class RouterBridge {
                     ? MonitorRouterClient.readBounded(stream, "/backup/battery-log.csv".equals(url.getPath()) ? BatteryCsv.MAX_BYTES : 256 * 1024,
                         System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout))
                     : readText(stream, connection.getContentType());
+                MonitorRouterClient.ensureRequestAllowed(allowed);
                 result.put("ok", status >= 200 && status < 300);
                 result.put("status", status);
                 result.put("body", responseBody);
@@ -244,7 +263,7 @@ public final class RouterBridge {
                     result.put("error", error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
                 } catch (Exception ignored) {}
             } finally {
-                if (connection != null) connection.disconnect();
+                if (connection != null) { connection.disconnect(); foregroundReads.remove(connection); }
             }
             deliver(requestId, result.toString());
         });
@@ -257,8 +276,18 @@ public final class RouterBridge {
 
     /** MainActivity.onDestroy 调用：释放路由器请求、异步历史线程池和本地反代。 */
     void shutdown() {
+        setAppForeground(false);
         executor.shutdownNow();
         stockProxy.stop();
+    }
+
+    synchronized void setAppForeground(boolean foreground) {
+        if (!"gauge88-csv".equals(BatteryProfile.mode())) return;
+        appForeground = foreground;
+        if (!foreground) {
+            requestGeneration++;
+            for (HttpURLConnection connection : foregroundReads) connection.disconnect();
+        }
     }
 
     private synchronized void shareSessionIfChanged() {

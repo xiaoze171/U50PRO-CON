@@ -29,12 +29,15 @@ final class BatteryCsvCache {
     BatteryCsvCache(Loader loader) { this(loader, () -> System.nanoTime() / 1000000); }
     BatteryCsvCache(Loader loader, Clock clock) { this.loader = loader; this.clock = clock; }
     synchronized Future<Result> request(String target) {
+        return request(target, loader);
+    }
+    synchronized Future<Result> request(String target, Loader requestLoader) {
         long now = clock.nowMs();
         if (pending != null && target.equals(endpoint) && (!pending.isDone() || now >= requestedAt && now - requestedAt < 60000)) return pending;
         invalidate(); endpoint = target; requestedAt = now;
         pending = new FutureTask<>(() -> {
             String text;
-            try { text = loader.load(target); }
+            try { text = requestLoader.load(target); }
             catch (Exception error) {
                 String message = MonitorRouterClient.message(error);
                 return new Result(null, message, error instanceof java.net.SocketTimeoutException ? "timeout" : message.contains("limit") ? "too-large" : "fetch-error");

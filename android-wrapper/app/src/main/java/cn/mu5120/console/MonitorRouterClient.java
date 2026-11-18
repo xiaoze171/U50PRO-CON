@@ -17,9 +17,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Complete read-only collection using the same field inventory as router-client.js. */
 final class MonitorRouterClient {
+    interface RequestAllowed { boolean getAsBoolean(); }
     private static final ScheduledExecutorService DEADLINES = Executors.newScheduledThreadPool(2, task -> {
         Thread thread = new Thread(task, "battery-request-deadline"); thread.setDaemon(true); return thread;
     });
@@ -29,6 +33,7 @@ final class MonitorRouterClient {
     private final BatteryCsvCache batteryCsvCache;
     private String routerUrl;
     private String password;
+    private final Set<HttpURLConnection> pendingConnections = Collections.newSetFromMap(new ConcurrentHashMap<HttpURLConnection, Boolean>());
 
     MonitorRouterClient(Context context, String routerUrl, String password) throws Exception {
         this(context, routerUrl, password, new BatteryGaugeConfig("gauge", "", 88));
@@ -50,29 +55,35 @@ final class MonitorRouterClient {
     }
 
     JSONObject dashboard() throws Exception {
+        return dashboard(() -> true);
+    }
+
+    JSONObject dashboard(RequestAllowed allowed) throws Exception {
+        ensureRequestAllowed(allowed);
         Future<BatteryCsvCache.Result> csvRequest = "gauge".equals(batteryConfig.source)
-            ? batteryCsvCache.request(batteryConfig.csvEndpoint(routerUrl)) : null;
-        JSONObject status = group("status");
+            ? batteryCsvCache.request(batteryConfig.csvEndpoint(routerUrl), target -> fetchGaugeCsv(context, target, allowed, pendingConnections)) : null;
+        JSONObject status = group("status", allowed);
         if (!"ok".equals(status.optString("loginfo"))) {
-            login();
-            status = group("status");
+            login(allowed);
+            status = group("status", allowed);
         }
         if (!"ok".equals(status.optString("loginfo"))) throw new Exception("路由器登录失败");
         JSONObject snapshot = new JSONObject().put("status", status);
         JSONObject errors = new JSONObject();
         for (String name : new String[] { "signal", "temperature", "resources", "locks", "neighbors", "features" }) {
-            try { snapshot.put(name, group(name)); }
+            ensureRequestAllowed(allowed);
+            try { snapshot.put(name, group(name, allowed)); }
             catch (Exception error) { errors.put(name, message(error)); }
         }
         JSONObject clientAvailability = new JSONObject().put("stations", false).put("cableStations", false);
         try {
-            JSONObject response = command("station_list");
+            JSONObject response = command(allowed, "station_list");
             snapshot.put("stations", list(response, "station_list"));
             clientAvailability.put("stations", response.has("station_list"));
         }
         catch (Exception error) { errors.put("stations", message(error)); }
         try {
-            JSONObject response = command("lan_station_list");
+            JSONObject response = command(allowed, "lan_station_list");
             snapshot.put("cableStations", list(response, response.has("lan_station_list") ? "lan_station_list" : "station_list"));
             clientAvailability.put("cableStations", response.has("lan_station_list") || response.has("station_list"));
         } catch (Exception error) { errors.put("cableStations", message(error)); }
@@ -82,7 +93,8 @@ final class MonitorRouterClient {
             BatteryCsvCache.Result csv;
             try { csv = csvRequest.get(3, TimeUnit.SECONDS); }
             catch (Exception error) { csv = new BatteryCsvCache.Result(null, message(error), error instanceof java.util.concurrent.TimeoutException ? "timeout" : "fetch-error"); }
-            status.put("battery_gauge", gauge());
+            ensureRequestAllowed(allowed);
+            status.put("battery_gauge", fetchGaugeState(context, batteryConfig.endpoint(routerUrl), allowed, pendingConnections));
             JSONObject marker = status.optJSONObject("battery_gauge");
             JSONObject raw = marker == null ? null : marker.optJSONObject("raw");
             long calculatedAt = System.currentTimeMillis();
@@ -100,6 +112,7 @@ final class MonitorRouterClient {
             }
             snapshot.put("battery", estimates);
         }
+        ensureRequestAllowed(allowed);
         snapshot.put("timestamp", System.currentTimeMillis());
         BatteryGaugeReading.refreshStatus(status, snapshot.getLong("timestamp"));
         snapshot.put("login", new JSONObject().put("loggedIn", true).put("message", "后台采集已连接"));
@@ -127,6 +140,11 @@ final class MonitorRouterClient {
     }
 
     static JSONObject fetchGaugeState(Context context, String endpoint) throws Exception {
+        return fetchGaugeState(context, endpoint, () -> true, null);
+    }
+
+    private static JSONObject fetchGaugeState(Context context, String endpoint, RequestAllowed allowed, Set<HttpURLConnection> pending) throws Exception {
+        ensureRequestAllowed(allowed);
         HttpURLConnection connection = null;
         ScheduledFuture<?> abort = null;
         AtomicBoolean timedOut = new AtomicBoolean();
@@ -135,6 +153,7 @@ final class MonitorRouterClient {
             URL target = new URL(endpoint);
             if (!RouterBridge.isLocalRouterHost(target.getHost())) throw new SecurityException("只允许访问局域网路由器地址");
             connection = RouterNetwork.open(context, target);
+            if (pending != null) pending.add(connection);
             HttpURLConnection active = connection;
             abort = DEADLINES.schedule(() -> { timedOut.set(true); active.disconnect(); }, 3, TimeUnit.SECONDS);
             connection.setRequestMethod("GET");
@@ -144,6 +163,7 @@ final class MonitorRouterClient {
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "application/json");
             // Gauge requests never consume or update the factory session cookie jar.
+            ensureRequestAllowed(allowed);
             int code = connection.getResponseCode();
             if (code < 200 || code >= 300) throw new Exception("Gauge HTTP " + code);
             String age = connection.getHeaderField("X-Gauge-Age");
@@ -153,19 +173,39 @@ final class MonitorRouterClient {
         } catch (Exception error) {
             return new JSONObject().put("percent", JSONObject.NULL).put("state", "unavailable")
                 .put("url", endpoint).put("raw", JSONObject.NULL).put("error", timedOut.get() ? "Gauge state request timeout" : message(error));
-        } finally { if (abort != null) abort.cancel(false); if (connection != null) connection.disconnect(); }
+        } finally {
+            if (abort != null) abort.cancel(false);
+            if (connection != null) { connection.disconnect(); if (pending != null) pending.remove(connection); }
+        }
     }
 
     void invalidateBatteryCsv() { batteryCsvCache.invalidate(); }
+
+    void cancelPendingRequests() {
+        invalidateBatteryCsv();
+        for (HttpURLConnection connection : pendingConnections) connection.disconnect();
+    }
+
+    static void ensureRequestAllowed(RequestAllowed allowed) throws java.io.InterruptedIOException {
+        if (Thread.currentThread().isInterrupted() || !allowed.getAsBoolean()) {
+            throw new java.io.InterruptedIOException("Router request lifecycle ended");
+        }
+    }
 
     private String readGaugeCsv(String endpoint) throws Exception {
         return fetchGaugeCsv(context, endpoint);
     }
 
     static String fetchGaugeCsv(Context context, String endpoint) throws Exception {
+        return fetchGaugeCsv(context, endpoint, () -> true, null);
+    }
+
+    private static String fetchGaugeCsv(Context context, String endpoint, RequestAllowed allowed, Set<HttpURLConnection> pending) throws Exception {
+        ensureRequestAllowed(allowed);
         URL target = new URL(endpoint);
         if (!RouterBridge.isLocalRouterHost(target.getHost())) throw new SecurityException("只允许访问局域网路由器地址");
         HttpURLConnection connection = RouterNetwork.open(context, target);
+        if (pending != null) pending.add(connection);
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         AtomicBoolean timedOut = new AtomicBoolean();
         ScheduledFuture<?> abort = DEADLINES.schedule(() -> { timedOut.set(true); connection.disconnect(); }, 3, TimeUnit.SECONDS);
@@ -174,6 +214,7 @@ final class MonitorRouterClient {
             connection.setUseCaches(false); connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", "text/csv");
             // Never read or write RouterSession, including Set-Cookie on error/redirect responses.
+            ensureRequestAllowed(allowed);
             int code = connection.getResponseCode();
             if (code < 200 || code >= 300) throw new Exception("Gauge CSV HTTP " + code);
             int length = connection.getContentLength(); if (length > BatteryCsv.MAX_BYTES) throw new Exception("Battery CSV byte limit exceeded");
@@ -181,7 +222,7 @@ final class MonitorRouterClient {
         } catch (Exception error) {
             if (timedOut.get()) throw new java.net.SocketTimeoutException("Gauge CSV request timeout");
             throw error;
-        } finally { abort.cancel(false); connection.disconnect(); }
+        } finally { abort.cancel(false); connection.disconnect(); if (pending != null) pending.remove(connection); }
     }
 
     static String readBounded(InputStream input, int limit, long deadline) throws Exception {
@@ -196,32 +237,51 @@ final class MonitorRouterClient {
     }
 
     private JSONObject group(String name) throws Exception {
+        return group(name, () -> true);
+    }
+
+    private JSONObject group(String name, RequestAllowed allowed) throws Exception {
         JSONArray names = fields.getJSONArray(name);
         StringBuilder command = new StringBuilder();
         for (int index = 0; index < names.length(); index++) {
             if (index > 0) command.append(',');
             command.append(names.getString(index));
         }
-        return command(command.toString(), "multi_data", "1");
+        return command(allowed, command.toString(), "multi_data", "1");
     }
 
     private JSONObject command(String command, String... parameters) throws Exception {
+        return command(() -> true, command, parameters);
+    }
+
+    private JSONObject command(RequestAllowed allowed, String command, String... parameters) throws Exception {
         String query = form("isTest", "false", "cmd", command, "_", String.valueOf(System.currentTimeMillis()));
         if (parameters.length > 0) query += "&" + form(parameters);
-        return new JSONObject(request("/goform/goform_get_cmd_process?" + query, "GET", ""));
+        return new JSONObject(request("/goform/goform_get_cmd_process?" + query, "GET", "", allowed));
     }
 
     private void login() throws Exception {
+        login(() -> true);
+    }
+
+    private void login(RequestAllowed allowed) throws Exception {
+        ensureRequestAllowed(allowed);
         RouterSession.clear();
-        request("/index.html", "GET", "");
-        command("Language,cr_version,wa_inner_version", "multi_data", "1");
-        JSONObject token = command("LD", "multi_data", "1");
+        request("/index.html", "GET", "", allowed);
+        command(allowed, "Language,cr_version,wa_inner_version", "multi_data", "1");
+        JSONObject token = command(allowed, "LD", "multi_data", "1");
         String hash = RouterAuth.loginHash(password, token.optString("LD"));
-        request("/goform/goform_set_cmd_process", "POST", form("isTest", "false", "goformId", "LOGIN", "password", hash));
+        request("/goform/goform_set_cmd_process", "POST", form("isTest", "false", "goformId", "LOGIN", "password", hash), allowed);
     }
 
     private String request(String path, String method, String body) throws Exception {
+        return request(path, method, body, () -> true);
+    }
+
+    private String request(String path, String method, String body, RequestAllowed allowed) throws Exception {
+        ensureRequestAllowed(allowed);
         HttpURLConnection connection = RouterNetwork.open(context, new URL(routerUrl + path));
+        if (pendingConnections != null) pendingConnections.add(connection);
         try {
             connection.setRequestMethod(method);
             connection.setConnectTimeout(8000);
@@ -238,13 +298,16 @@ final class MonitorRouterClient {
                 connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
                 byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                 connection.setFixedLengthStreamingMode(bytes.length);
+                ensureRequestAllowed(allowed);
                 try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
             }
+            ensureRequestAllowed(allowed);
             int status = connection.getResponseCode();
+            ensureRequestAllowed(allowed);
             RouterSession.remember(connection.getHeaderFields());
             if (status < 200 || status >= 300) throw new Exception("路由器返回 HTTP " + status);
             try (InputStream input = connection.getInputStream()) { return read(input); }
-        } finally { connection.disconnect(); }
+        } finally { connection.disconnect(); if (pendingConnections != null) pendingConnections.remove(connection); }
     }
 
     private static JSONArray list(JSONObject response, String key) throws Exception {

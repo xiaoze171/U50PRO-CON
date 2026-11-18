@@ -204,6 +204,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (routerBridge != null) routerBridge.setAppForeground(true);
         foregroundHandler.removeCallbacks(foregroundHeartbeat);
         foregroundHeartbeat.run();
         BackgroundMonitorService.refreshOverlay(this);
@@ -218,6 +219,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (routerBridge != null) routerBridge.setAppForeground(false);
         foregroundHandler.removeCallbacks(foregroundHeartbeat);
         BackgroundMonitorService.setAppForeground(this, false);
         if (webView != null) {

@@ -5,9 +5,12 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.AlarmManager;
+import android.app.ActivityManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.BroadcastReceiver;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
@@ -29,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -46,6 +50,7 @@ public final class BackgroundMonitorService extends Service {
     private static final String KEY_BATTERY_PORT = "batteryPort";
     private static final String KEY_FOREGROUND_UNTIL = "appForegroundUntil";
     private static final String KEY_OVERLAY_ENABLED = "overlayEnabled";
+    private static final String KEY_OVERLAY_REVISION = "overlayRevision";
     private static final String ACTION_FOREGROUND = "cn.mu5120.console.monitor.FOREGROUND";
     private static final String ACTION_CONFIGURE = "cn.mu5120.console.monitor.CONFIGURE";
     private static final String ACTION_SNAPSHOT = "cn.mu5120.console.monitor.SNAPSHOT";
@@ -58,6 +63,7 @@ public final class BackgroundMonitorService extends Service {
     private static final int BATTERY_MAX_POINTS = 1445;
     private static final Object HISTORY_LOCK = new Object();
     private static final Object CONFIG_LOCK = new Object();
+    private static final Object OVERLAY_CHOICE_LOCK = new Object();
     private static volatile BackgroundMonitorService instance;
 
     private ScheduledExecutorService executor;
@@ -93,6 +99,29 @@ public final class BackgroundMonitorService extends Service {
     private String lastError = "";
     private volatile long lastSuccessAt;
     private volatile boolean overlayEnabled;
+    private boolean receiverRegistered;
+    private final BroadcastReceiver runtimeReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (intent == null) return;
+            if (ACTION_OVERLAY.equals(intent.getAction())) {
+                acceptOverlayChoice(intent);
+                if (!MonitorRuntimePolicy.shouldRun(deviceHistoryProfile(), currentOverlaySelection())) stopOptionalRuntime();
+                else updateOverlay();
+            } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                synchronized (CONFIG_LOCK) { configGeneration += 2; }
+                stopFastPolling();
+                if (routerClient != null) routerClient.cancelPendingRequests();
+                batteryCurrentWindow.reset();
+                updateOverlay();
+                writeMonitorState(true);
+            } else if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                startFastPolling();
+                updateOverlay();
+            }
+        }
+    };
+
+    private static boolean deviceHistoryProfile() { return "gauge88-csv".equals(BatteryProfile.mode()); }
 
     public static void start(Context context) {
         sendCommand(context, new Intent(context, BackgroundMonitorService.class));
@@ -135,6 +164,7 @@ public final class BackgroundMonitorService extends Service {
     }
 
     public static String readBatteryHistory(Context context) {
+        if (!MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile())) return "[]";
         try {
             File file = historyFile(context);
             if (!file.exists()) return "[]";
@@ -159,6 +189,7 @@ public final class BackgroundMonitorService extends Service {
     }
 
     public static String readMonitorHistory(Context context) {
+        if (!MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile())) return "{}";
         try { return new MonitorHistoryStore(context.getFilesDir()).read(System.currentTimeMillis(), false).toString(); }
         catch (Exception error) {
             Log.e(TAG, "read history failed", error);
@@ -167,7 +198,31 @@ public final class BackgroundMonitorService extends Service {
     }
 
     public static String readMonitorState(Context context) {
-        return MonitorHistoryStore.readJson(new File(context.getFilesDir(), "monitor-state.json")).toString();
+        JSONObject state = MonitorHistoryStore.readJson(new File(context.getFilesDir(), "monitor-state.json"));
+        if (deviceHistoryProfile()) {
+            try {
+                boolean enabled = isOverlayEnabled(context);
+                boolean active = enabled && isServiceRunning(context);
+                state.put("historySource", "device-csv").put("source", "device").put("lastSavedAt", 0)
+                    .put("overlayEnabled", enabled).put("running", active)
+                    .put("polling", active && state.optBoolean("polling"))
+                    .put("wakeLockHeld", false).put("wifiLockHeld", false);
+                if (!active) state.put("background", false).put("lastError", "").put("collectionError", "");
+            } catch (Exception ignored) { }
+        }
+        return state.toString();
+    }
+
+    @SuppressWarnings("deprecation")
+    private static boolean isServiceRunning(Context context) {
+        try {
+            ActivityManager manager = (ActivityManager) context.getSystemService(ACTIVITY_SERVICE);
+            if (manager == null) return false;
+            for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(100)) {
+                if (BackgroundMonitorService.class.getName().equals(service.service.getClassName()) && service.started) return true;
+            }
+        } catch (RuntimeException ignored) { }
+        return false;
     }
 
     public static void acceptSession(Context context, String cookieHeader) {
@@ -181,16 +236,23 @@ public final class BackgroundMonitorService extends Service {
         sendCommand(context, new Intent(context, BackgroundMonitorService.class).setAction(ACTION_CLEAR_SESSION));
     }
 
+    @SuppressWarnings("deprecation")
     public static boolean isOverlayEnabled(Context context) {
-        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_OVERLAY_ENABLED, false);
+        // Reload the selection at cross-process entry points; explicit intents still update the service cache.
+        return context.getSharedPreferences(PREFS, MODE_PRIVATE | MODE_MULTI_PROCESS)
+            .getBoolean(KEY_OVERLAY_ENABLED, false);
     }
 
     public static void setOverlayEnabled(Context context, boolean enabled) {
-        context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_OVERLAY_ENABLED, enabled).apply();
+        synchronized (OVERLAY_CHOICE_LOCK) {
+        android.content.SharedPreferences preferences = context.getSharedPreferences(PREFS, MODE_PRIVATE);
+        preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, enabled)
+            .putLong(KEY_OVERLAY_REVISION, preferences.getLong(KEY_OVERLAY_REVISION, 0) + 1).commit();
         Intent intent = new Intent(context, BackgroundMonitorService.class)
             .setAction(ACTION_OVERLAY)
             .putExtra("enabled", enabled);
         sendCommand(context, intent);
+        }
     }
 
     public static void refreshOverlay(Context context) {
@@ -202,8 +264,30 @@ public final class BackgroundMonitorService extends Service {
     private static void sendCommand(Context context, Intent intent) {
         Context app = context.getApplicationContext();
         try {
+            synchronized (OVERLAY_CHOICE_LOCK) {
+            if (deviceHistoryProfile()) {
+                android.content.SharedPreferences preferences = app.getSharedPreferences(PREFS, MODE_PRIVATE | MODE_MULTI_PROCESS);
+                // getAll is one preference snapshot: a captured old value cannot borrow
+                // a later choice's revision. UI updates and dispatch share this lock.
+                Map<String, ?> selection = preferences.getAll();
+                boolean enabled = Boolean.TRUE.equals(selection.get(KEY_OVERLAY_ENABLED));
+                Object revisionValue = selection.get(KEY_OVERLAY_REVISION);
+                long revision = revisionValue instanceof Long ? (Long) revisionValue : 0;
+                if (ACTION_OVERLAY.equals(intent.getAction())) intent.putExtra("enabled", enabled);
+                intent.putExtra(KEY_OVERLAY_ENABLED, enabled)
+                    .putExtra(KEY_OVERLAY_REVISION, revision);
+                if (!MonitorRuntimePolicy.shouldRun(true, enabled)) {
+                    // A broadcast updates an existing service's preference cache without creating one.
+                    app.sendBroadcast(new Intent(ACTION_OVERLAY).setPackage(app.getPackageName())
+                        .putExtra("enabled", false).putExtra(KEY_OVERLAY_REVISION, revision));
+                    app.stopService(new Intent(app, BackgroundMonitorService.class));
+                    cancelWatchdog(app);
+                    return;
+                }
+            }
             if (Build.VERSION.SDK_INT >= 26) app.startForegroundService(intent);
             else app.startService(intent);
+            }
         } catch (RuntimeException error) {
             Log.e(TAG, "无法启动后台监测，请打开应用并允许后台运行", error);
         }
@@ -213,7 +297,6 @@ public final class BackgroundMonitorService extends Service {
     public void onCreate() {
         super.onCreate();
         instance = this;
-        running = true;
         android.content.SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         routerUrl = preferences.getString(KEY_URL, "http://192.168.0.1");
         password = preferences.getString(KEY_PASSWORD, "111111");
@@ -225,14 +308,29 @@ public final class BackgroundMonitorService extends Service {
         Log.w(TAG, "service created foreground=" + appForeground);
         notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+    }
+
+    private void startRuntime() {
+        if (running) return;
+        running = true;
         overlay = new MonitorOverlay(this);
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification("正在启动后台监测…"));
         updateOverlay();
         acquireLocks();
-        historyStore = new MonitorHistoryStore(getFilesDir());
-        JSONObject savedState = MonitorHistoryStore.readJson(new File(getFilesDir(), "monitor-state.json"));
-        lastSavedAt = savedState.optLong("lastSavedAt");
+        if (MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile())) {
+            historyStore = new MonitorHistoryStore(getFilesDir());
+            JSONObject savedState = MonitorHistoryStore.readJson(new File(getFilesDir(), "monitor-state.json"));
+            lastSavedAt = savedState.optLong("lastSavedAt");
+        } else {
+            cancelWatchdog();
+            IntentFilter filter = new IntentFilter(ACTION_OVERLAY);
+            filter.addAction(Intent.ACTION_SCREEN_ON);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(runtimeReceiver, filter, 4 /* RECEIVER_NOT_EXPORTED */);
+            else registerReceiver(runtimeReceiver, filter);
+            receiverRegistered = true;
+        }
         executor = Executors.newSingleThreadScheduledExecutor();
         // Keep a low-cost ticker alive even in the foreground. If the UI process disappears
         // without onPause, its heartbeat expires and native collection takes over.
@@ -242,6 +340,14 @@ public final class BackgroundMonitorService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (deviceHistoryProfile()) {
+            if (intent != null) acceptOverlayChoice(intent);
+            if (!MonitorRuntimePolicy.shouldRun(true, currentOverlaySelection())) {
+                stopOptionalRuntime();
+                return START_NOT_STICKY;
+            }
+        }
+        startRuntime();
         if (intent != null) {
             String action = intent.getAction();
             if (ACTION_FOREGROUND.equals(action)) {
@@ -262,13 +368,17 @@ public final class BackgroundMonitorService extends Service {
                 if (password == null) password = "";
                 batteryConfig = new BatteryGaugeConfig(intent.getStringExtra(KEY_BATTERY_SOURCE),
                     intent.getStringExtra(KEY_BATTERY_HOST), intent.getIntExtra(KEY_BATTERY_PORT, 88));
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putString(KEY_URL, routerUrl)
-                    .putString(KEY_PASSWORD, password)
-                    .putString(KEY_BATTERY_SOURCE, batteryConfig.source)
-                    .putString(KEY_BATTERY_HOST, batteryConfig.host)
-                    .putInt(KEY_BATTERY_PORT, batteryConfig.port)
-                    .apply();
+                // configure() already persists the UI-owned settings. A monitor
+                // cache must not write its stale full preference map in device mode.
+                if (!deviceHistoryProfile()) {
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putString(KEY_URL, routerUrl)
+                        .putString(KEY_PASSWORD, password)
+                        .putString(KEY_BATTERY_SOURCE, batteryConfig.source)
+                        .putString(KEY_BATTERY_HOST, batteryConfig.host)
+                        .putInt(KEY_BATTERY_PORT, batteryConfig.port)
+                        .apply();
+                }
                 configGeneration++;
                 if (intent.getBooleanExtra("changed", false)) RouterSession.clear();
                 if (routerClient != null) routerClient.invalidateBatteryCsv();
@@ -278,17 +388,13 @@ public final class BackgroundMonitorService extends Service {
             } else if (ACTION_CLEAR_SESSION.equals(action)) {
                 RouterSession.clear();
             } else if (ACTION_OVERLAY.equals(action)) {
-                if (intent.hasExtra("enabled")) {
-                    overlayEnabled = intent.getBooleanExtra("enabled", false);
-                    // Keep this process's cache current before it saves other settings.
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putBoolean(KEY_OVERLAY_ENABLED, overlayEnabled).apply();
-                }
+                acceptOverlayChoice(intent);
                 updateOverlay();
             } else if (ACTION_SNAPSHOT.equals(action)) {
                 String payload = intent.getStringExtra("payload");
                 executor.execute(() -> applySnapshotPayload(payload, "foreground"));
             } else if (ACTION_SMS.equals(action)) {
+                if (!MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile())) return START_NOT_STICKY;
                 String payload = intent.getStringExtra("payload");
                 executor.execute(() -> {
                     try { historyStore.recordSms(new JSONObject(payload).put("source", "foreground"), System.currentTimeMillis()); }
@@ -298,18 +404,61 @@ public final class BackgroundMonitorService extends Service {
                 startFastPolling();
             }
         }
-        return START_STICKY;
+        return deviceHistoryProfile() ? START_NOT_STICKY : START_STICKY;
+    }
+
+    private void acceptOverlayChoice(Intent intent) {
+        boolean explicit = intent.hasExtra("enabled") || intent.hasExtra(KEY_OVERLAY_ENABLED);
+        if (!explicit) return;
+        android.content.SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE | MODE_MULTI_PROCESS);
+        if (deviceHistoryProfile() && intent.hasExtra(KEY_OVERLAY_REVISION)) {
+            // The UI owns the persisted choice. Never write a stamped service command
+            // back: another process may disable it immediately after this snapshot.
+            overlayEnabled = Boolean.TRUE.equals(preferences.getAll().get(KEY_OVERLAY_ENABLED));
+            return;
+        }
+        boolean enabled = intent.hasExtra("enabled") ? intent.getBooleanExtra("enabled", false)
+            : intent.getBooleanExtra(KEY_OVERLAY_ENABLED, false);
+        if (intent.hasExtra(KEY_OVERLAY_REVISION)
+            && intent.getLongExtra(KEY_OVERLAY_REVISION, 0) != preferences.getLong(KEY_OVERLAY_REVISION, 0)) {
+            enabled = preferences.getBoolean(KEY_OVERLAY_ENABLED, false);
+        }
+        overlayEnabled = enabled;
+        // Keep this process's cache current before overlay position/configuration writes.
+        preferences.edit().putBoolean(KEY_OVERLAY_ENABLED, enabled).commit();
+    }
+
+    private void stopOptionalRuntime() {
+        synchronized (CONFIG_LOCK) { running = false; configGeneration += 2; }
+        stopFastPolling();
+        if (routerClient != null) routerClient.cancelPendingRequests();
+        cancelWatchdog();
+        releaseLocks();
+        batteryCurrentWindow.reset();
+        if (executor != null) executor.shutdownNow();
+        if (overlay != null) overlay.remove();
+        writeMonitorState(true);
+        if (instance == this) {
+            stopForeground(true);
+            stopSelf();
+        }
     }
 
     @Override
     public void onDestroy() {
         Log.w(TAG, "service destroyed");
-        running = false;
+        synchronized (CONFIG_LOCK) { running = false; configGeneration += 2; }
         stopFastPolling();
+        if (routerClient != null) routerClient.cancelPendingRequests();
         cancelWatchdog();
         if (executor != null) executor.shutdownNow();
         releaseLocks();
         if (overlay != null) overlay.remove();
+        if (receiverRegistered) {
+            unregisterReceiver(runtimeReceiver);
+            receiverRegistered = false;
+        }
+        writeMonitorState(true);
         if (instance == this) instance = null;
         super.onDestroy();
     }
@@ -321,7 +470,10 @@ public final class BackgroundMonitorService extends Service {
 
     private void pollRouter() {
         if (!running) return;
-        if (isAppForeground()) { batteryCurrentWindow.reset(); writeMonitorState(false); return; }
+        if (!MonitorRuntimePolicy.shouldPoll(deviceHistoryProfile(), currentOverlaySelection(),
+            isAppForeground(), isScreenInteractive())) {
+            batteryCurrentWindow.reset(); writeMonitorState(false); return;
+        }
         String url = routerUrl;
         String secret = password;
         BatteryGaugeConfig selectedBattery = batteryConfig;
@@ -338,16 +490,18 @@ public final class BackgroundMonitorService extends Service {
                 clientBatteryConfig = selectedBattery;
             }
             String source = nativeCollectionSource();
-            JSONObject snapshot = routerClient.dashboard();
-            if (generation != configGeneration || !url.equals(routerUrl) || !secret.equals(password) || isAppForeground()) return;
+            JSONObject snapshot = routerClient.dashboard(() -> running && generation == configGeneration && canAcceptSnapshot(true));
+            if (generation != configGeneration || !url.equals(routerUrl) || !secret.equals(password)
+                || !canAcceptSnapshot(true)) return;
             if ("factory".equals(selectedBattery.source)) {
                 JSONArray factoryHistory;
                 synchronized (HISTORY_LOCK) { factoryHistory = new SharedHistory(this).loadUnlocked(); }
                 snapshot.put("battery", BatteryFactory.estimate(snapshot.optJSONObject("status"), factoryHistory, snapshot.optLong("timestamp"), url));
             }
             applySnapshotPayload(snapshot.toString(), source, generation);
+            if (generation != configGeneration || !canAcceptSnapshot(true)) return;
             long now = System.currentTimeMillis();
-            if (now - lastSmsPoll >= 5000) {
+            if (MonitorRuntimePolicy.shouldPollSms(deviceHistoryProfile()) && now - lastSmsPoll >= 5000) {
                 lastSmsPoll = now;
                 try {
                     String smsSource = nativeCollectionSource();
@@ -360,17 +514,20 @@ public final class BackgroundMonitorService extends Service {
             }
             lastError = "";
         } catch (Throwable error) {
+            if (generation != configGeneration || !canAcceptSnapshot(true)) return;
             lastError = error.getMessage() == null ? "等待路由器连接" : error.getMessage();
             Log.e(TAG, "poll failed", error);
             updateNotification();
             updateOverlay();
         } finally {
-            writeMonitorState(false);
-            if (running) scheduleWatchdog();
+            if (running && (!deviceHistoryProfile() || currentOverlaySelection())) {
+                writeMonitorState(false); scheduleWatchdog();
+            }
         }
     }
 
     private void startFastPolling() {
+        if (!running || !MonitorRuntimePolicy.shouldTick(deviceHistoryProfile(), currentOverlaySelection(), isScreenInteractive())) return;
         ScheduledExecutorService current = executor;
         if (current == null || current.isShutdown()) return;
         if (fastPollTask != null && !fastPollTask.isDone()) return;
@@ -387,6 +544,7 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void scheduleWatchdog() {
+        if (!running || !MonitorRuntimePolicy.shouldWake(deviceHistoryProfile())) return;
         if (alarmManager == null) return;
         long now = SystemClock.elapsedRealtime();
         if (now - lastWatchdog < 30000) return;
@@ -407,12 +565,21 @@ public final class BackgroundMonitorService extends Service {
         if (alarmManager != null) alarmManager.cancel(watchdogPendingIntent());
     }
 
+    private static void cancelWatchdog(Context context) {
+        AlarmManager alarms = (AlarmManager) context.getSystemService(ALARM_SERVICE);
+        if (alarms != null) alarms.cancel(watchdogPendingIntent(context));
+    }
+
     private PendingIntent watchdogPendingIntent() {
-        Intent intent = new Intent(this, MonitorTickReceiver.class).setAction(ACTION_POLL);
+        return watchdogPendingIntent(this);
+    }
+
+    private static PendingIntent watchdogPendingIntent(Context context) {
+        Intent intent = new Intent(context, MonitorTickReceiver.class).setAction(ACTION_POLL);
         int flags = Build.VERSION.SDK_INT >= 23
             ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
             : PendingIntent.FLAG_UPDATE_CURRENT;
-        return PendingIntent.getBroadcast(this, 5121, intent, flags);
+        return PendingIntent.getBroadcast(context, 5121, intent, flags);
     }
 
     private void applySnapshotPayload(String payload, String source) {
@@ -422,6 +589,7 @@ public final class BackgroundMonitorService extends Service {
     private void applySnapshotPayload(String payload, String source, long expectedGeneration) {
         synchronized (CONFIG_LOCK) {
         try {
+            if (!canAcceptSnapshot(expectedGeneration >= 0)) return;
             if (expectedGeneration >= 0 && expectedGeneration != configGeneration) return;
             if (expectedGeneration >= 0 && isAppForeground()) return;
             JSONObject input = new JSONObject(payload == null ? "{}" : payload);
@@ -436,7 +604,8 @@ public final class BackgroundMonitorService extends Service {
             applySnapshot(status, temperature, source, input.optLong("timestamp", System.currentTimeMillis()), input.optJSONObject("battery"));
             JSONObject errors = input.optJSONObject("errors");
             lastCollectionError = errors == null ? "" : errors.toString();
-            boolean saved = historyStore.record(input, System.currentTimeMillis());
+            boolean saved = MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile())
+                && historyStore.record(input, System.currentTimeMillis());
             if (saved) {
                 lastSavedAt = input.optLong("timestamp");
                 Log.i(TAG, "full snapshot saved timestamp=" + lastSavedAt + " background=" + !isAppForeground()
@@ -444,6 +613,7 @@ public final class BackgroundMonitorService extends Service {
             }
             writeMonitorState(saved);
         } catch (Exception error) {
+            if (!canAcceptSnapshot(expectedGeneration >= 0)) return;
             lastCollectionError = "保存数据失败：" + MonitorRouterClient.message(error);
             Log.e(TAG, lastCollectionError, error);
         }
@@ -458,9 +628,13 @@ public final class BackgroundMonitorService extends Service {
             JSONObject state = new JSONObject().put("checkedAt", now).put("lastSuccessAt", lastSuccessAt)
                 .put("lastSavedAt", lastSavedAt).put("background", !isAppForeground())
                 .put("source", isAppForeground() ? "foreground" : nativeCollectionSource())
+                .put("running", running).put("overlayEnabled", overlayEnabled)
+                .put("polling", running && MonitorRuntimePolicy.shouldPoll(deviceHistoryProfile(), currentOverlaySelection(),
+                    isAppForeground(), isScreenInteractive()))
                 .put("lastError", lastError).put("collectionError", lastCollectionError)
                 .put("wakeLockHeld", wakeLock != null && wakeLock.isHeld())
                 .put("wifiLockHeld", wifiLock != null && wifiLock.isHeld());
+            if (deviceHistoryProfile()) state.put("source", "device").put("historySource", "device-csv").put("lastSavedAt", 0);
             MonitorHistoryStore.writeJson(new File(getFilesDir(), "monitor-state.json"), state);
         } catch (Exception error) { Log.e(TAG, "save monitor state failed", error); }
     }
@@ -522,7 +696,8 @@ public final class BackgroundMonitorService extends Service {
         lastTemperature = temperature.display();
         lastError = "";
         lastSuccessAt = System.currentTimeMillis();
-        recordBattery(this, status, temperatures, source, timestamp, summary);
+        if (MonitorRuntimePolicy.shouldArchive(deviceHistoryProfile()))
+            recordBattery(this, status, temperatures, source, timestamp, summary);
         updateNotification();
         updateOverlay();
     }
@@ -530,7 +705,8 @@ public final class BackgroundMonitorService extends Service {
     private void updateOverlay() {
         mainHandler.post(() -> {
             if (overlay == null) return;
-            if (!overlayEnabled) {
+            if (!overlayEnabled || !running || deviceHistoryProfile()
+                && (!currentOverlaySelection() || !isScreenInteractive())) {
                 overlay.remove();
                 return;
             }
@@ -589,7 +765,7 @@ public final class BackgroundMonitorService extends Service {
         return builder.setSmallIcon(R.drawable.ic_stat_monitor)
             .setLargeIcon(BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher))
             .setContentTitle("U50 Pro")
-            .setContentText("后台监测服务运行中")
+            .setContentText(deviceHistoryProfile() ? "实时悬浮窗运行中 · 历史由设备保存" : "后台监测服务运行中")
             .setContentIntent(pending)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -604,6 +780,20 @@ public final class BackgroundMonitorService extends Service {
         return appForeground && SystemClock.elapsedRealtime() < foregroundUntil && power != null && power.isInteractive();
     }
 
+    private boolean isScreenInteractive() {
+        PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+        return power == null || power.isInteractive();
+    }
+
+    private boolean currentOverlaySelection() {
+        return overlayEnabled && (!deviceHistoryProfile() || isOverlayEnabled(this));
+    }
+
+    private boolean canAcceptSnapshot(boolean nativeCollection) {
+        return running && MonitorRuntimePolicy.shouldAcceptSnapshot(deviceHistoryProfile(), currentOverlaySelection(),
+            nativeCollection, isAppForeground(), isScreenInteractive());
+    }
+
     private String nativeCollectionSource() {
         PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
         return CollectionSource.resolve(false, power == null || power.isInteractive(),
@@ -613,7 +803,7 @@ public final class BackgroundMonitorService extends Service {
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "U50 Pro 后台服务", NotificationManager.IMPORTANCE_MIN);
-        channel.setDescription("后台数据采样服务");
+        channel.setDescription(deviceHistoryProfile() ? "可选实时悬浮窗；历史由设备保存" : "后台数据采样服务");
         channel.setShowBadge(false);
         channel.setSound(null, null);
         channel.enableVibration(false);
@@ -621,6 +811,7 @@ public final class BackgroundMonitorService extends Service {
     }
 
     private void acquireLocks() {
+        if (!MonitorRuntimePolicy.shouldWake(deviceHistoryProfile())) return;
         try {
             PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "U50Pro:BackgroundMonitor");

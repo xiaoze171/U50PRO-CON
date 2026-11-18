@@ -95,10 +95,11 @@ const historyDateFormatter = new Intl.DateTimeFormat('zh-CN', {
   hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
 });
 
-export function formatDate(timestamp) {
-  if (!timestamp) return '—';
+export function formatDate(timestamp, source) {
+  if (timestamp == null || timestamp === '' || !timestamp && source !== 'device') return '—';
   const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? 'Invalid Date' : historyDateFormatter.format(date);
+  if (Number.isNaN(date.getTime())) return 'Invalid Date';
+  return source === 'device' ? date.toISOString().slice(0, 19).replace('T', ' ') : historyDateFormatter.format(date);
 }
 
 export function extractVerificationCode(raw) {
