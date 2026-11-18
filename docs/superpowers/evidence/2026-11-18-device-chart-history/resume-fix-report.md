@@ -140,7 +140,7 @@ Isolated compile/policy/request checks executed with current sources:
 .superpowers/sdd/2026-11-18-device-chart-history/run-fix-jvm.ps1 -Phase fix-7-preferences-compile -Profile factory -Tests NativeBatteryProfileTest,MonitorRuntimePolicyTest,NativeMonitorRequestLifecycleTest
 ```
 
-Both exited 0 with all three named suites passing. Logs `fix-7-preferences-compile-gauge88-csv.log` and `fix-7-preferences-compile-factory.log`. These verify native compilation and existing profile/request policies, not Android preference persistence. Actual on-device GREEN for the new persistence cases remains pending root's full 21-test gauge and factory runs. All persistence fixtures are temp XML files, with no app preference or device-setting changes.
+Both exited 0 with all three named suites passing. Logs `fix-7-preferences-compile-gauge88-csv.log` and `fix-7-preferences-compile-factory.log`. These verify native compilation and existing profile/request policies. Root subsequently completed actual on-device GREEN for the persistence regressions: `.codex/device88-audit-20261118/instrumentation-gauge-final.txt` and `instrumentation-factory-final.txt` both report `OK (21 tests)`, taking 0.518 and 0.529 seconds respectively. All persistence fixtures are temp XML files, with no app preference or device-setting changes.
 
 `git diff --check` also exited 0 after the fixes; Git emitted only the workspace's existing LF/CRLF conversion notices.
 

@@ -1,6 +1,6 @@
 # Native overlay choice and foreground bridge re-review
 
-**Original finding 2: ADDRESSED in the reviewed source.** The stale-refresh/new-revision reproduction can no longer restore an enabled choice. The related foreground bridge issue is also addressed in source. No new concrete production breakage was found in these scoped fixes. Root is running GREEN compilation/device instrumentation; this report does not claim those checks have passed.
+**Original finding 2: ADDRESSED.** The stale-refresh/new-revision reproduction can no longer restore an enabled choice. The related foreground bridge issue is also addressed. No new concrete production breakage was found in these scoped fixes. Root's subsequent final on-device GREEN passed 21 tests in each of the gauge and factory profiles, as recorded below.
 
 ## Overlay choice
 
@@ -29,6 +29,6 @@ Explicit management writes retain an always-allowed lifecycle predicate; they ar
 
 Read `.codex/device88-audit-20261118/native-races-red-instrumentation.txt`: actual phone instrumentation ran 12 tests with 3 failures and 0 errors. The failures are precisely the two new choice regressions (stale refresh caused one start; service acceptance overwrote the newer disable) and the bridge pause regression (two HTTP requests rather than one).
 
-The current fixes target each failing production path directly. GREEN evidence remains with root's concurrent run. The factory bridge test returns early in a gauge build, so the RED gauge run's passing factory test entry does not establish the factory-mode assertion. The current bridge test checks paused reads; management POST preservation and login gating are supported by this source review rather than dedicated assertions in that fixture. It also does not test activity pause wiring end to end or successful resume of newly submitted bridge requests.
+The fixes target each failing production path directly. Root's final `.codex/device88-audit-20261118/instrumentation-gauge-final.txt` and `instrumentation-factory-final.txt` both report `OK (21 tests)`; the paused-read gauge assertion and the factory transport assertion execute in their corresponding builds. The earlier RED gauge run alone did not establish the factory assertion because that test returns early in a gauge build. The bridge fixture checks paused reads; management POST preservation and login gating remain supported by this source review rather than dedicated assertions in that fixture. It also does not test activity pause wiring end to end or successful resume of newly submitted bridge requests.
 
 No builds, Git/configuration changes, or device actions were performed by this reviewer. The only write is this report. The request-chain finding reviewed earlier remains outside this re-review except for confirming that current selection still feeds its existing request predicate.

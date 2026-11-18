@@ -16,7 +16,7 @@
 
 前端独立审查发现的字段、DST 和窗口端点问题已通过补充回归和复审。最终审查进一步发现 CPU 温度的分钟合并会删除设备原始缺失点；修复后实测 9,254 条输入保留全部 9,254 个 CPU 点，原厂字段别名合并规则保持原样。
 
-原生首次手机回归 12 项，准确复现三个失败：过期刷新启动服务、服务写回覆盖较新的关闭选择、页面暂停后仍发第二个请求。最终审查又用两个真实 Android SharedPreferences 实例复现拖动位置、过期配置写回导致关闭状态被恢复的两个失败。修复后 `gauge88-csv` 全部 21 项手机 instrumentation 测试通过；最终复审没有未解决的代码问题。
+原生首次手机回归 12 项，准确复现三个失败：过期刷新启动服务、服务写回覆盖较新的关闭选择、页面暂停后仍发第二个请求。最终审查又用两个真实 Android SharedPreferences 实例复现拖动位置、过期配置写回导致关闭状态被恢复的两个失败。修复后 `gauge88-csv` 和 `factory` 两种配置的手机 instrumentation 均为 21 项通过，分别耗时 0.518 秒和 0.529 秒；最终复审没有未解决的代码问题。
 
 ## APK 与实机
 
@@ -30,6 +30,8 @@ SHA-256：`9aaaf34b1111cd149637e331f5842b03f06f21272d8cf4fb406ea584898ee25d`。
 
 实机关闭悬浮窗后，监测状态及 `dumpsys activity services` 确认服务停止。开启悬浮窗并息屏后，原生状态确认 `polling=false`、无唤醒锁、无 Wi-Fi 锁、`lastSavedAt=0`，来源为 `device-csv`。USB 中途断开后使用设备已启用的无线 ADB继续验证，并确认原序列号相同。
 
-息屏检查后手机安全锁阻止后续安装；常规配置 instrumentation 及最后的 Release 覆盖安装等待用户再次解锁，已有应用数据保留。最终验收时补充这两项结果。
+用户解锁并通过 USB 重新连接同一 V2231A 手机后，常规配置回归及最终私用 88 Release 覆盖安装均已完成。`adb install -r` 返回 `Success`，使用替换安装方式保留已有应用数据，未卸载或清除数据；应用已启动。拉取实际安装的 `base.apk`，其 SHA-256、1,115,347 字节大小及签名与上述私用 Release 完全一致，版本为 `1.3.58` / `78`，`DEBUGGABLE=false`。对应证据为 `instrumentation-factory-final.txt`、`installed-final-verification.json` 和 `installed-final-signature.txt`。
+
+最终 Release 安装后，首页已自动连接并显示实时读数，原有连接配置和悬浮开启选择仍有效；趋势页显示 9,382 条设备记录，截至 `2026-11-18 17:59:17`，网速曲线正常绘制。安装后截图保存在本机 `installed-final-screen.png` 与 `installed-final-trends.png`。
 
 构建及详细日志位于本机 `.codex/device88-audit-20261118/`；审查和红绿记录位于 `.superpowers/sdd/2026-11-18-device-chart-history/`。这些日志为本机验证资料，不进入公共 Release。
